@@ -1,0 +1,19 @@
+{
+  "widget_type": "table",
+  "props": {
+    "columns": [
+      {"key": "issue", "label": "이슈", "type": "text"},
+      {"key": "severity", "label": "심각도", "type": "select",
+       "options": ["낮음", "보통", "높음"]},
+      {"key": "owner", "label": "담당자", "type": "text"}
+    ]
+  },
+  "raw_input": [
+    {"issue": "결제 API 지연", "severity": "높음", "owner": "김철수",
+     "extra_field_one": "stray", "another_unknown": 42},
+    {"issue": "캐시 성능 저하", "severity": "보통", "owner": "이영희",
+     "ml_confidence": 0.83}
+  ],
+  "should_normalize": true,
+  "note": "weak LLM tends to hallucinate extra columns; adapter drops them silently per col_by_key/label lookup"
+}

@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "widget_type": "packing",
+  "for_schema_hash": "123da9f07a2802f2",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "unit": "TODO",
+      "rows": [
+        {
+          "label": "TODO",
+          "parent": "TODO",
+          "value": 0,
+          "color": "TODO"
+        }
+      ],
+      "colorscale": "Viridis"
+    },
+    "props": {
+      "label": "패킹"
+    }
+  },
+  "expected_content": {
+    "rows": [
+      {
+        "label": "제품 A"
+      },
+      {
+        "label": "feat1",
+        "value": 30.0,
+        "parent": "제품 A"
+      },
+      {
+        "label": "feat2",
+        "value": 25.0,
+        "parent": "제품 A"
+      },
+      {
+        "label": "제품 B"
+      },
+      {
+        "label": "feat3",
+        "value": 20.0,
+        "parent": "제품 B"
+      },
+      {
+        "label": "feat4",
+        "value": 15.0,
+        "parent": "제품 B"
+      }
+    ]
+  },
+  "notes": "mined from report 3 (page#0 block=circle_packing)"
+}

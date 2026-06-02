@@ -1,0 +1,11 @@
+{
+  "title": "[verify] LLM-with-URL upload sanity check",
+  "report_date": "2026-05-29",
+  "tags": ["verify", "sanity"],
+  "blocks": {
+    "meta": {"sprint": "verify"},
+    "summary": "End-to-end verification that an LLM given only the server URL can post via the skill.",
+    "progress": ["adapter normalize", "validate", "POST"],
+    "next_week": ["delete this report"]
+  }
+}

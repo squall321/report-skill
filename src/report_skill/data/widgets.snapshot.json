@@ -1,0 +1,5635 @@
+{
+  "fetched_at": "2026-06-01T20:13:04.089825+00:00",
+  "api_base_url": "<captured-from-dev>",
+  "schema_version": "widget-v1",
+  "widgets": {
+    "attachment": {
+      "type": "attachment",
+      "label": "첨부 파일",
+      "description": "PDF, 스프레드시트 등 다운로드 카드로 표시되는 파일",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "max_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "allowed_extensions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^\\.[a-zA-Z0-9]+$"
+            }
+          }
+        },
+        "required": [
+          "max_count"
+        ],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "첨부",
+        "max_count": 5
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "max_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "filename": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "file_id",
+                "filename"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 5
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "7ebe76ad7650c7a3"
+    },
+    "box": {
+      "type": "box",
+      "label": "박스플롯",
+      "description": "그룹별 분포 (5수치 요약 + 이상치) — A/B 비교, 실험 분산, 측정값 산포",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "박스플롯"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "group": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "orientation": {
+            "type": "string",
+            "enum": [
+              "vertical",
+              "horizontal"
+            ]
+          },
+          "y_min": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "y_max": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "box_points": {
+            "type": "string",
+            "enum": [
+              "outliers",
+              "suspectedoutliers",
+              "all",
+              "none"
+            ]
+          },
+          "box_mean": {
+            "type": "string",
+            "enum": [
+              "none",
+              "line",
+              "sd"
+            ]
+          },
+          "jitter": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "2283dac36cd92005"
+    },
+    "bulleted_list": {
+      "type": "bulleted_list",
+      "label": "항목 리스트",
+      "description": "한 줄짜리 항목 여러 개 (이번주 한 일, 다음주 계획 등)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "placeholder": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "min_items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "text_style": {
+            "type": "object",
+            "properties": {
+              "font_size_px": {
+                "type": "integer",
+                "minimum": 6,
+                "maximum": 200
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "xs",
+                  "sm",
+                  "base",
+                  "lg",
+                  "xl",
+                  "2xl"
+                ]
+              },
+              "font_family": {
+                "type": "string",
+                "enum": [
+                  "sans",
+                  "serif",
+                  "mono"
+                ]
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right",
+                  "justify"
+                ]
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "medium",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "항목"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "5bbf43a25b2ec75f"
+    },
+    "cad_3d": {
+      "type": "cad_3d",
+      "label": "3D 모델",
+      "description": "3D CAD 모델 뷰어 (GLB/GLTF/STL/OBJ) — 회전·줌·뷰 프리셋",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "mm",
+              "cm",
+              "m"
+            ]
+          },
+          "default_view": {
+            "type": "string",
+            "enum": [
+              "iso",
+              "front",
+              "top",
+              "side",
+              "fit"
+            ]
+          },
+          "show_grid": {
+            "type": "boolean"
+          },
+          "show_axes": {
+            "type": "boolean"
+          },
+          "background": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "3D 모델",
+        "unit": "mm",
+        "default_view": "iso",
+        "show_grid": true,
+        "show_axes": true,
+        "background": "#f8fafc"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "file_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "loaded_filename": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "view_state": {
+            "type": "object",
+            "properties": {
+              "position": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "target": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "zoom": {
+                "type": "number"
+              },
+              "show_grid": {
+                "type": "boolean"
+              },
+              "show_axes": {
+                "type": "boolean"
+              },
+              "sidebar_open": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
+          "hidden_parts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "wireframe_parts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "annotations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "distance_3d",
+                    "point_3d"
+                  ]
+                },
+                "p1": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    },
+                    "z": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y",
+                    "z"
+                  ],
+                  "additionalProperties": false
+                },
+                "p2": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    },
+                    "z": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y",
+                    "z"
+                  ],
+                  "additionalProperties": false
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "color": {
+                  "type": "string",
+                  "pattern": "^#[0-9a-fA-F]{6}$"
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "p1"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "5a9eaf63a63985da"
+    },
+    "chart": {
+      "type": "chart",
+      "label": "막대/선 차트",
+      "description": "범주형 x축 (분기, 모델명 등) + 막대 / 꺾은선 — 사양·결과 비교용",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "chart_type": {
+            "type": "string",
+            "enum": [
+              "bar",
+              "line"
+            ]
+          },
+          "x_column_key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "maxLength": 64
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "columns": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "number"
+                  ]
+                },
+                "meta": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "chart_type",
+          "x_column_key",
+          "columns"
+        ],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "그래프",
+        "chart_type": "bar",
+        "x_column_key": "category",
+        "columns": [
+          {
+            "key": "category",
+            "label": "구분",
+            "type": "text"
+          },
+          {
+            "key": "value",
+            "label": "값",
+            "type": "number"
+          }
+        ]
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "chart_type": {
+            "type": "string",
+            "enum": [
+              "bar",
+              "line"
+            ]
+          },
+          "x_column_key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "x_min": {
+            "type": "number"
+          },
+          "x_max": {
+            "type": "number"
+          },
+          "y_min": {
+            "type": "number"
+          },
+          "y_max": {
+            "type": "number"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "number"
+                  ]
+                },
+                "meta": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "annotations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "vline",
+                    "vrange",
+                    "hline",
+                    "hrange",
+                    "point",
+                    "rect",
+                    "arrow",
+                    "text"
+                  ]
+                },
+                "coord_space": {
+                  "type": "string",
+                  "enum": [
+                    "data",
+                    "data_relative",
+                    "image_pct"
+                  ]
+                },
+                "geometry": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "x": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "y": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "x_from": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "x_to": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "y_from": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "y_to": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "from": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
+                        "y": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "to": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
+                        "y": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "label": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "position": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "top",
+                        "bottom",
+                        "inside",
+                        "left",
+                        "right"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                "style": {
+                  "type": "object",
+                  "properties": {
+                    "color": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "opacity": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "border": {
+                      "type": "string",
+                      "enum": [
+                        "solid",
+                        "dashed",
+                        "dotted"
+                      ]
+                    },
+                    "z": {
+                      "type": "string",
+                      "enum": [
+                        "front",
+                        "back"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "locked": {
+                  "type": "boolean"
+                },
+                "hidden": {
+                  "type": "boolean"
+                },
+                "series_key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "geometry"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "6fbcc75ed6cde4e1"
+    },
+    "comparison": {
+      "type": "comparison",
+      "label": "비교 표",
+      "description": "AS-IS / TO-BE 또는 여러 CASE를 열로, 비교 항목을 행으로 — 행은 텍스트/숫자 행과 이미지 행을 자유롭게 섞을 수 있음",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "cases": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "horizontal_scroll": {
+            "type": "boolean"
+          },
+          "max_cases": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 30
+          },
+          "image_max_height_px": {
+            "type": "integer",
+            "minimum": 80,
+            "maximum": 600
+          },
+          "text_style": {
+            "type": "object",
+            "properties": {
+              "font_size_px": {
+                "type": "integer",
+                "minimum": 6,
+                "maximum": 200
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "xs",
+                  "sm",
+                  "base",
+                  "lg",
+                  "xl",
+                  "2xl"
+                ]
+              },
+              "font_family": {
+                "type": "string",
+                "enum": [
+                  "sans",
+                  "serif",
+                  "mono"
+                ]
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right",
+                  "justify"
+                ]
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "medium",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "cases"
+        ],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "비교 표",
+        "cases": [
+          {
+            "key": "as_is",
+            "label": "AS-IS"
+          },
+          {
+            "key": "to_be",
+            "label": "TO-BE"
+          }
+        ],
+        "horizontal_scroll": false,
+        "max_cases": 6,
+        "image_max_height_px": 240
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "cases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "horizontal_scroll": {
+            "type": "boolean"
+          },
+          "max_cases": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 30
+          },
+          "image_max_height_px": {
+            "type": "integer",
+            "minimum": 80,
+            "maximum": 600
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "image"
+                  ]
+                },
+                "values": {
+                  "type": "object",
+                  "patternProperties": {
+                    "^[a-z][a-z0-9_]{0,63}$": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "file_id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "alt": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "caption": {
+                              "type": "string",
+                              "maxLength": 500
+                            }
+                          },
+                          "required": [
+                            "file_id"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "key",
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "column_widths": {
+            "type": "object",
+            "patternProperties": {
+              "^[a-z][a-z0-9_]{0,63}$": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 1200
+              }
+            },
+            "additionalProperties": false
+          },
+          "row_label_width": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 1200
+          },
+          "merges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "r": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "c": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "rs": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "cs": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "r",
+                "c",
+                "rs",
+                "cs"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "table_width_px": {
+            "type": "integer",
+            "minimum": 120,
+            "maximum": 4000
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "301301776d68c75d"
+    },
+    "contour": {
+      "type": "contour",
+      "label": "등고선 차트",
+      "description": "2D 값 매트릭스를 등고선으로 — 응답면, 등압선, 민감도 등고",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "등고선"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "matrix",
+              "rows"
+            ]
+          },
+          "x_labels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "y_labels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "matrix": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "y": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "z": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "colorscale": {
+            "type": "string",
+            "enum": [
+              "Viridis",
+              "Plasma",
+              "Cividis",
+              "Hot",
+              "Blues",
+              "Reds",
+              "Greens",
+              "RdBu",
+              "Bluered",
+              "Portland",
+              "Jet"
+            ]
+          },
+          "reverse_scale": {
+            "type": "boolean"
+          },
+          "z_min": {
+            "type": "number"
+          },
+          "z_max": {
+            "type": "number"
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "ncontours": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 100
+          },
+          "contours_coloring": {
+            "type": "string",
+            "enum": [
+              "fill",
+              "heatmap",
+              "lines",
+              "none"
+            ]
+          },
+          "show_lines": {
+            "type": "boolean"
+          },
+          "show_labels": {
+            "type": "boolean"
+          },
+          "connect_gaps": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "4846f4a68a48a11d"
+    },
+    "density": {
+      "type": "density",
+      "label": "밀도 곡선",
+      "description": "그룹별 1D KDE 곡선 — 시간·그룹별 분포 비교, 옵션으로 원데이터 점 표기",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "밀도 곡선"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "bandwidth_mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "manual"
+            ]
+          },
+          "bandwidth": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "samples": {
+            "type": "integer",
+            "minimum": 16,
+            "maximum": 1024
+          },
+          "x_min": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "x_max": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "fill": {
+            "type": "boolean"
+          },
+          "show_dots": {
+            "type": "string",
+            "enum": [
+              "none",
+              "rug",
+              "jitter"
+            ]
+          },
+          "dot_opacity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "8d44927b4fd5a0fa"
+    },
+    "equation": {
+      "type": "equation",
+      "label": "수식",
+      "description": "LaTeX 문법의 수학식 — 지배 방정식, 정의식, 회귀식 등",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "수식"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "latex": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "display_mode": {
+            "type": "string",
+            "enum": [
+              "display",
+              "inline"
+            ]
+          },
+          "number": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "3855bdf9c88f90d1"
+    },
+    "flowchart": {
+      "type": "flowchart",
+      "label": "순서도",
+      "description": "단계별 흐름을 가로 또는 세로로 연결해 표시하는 플로우차트",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "orientation": {
+            "type": "string",
+            "enum": [
+              "horizontal",
+              "vertical"
+            ]
+          },
+          "text_style": {
+            "type": "object",
+            "properties": {
+              "font_size_px": {
+                "type": "integer",
+                "minimum": 6,
+                "maximum": 200
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "xs",
+                  "sm",
+                  "base",
+                  "lg",
+                  "xl",
+                  "2xl"
+                ]
+              },
+              "font_family": {
+                "type": "string",
+                "enum": [
+                  "sans",
+                  "serif",
+                  "mono"
+                ]
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right",
+                  "justify"
+                ]
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "medium",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "순서도",
+        "orientation": "horizontal"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "orientation": {
+            "type": "string",
+            "enum": [
+              "horizontal",
+              "vertical"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 1000
+                }
+              },
+              "required": [
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "0c7b77d69a6307b2"
+    },
+    "heading": {
+      "type": "heading",
+      "label": "제목",
+      "description": "섹션 제목. level은 템플릿이 잠그고, 텍스트는 보고서 작성자가 입력 (default_text로 미리 채울 수 있음).",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              3
+            ]
+          },
+          "default_text": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "text_style": {
+            "type": "object",
+            "properties": {
+              "font_size_px": {
+                "type": "integer",
+                "minimum": 6,
+                "maximum": 200
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "xs",
+                  "sm",
+                  "base",
+                  "lg",
+                  "xl",
+                  "2xl"
+                ]
+              },
+              "font_family": {
+                "type": "string",
+                "enum": [
+                  "sans",
+                  "serif",
+                  "mono"
+                ]
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right",
+                  "justify"
+                ]
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "medium",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "margin_bottom_px": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "level"
+        ],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "level": 2
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "level": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              3
+            ]
+          },
+          "text_style": {
+            "type": "object",
+            "properties": {
+              "font_size_px": {
+                "type": "integer",
+                "minimum": 6,
+                "maximum": 200
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "xs",
+                  "sm",
+                  "base",
+                  "lg",
+                  "xl",
+                  "2xl"
+                ]
+              },
+              "font_family": {
+                "type": "string",
+                "enum": [
+                  "sans",
+                  "serif",
+                  "mono"
+                ]
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right",
+                  "justify"
+                ]
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "medium",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "margin_bottom_px": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "63a5047aba79fb63"
+    },
+    "heatmap": {
+      "type": "heatmap",
+      "label": "히트맵",
+      "description": "2D 값 매트릭스를 색상으로 — 상관행렬, 파라미터 스윕, 민감도 등",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "히트맵"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "x_labels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "y_labels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "matrix": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "colorscale": {
+            "type": "string",
+            "enum": [
+              "Viridis",
+              "Plasma",
+              "Cividis",
+              "Hot",
+              "Blues",
+              "Reds",
+              "Greens",
+              "RdBu",
+              "Bluered",
+              "Portland",
+              "Jet"
+            ]
+          },
+          "reverse_scale": {
+            "type": "boolean"
+          },
+          "z_min": {
+            "type": "number"
+          },
+          "z_max": {
+            "type": "number"
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "show_values": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "ee51c5266469123b"
+    },
+    "html_embed": {
+      "type": "html_embed",
+      "label": "HTML 임베드",
+      "description": "업로드한 HTML 파일을 sandbox iframe 으로 그대로 렌더 (스크립트 OK, 메인 페이지와 격리)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "HTML"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "file_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "bundle_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "entry_path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "height_px": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 4000
+          },
+          "display": {
+            "type": "string",
+            "enum": [
+              "card",
+              "inline"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "cover_file_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "8733ed67ec759a04"
+    },
+    "image": {
+      "type": "image",
+      "label": "이미지",
+      "description": "이미지 1장 또는 갤러리 (max_count로 결정)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "max_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "caption_required": {
+            "type": "boolean"
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "pattern": "^\\d+:\\d+$",
+            "description": "예: '16:9', '4:3', '1:1'"
+          }
+        },
+        "required": [
+          "max_count"
+        ],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "이미지",
+        "max_count": 1
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "max_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "pattern": "^\\d+:\\d+$",
+            "description": "예: '16:9', '4:3', '1:1'"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "caption": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "alt": {
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "required": [
+                "file_id"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 1
+          },
+          "annotations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "vline",
+                    "vrange",
+                    "hline",
+                    "hrange",
+                    "point",
+                    "rect",
+                    "arrow",
+                    "text"
+                  ]
+                },
+                "coord_space": {
+                  "type": "string",
+                  "enum": [
+                    "data",
+                    "data_relative",
+                    "image_pct"
+                  ]
+                },
+                "geometry": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "x": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "y": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "x_from": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "x_to": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "y_from": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "y_to": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "from": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
+                        "y": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "to": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
+                        "y": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "label": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "position": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "top",
+                        "bottom",
+                        "inside",
+                        "left",
+                        "right"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                "style": {
+                  "type": "object",
+                  "properties": {
+                    "color": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "opacity": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "border": {
+                      "type": "string",
+                      "enum": [
+                        "solid",
+                        "dashed",
+                        "dotted"
+                      ]
+                    },
+                    "z": {
+                      "type": "string",
+                      "enum": [
+                        "front",
+                        "back"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "locked": {
+                  "type": "boolean"
+                },
+                "hidden": {
+                  "type": "boolean"
+                },
+                "series_key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "geometry"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "04d04e198ca2d37b"
+    },
+    "key_value": {
+      "type": "key_value",
+      "label": "키-값",
+      "description": "자유로운 key-value 쌍을 보고서마다 직접 정의해 입력 — 메모, 사양표, 메타정보 등에 사용",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "number",
+                    "integer",
+                    "date",
+                    "select"
+                  ]
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "multi": {
+                  "type": "boolean"
+                },
+                "meta": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "text_style": {
+            "type": "object",
+            "properties": {
+              "font_size_px": {
+                "type": "integer",
+                "minimum": 6,
+                "maximum": 200
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "xs",
+                  "sm",
+                  "base",
+                  "lg",
+                  "xl",
+                  "2xl"
+                ]
+              },
+              "font_family": {
+                "type": "string",
+                "enum": [
+                  "sans",
+                  "serif",
+                  "mono"
+                ]
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right",
+                  "justify"
+                ]
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "medium",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "메모"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "number",
+                    "integer",
+                    "date",
+                    "select"
+                  ]
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "multi": {
+                  "type": "boolean"
+                },
+                "meta": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "patternProperties": {
+          "^(?!(caption|caption_skip_autofill|items)$)[a-z][a-z0-9_]{0,63}$": {
+            "anyOf": [
+              {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "null"
+                ]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "9df6dc1a3c1bae54"
+    },
+    "milestone": {
+      "type": "milestone",
+      "label": "마일스톤",
+      "description": "일정과 항목명으로 타임라인 위에 마커를 표시 (예정/완료/지연 상태)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "text_style": {
+            "type": "object",
+            "properties": {
+              "font_size_px": {
+                "type": "integer",
+                "minimum": 6,
+                "maximum": 200
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "xs",
+                  "sm",
+                  "base",
+                  "lg",
+                  "xl",
+                  "2xl"
+                ]
+              },
+              "font_family": {
+                "type": "string",
+                "enum": [
+                  "sans",
+                  "serif",
+                  "mono"
+                ]
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right",
+                  "justify"
+                ]
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "medium",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "마일스톤"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "done",
+                    "delayed"
+                  ]
+                }
+              },
+              "required": [
+                "date",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "annotations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "vline",
+                    "vrange",
+                    "hline",
+                    "hrange",
+                    "point",
+                    "rect",
+                    "arrow",
+                    "text"
+                  ]
+                },
+                "coord_space": {
+                  "type": "string",
+                  "enum": [
+                    "data",
+                    "data_relative",
+                    "image_pct"
+                  ]
+                },
+                "geometry": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "x": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "y": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "x_from": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "x_to": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "y_from": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "y_to": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "from": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
+                        "y": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "to": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
+                        "y": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "label": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "position": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "top",
+                        "bottom",
+                        "inside",
+                        "left",
+                        "right"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                "style": {
+                  "type": "object",
+                  "properties": {
+                    "color": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "opacity": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "border": {
+                      "type": "string",
+                      "enum": [
+                        "solid",
+                        "dashed",
+                        "dotted"
+                      ]
+                    },
+                    "z": {
+                      "type": "string",
+                      "enum": [
+                        "front",
+                        "back"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "locked": {
+                  "type": "boolean"
+                },
+                "hidden": {
+                  "type": "boolean"
+                },
+                "series_key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "geometry"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "761c6f5f46ff1f01"
+    },
+    "mind_map": {
+      "type": "mind_map",
+      "label": "마인드맵",
+      "description": "방사형/좌우 분기 마인드맵 — 가지에 라벨이 얹힌 유기적 곡선. 캔버스에서 +버튼·키보드로 가지 쳐가며 편집 (트리와 데이터 동일)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "마인드맵"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "parent": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 32
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "radial",
+              "horizontal"
+            ]
+          },
+          "branch_style": {
+            "type": "string",
+            "enum": [
+              "taper",
+              "curve"
+            ]
+          },
+          "color_by_group": {
+            "type": "boolean"
+          },
+          "show_root_emphasis": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "8dd9e77c7164f042"
+    },
+    "network": {
+      "type": "network",
+      "label": "네트워크 그래프",
+      "description": "노드·엣지 일반 그래프 — force-directed / circular / grid / radial 레이아웃. 의존성, 인용, 소셜 네트워크 등 (비계층 데이터)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "네트워크"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "group": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "fixed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "target": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "weight": {
+                  "type": "number"
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "directed": {
+                  "type": "boolean"
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 64
+                }
+              },
+              "required": [
+                "source",
+                "target"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "directed": {
+            "type": "boolean"
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "force",
+              "circular",
+              "grid",
+              "radial"
+            ]
+          },
+          "node_shape": {
+            "type": "string",
+            "enum": [
+              "circle",
+              "rect"
+            ]
+          },
+          "show_labels": {
+            "type": "boolean"
+          },
+          "show_edge_labels": {
+            "type": "boolean"
+          },
+          "color_by_group": {
+            "type": "boolean"
+          },
+          "node_size_by_value": {
+            "type": "boolean"
+          },
+          "node_size_min": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 80
+          },
+          "node_size_max": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 200
+          },
+          "link_distance": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 400
+          },
+          "charge_strength": {
+            "type": "integer",
+            "minimum": -2000,
+            "maximum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "f9ff5ea8f55f7d92"
+    },
+    "packing": {
+      "type": "packing",
+      "label": "원형 패킹",
+      "description": "계층 데이터를 원·원 패킹으로 (treemap 과 데이터 동일, 시각만 원형)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "패킹"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "parent": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 32
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "colorscale": {
+            "type": "string",
+            "enum": [
+              "Viridis",
+              "Plasma",
+              "Cividis",
+              "Hot",
+              "Blues",
+              "Reds",
+              "Greens",
+              "RdBu",
+              "Bluered",
+              "Portland",
+              "Jet"
+            ]
+          },
+          "reverse_scale": {
+            "type": "boolean"
+          },
+          "text_info": {
+            "type": "string",
+            "enum": [
+              "label",
+              "label+value",
+              "label+value+percent",
+              "value",
+              "none"
+            ]
+          },
+          "padding": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "123da9f07a2802f2"
+    },
+    "pie": {
+      "type": "pie",
+      "label": "파이 / 도넛 차트",
+      "description": "비중을 한 원의 부채꼴로 — 항목별 점유, 비용 구성 등 (계층은 트리맵)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "비중"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 32
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "chart_type": {
+            "type": "string",
+            "enum": [
+              "pie",
+              "donut"
+            ]
+          },
+          "hole": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.9
+          },
+          "colorscale": {
+            "type": "string",
+            "enum": [
+              "Viridis",
+              "Plasma",
+              "Cividis",
+              "Hot",
+              "Blues",
+              "Reds",
+              "Greens",
+              "RdBu",
+              "Bluered",
+              "Portland",
+              "Jet"
+            ]
+          },
+          "reverse_scale": {
+            "type": "boolean"
+          },
+          "text_info": {
+            "type": "string",
+            "enum": [
+              "label",
+              "label+percent",
+              "label+value",
+              "label+value+percent",
+              "percent",
+              "value",
+              "none"
+            ]
+          },
+          "text_position": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "inside",
+              "outside",
+              "none"
+            ]
+          },
+          "sort": {
+            "type": "boolean"
+          },
+          "show_legend": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "6ce89234e2e70095"
+    },
+    "progress_bar": {
+      "type": "progress_bar",
+      "label": "진행률 바",
+      "description": "여러 작업의 진척도를 가로 막대로 한 번에 비교 (값/목표 비율에 따라 색상 자동 매핑)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "default_max": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 8
+          },
+          "min_items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "text_style": {
+            "type": "object",
+            "properties": {
+              "font_size_px": {
+                "type": "integer",
+                "minimum": 6,
+                "maximum": 200
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "xs",
+                  "sm",
+                  "base",
+                  "lg",
+                  "xl",
+                  "2xl"
+                ]
+              },
+              "font_family": {
+                "type": "string",
+                "enum": [
+                  "sans",
+                  "serif",
+                  "mono"
+                ]
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right",
+                  "justify"
+                ]
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "medium",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "진행률",
+        "default_max": 100,
+        "unit": "%"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "default_max": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 8
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "value": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "max": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "in_progress",
+                    "done",
+                    "blocked"
+                  ]
+                }
+              },
+              "required": [
+                "label",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "cff748ca138c47b1"
+    },
+    "quadrant": {
+      "type": "quadrant",
+      "label": "2x2 매트릭스",
+      "description": "사분면 매트릭스 — SWOT/Eisenhower(버킷형 텍스트) 또는 BCG/Risk(연속 좌표) 모드",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "default_mode": {
+            "type": "string",
+            "enum": [
+              "bucket",
+              "plot"
+            ]
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "swot",
+              "bcg",
+              "eisenhower",
+              "risk",
+              "custom"
+            ]
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "x_low_label": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "x_high_label": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "y_low_label": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "y_high_label": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "quadrant_labels": {
+            "type": "object",
+            "properties": {
+              "tl": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "tr": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "bl": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "br": {
+                "type": "string",
+                "maxLength": 100
+              }
+            },
+            "additionalProperties": false
+          },
+          "quadrant_colors": {
+            "type": "object",
+            "properties": {
+              "tl": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "tr": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "bl": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              "br": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "show_grid_lines": {
+            "type": "boolean"
+          },
+          "show_axis_arrows": {
+            "type": "boolean"
+          },
+          "x_range": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "y_range": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "show_bubble_size": {
+            "type": "boolean"
+          },
+          "text_style": {
+            "type": "object",
+            "properties": {
+              "font_size_px": {
+                "type": "integer",
+                "minimum": 6,
+                "maximum": 200
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "xs",
+                  "sm",
+                  "base",
+                  "lg",
+                  "xl",
+                  "2xl"
+                ]
+              },
+              "font_family": {
+                "type": "string",
+                "enum": [
+                  "sans",
+                  "serif",
+                  "mono"
+                ]
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right",
+                  "justify"
+                ]
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "medium",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "SWOT 분석",
+        "default_mode": "bucket",
+        "preset": "swot",
+        "x_axis_title": "",
+        "y_axis_title": "",
+        "x_low_label": "내부",
+        "x_high_label": "외부",
+        "y_low_label": "부정",
+        "y_high_label": "긍정",
+        "quadrant_labels": {
+          "tl": "강점 (Strengths)",
+          "tr": "기회 (Opportunities)",
+          "bl": "약점 (Weaknesses)",
+          "br": "위협 (Threats)"
+        },
+        "quadrant_colors": {
+          "tl": "#dbeafe",
+          "tr": "#dcfce7",
+          "bl": "#fef3c7",
+          "br": "#fee2e2"
+        },
+        "show_grid_lines": true,
+        "show_axis_arrows": true,
+        "x_range": [
+          0,
+          100
+        ],
+        "y_range": [
+          0,
+          100
+        ],
+        "show_bubble_size": false
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "bucket",
+              "plot"
+            ]
+          },
+          "bucket_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "quadrant": {
+                  "type": "string",
+                  "enum": [
+                    "tl",
+                    "tr",
+                    "bl",
+                    "br"
+                  ]
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "color": {
+                  "type": "string",
+                  "pattern": "^#[0-9a-fA-F]{6}$"
+                },
+                "weight": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "quadrant"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "plot_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "size": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "color": {
+                  "type": "string",
+                  "pattern": "^#[0-9a-fA-F]{6}$"
+                },
+                "group": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "id",
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "54b40c679335a27b"
+    },
+    "raci_matrix": {
+      "type": "raci_matrix",
+      "label": "RACI 매트릭스",
+      "description": "작업(행) × 역할(열) 책임 분담표. 각 셀은 R(실행)/A(책임)/C(자문)/I(통보) 중 하나 또는 슬래시 결합 (예: R/A). 역할 열은 보고서마다 자유롭게 추가·편집 가능, 같은 그룹의 인접 열은 상단 헤더로 자동 병합.",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "default_roles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "group": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "text_style": {
+            "type": "object",
+            "properties": {
+              "font_size_px": {
+                "type": "integer",
+                "minimum": 6,
+                "maximum": 200
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "xs",
+                  "sm",
+                  "base",
+                  "lg",
+                  "xl",
+                  "2xl"
+                ]
+              },
+              "font_family": {
+                "type": "string",
+                "enum": [
+                  "sans",
+                  "serif",
+                  "mono"
+                ]
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right",
+                  "justify"
+                ]
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "medium",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "RACI 매트릭스",
+        "default_roles": [
+          {
+            "key": "modeling",
+            "label": "",
+            "group": "모델링"
+          },
+          {
+            "key": "analysis",
+            "label": "",
+            "group": "분석"
+          },
+          {
+            "key": "develop",
+            "label": "",
+            "group": "개발"
+          },
+          {
+            "key": "design",
+            "label": "",
+            "group": "설계"
+          }
+        ]
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "group": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "assignments": {
+                  "type": "object",
+                  "patternProperties": {
+                    "^[a-z][a-z0-9_]{0,63}$": {
+                      "type": "string",
+                      "pattern": "^([RACI](/[RACI])*)?$",
+                      "maxLength": 7
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "4f10efa63147e36a"
+    },
+    "radar": {
+      "type": "radar",
+      "label": "레이더 차트",
+      "description": "다축 폴라 비교 — 사양 비교 / 평가표 / 다요소 점수",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "레이더 차트"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "axis_labels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 64
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "value_min": {
+            "type": "number"
+          },
+          "value_max": {
+            "type": "number"
+          },
+          "fill_opacity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "show_legend": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "f053b5caed92a224"
+    },
+    "rich_text": {
+      "type": "rich_text",
+      "label": "긴 글",
+      "description": "마크다운으로 자유 서술 (이슈, 회고, 분석 등)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "placeholder": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "min_length": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_length": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "expand_with_content": {
+            "type": "boolean"
+          },
+          "text_style": {
+            "type": "object",
+            "properties": {
+              "font_size_px": {
+                "type": "integer",
+                "minimum": 6,
+                "maximum": 200
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "xs",
+                  "sm",
+                  "base",
+                  "lg",
+                  "xl",
+                  "2xl"
+                ]
+              },
+              "font_family": {
+                "type": "string",
+                "enum": [
+                  "sans",
+                  "serif",
+                  "mono"
+                ]
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right",
+                  "justify"
+                ]
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "medium",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "depth_styles": {
+            "type": "object",
+            "properties": {
+              "0": {
+                "type": "object",
+                "properties": {
+                  "font_size_px": {
+                    "type": "integer",
+                    "minimum": 6,
+                    "maximum": 200
+                  },
+                  "size": {
+                    "type": "string",
+                    "enum": [
+                      "xs",
+                      "sm",
+                      "base",
+                      "lg",
+                      "xl",
+                      "2xl"
+                    ]
+                  },
+                  "font_family": {
+                    "type": "string",
+                    "enum": [
+                      "sans",
+                      "serif",
+                      "mono"
+                    ]
+                  },
+                  "align": {
+                    "type": "string",
+                    "enum": [
+                      "left",
+                      "center",
+                      "right",
+                      "justify"
+                    ]
+                  },
+                  "weight": {
+                    "type": "string",
+                    "enum": [
+                      "normal",
+                      "medium",
+                      "semibold",
+                      "bold"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "1": {
+                "type": "object",
+                "properties": {
+                  "font_size_px": {
+                    "type": "integer",
+                    "minimum": 6,
+                    "maximum": 200
+                  },
+                  "size": {
+                    "type": "string",
+                    "enum": [
+                      "xs",
+                      "sm",
+                      "base",
+                      "lg",
+                      "xl",
+                      "2xl"
+                    ]
+                  },
+                  "font_family": {
+                    "type": "string",
+                    "enum": [
+                      "sans",
+                      "serif",
+                      "mono"
+                    ]
+                  },
+                  "align": {
+                    "type": "string",
+                    "enum": [
+                      "left",
+                      "center",
+                      "right",
+                      "justify"
+                    ]
+                  },
+                  "weight": {
+                    "type": "string",
+                    "enum": [
+                      "normal",
+                      "medium",
+                      "semibold",
+                      "bold"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "2": {
+                "type": "object",
+                "properties": {
+                  "font_size_px": {
+                    "type": "integer",
+                    "minimum": 6,
+                    "maximum": 200
+                  },
+                  "size": {
+                    "type": "string",
+                    "enum": [
+                      "xs",
+                      "sm",
+                      "base",
+                      "lg",
+                      "xl",
+                      "2xl"
+                    ]
+                  },
+                  "font_family": {
+                    "type": "string",
+                    "enum": [
+                      "sans",
+                      "serif",
+                      "mono"
+                    ]
+                  },
+                  "align": {
+                    "type": "string",
+                    "enum": [
+                      "left",
+                      "center",
+                      "right",
+                      "justify"
+                    ]
+                  },
+                  "weight": {
+                    "type": "string",
+                    "enum": [
+                      "normal",
+                      "medium",
+                      "semibold",
+                      "bold"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "내용",
+        "required": false
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "markdown": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 5
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                "html": {
+                  "type": "string",
+                  "maxLength": 8000
+                },
+                "relation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32,
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                }
+              },
+              "required": [
+                "depth",
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "a3e326468221b9b5"
+    },
+    "sankey": {
+      "type": "sankey",
+      "label": "Sankey 다이어그램",
+      "description": "흐름·전환을 두께로 시각화 — 자금 흐름, 사용자 funnel, 에너지 손실, 예산 분배 등",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "arrangement": {
+            "type": "string",
+            "enum": [
+              "snap",
+              "perpendicular",
+              "freeform",
+              "fixed"
+            ]
+          },
+          "node_pad": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "node_thickness": {
+            "type": "integer",
+            "minimum": 4,
+            "maximum": 80
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 32
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "Sankey 다이어그램",
+        "arrangement": "snap",
+        "node_pad": 16,
+        "node_thickness": 18
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 32
+                }
+              },
+              "required": [
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "target": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 32
+                }
+              },
+              "required": [
+                "source",
+                "target"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "arrangement": {
+            "type": "string",
+            "enum": [
+              "snap",
+              "perpendicular",
+              "freeform",
+              "fixed"
+            ]
+          },
+          "node_pad": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "node_thickness": {
+            "type": "integer",
+            "minimum": 4,
+            "maximum": 80
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 32
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "8c7a216bd6aa00d1"
+    },
+    "scatter": {
+      "type": "scatter",
+      "label": "산점도",
+      "description": "x·y 모두 수치인 좌표 그래프 — 산점도 / 곡선 / 둘 다",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "scatter",
+              "line",
+              "scatter_line"
+            ]
+          },
+          "x_column_key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "maxLength": 64
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "columns": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "number"
+                  ]
+                },
+                "meta": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "mode",
+          "x_column_key",
+          "columns"
+        ],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "산점도",
+        "mode": "scatter_line",
+        "x_column_key": "x",
+        "columns": [
+          {
+            "key": "x",
+            "label": "X",
+            "type": "number"
+          },
+          {
+            "key": "y",
+            "label": "Y",
+            "type": "number"
+          }
+        ]
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "scatter",
+              "line",
+              "scatter_line"
+            ]
+          },
+          "x_column_key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "x_key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "y_key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 64
+                }
+              },
+              "required": [
+                "x_key",
+                "y_key"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "x_min": {
+            "type": "number"
+          },
+          "x_max": {
+            "type": "number"
+          },
+          "y_min": {
+            "type": "number"
+          },
+          "y_max": {
+            "type": "number"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "number"
+                  ]
+                },
+                "meta": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "annotations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "vline",
+                    "vrange",
+                    "hline",
+                    "hrange",
+                    "point",
+                    "rect",
+                    "arrow",
+                    "text"
+                  ]
+                },
+                "coord_space": {
+                  "type": "string",
+                  "enum": [
+                    "data",
+                    "data_relative",
+                    "image_pct"
+                  ]
+                },
+                "geometry": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "x": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "y": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "x_from": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "x_to": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "y_from": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "y_to": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    },
+                    "from": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
+                        "y": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "to": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
+                        "y": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "label": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "position": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "top",
+                        "bottom",
+                        "inside",
+                        "left",
+                        "right"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "text"
+                  ],
+                  "additionalProperties": false
+                },
+                "style": {
+                  "type": "object",
+                  "properties": {
+                    "color": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "opacity": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "border": {
+                      "type": "string",
+                      "enum": [
+                        "solid",
+                        "dashed",
+                        "dotted"
+                      ]
+                    },
+                    "z": {
+                      "type": "string",
+                      "enum": [
+                        "front",
+                        "back"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "locked": {
+                  "type": "boolean"
+                },
+                "hidden": {
+                  "type": "boolean"
+                },
+                "series_key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "geometry"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "b3f2182ed56576e2"
+    },
+    "scatter3d": {
+      "type": "scatter3d",
+      "label": "3D 산점도",
+      "description": "x·y·z 3축 수치 좌표 — 회전 / 확대 / 호버 가능 (Plotly)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "z_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "columns": {
+            "type": "array",
+            "minItems": 3,
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "number"
+                  ]
+                },
+                "meta": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "columns"
+        ],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "3D 산점도",
+        "columns": [
+          {
+            "key": "x",
+            "label": "X",
+            "type": "number"
+          },
+          {
+            "key": "y",
+            "label": "Y",
+            "type": "number"
+          },
+          {
+            "key": "z",
+            "label": "Z",
+            "type": "number"
+          }
+        ]
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "scatter3d"
+            ]
+          },
+          "colorscale": {
+            "type": "string",
+            "enum": [
+              "Viridis",
+              "Plasma",
+              "Cividis",
+              "Hot",
+              "Blues",
+              "Reds",
+              "Greens",
+              "RdBu",
+              "Bluered",
+              "Portland",
+              "Jet"
+            ]
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "scatter3d",
+                    "surface"
+                  ]
+                },
+                "x_key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "y_key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "z_key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "color_key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 64
+                }
+              },
+              "required": [
+                "x_key",
+                "y_key",
+                "z_key"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "x_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "y_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "z_axis_title": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "number"
+                  ]
+                },
+                "meta": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "e62c8d15a653a145"
+    },
+    "table": {
+      "type": "table",
+      "label": "표",
+      "description": "템플릿이 열을 정의하고 보고서가 행을 채움",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "columns": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "number",
+                    "integer",
+                    "date",
+                    "select"
+                  ]
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "multi": {
+                  "type": "boolean"
+                },
+                "meta": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "min_rows": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_rows": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "text_style": {
+            "type": "object",
+            "properties": {
+              "font_size_px": {
+                "type": "integer",
+                "minimum": 6,
+                "maximum": 200
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "xs",
+                  "sm",
+                  "base",
+                  "lg",
+                  "xl",
+                  "2xl"
+                ]
+              },
+              "font_family": {
+                "type": "string",
+                "enum": [
+                  "sans",
+                  "serif",
+                  "mono"
+                ]
+              },
+              "align": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right",
+                  "justify"
+                ]
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "medium",
+                  "semibold",
+                  "bold"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "columns"
+        ],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "표",
+        "columns": [
+          {
+            "key": "name",
+            "label": "이름",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "value",
+            "label": "값",
+            "type": "text"
+          }
+        ]
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "maxLength": 64
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "number",
+                    "integer",
+                    "date",
+                    "select"
+                  ]
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "multi": {
+                  "type": "boolean"
+                },
+                "meta": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "key",
+                "label",
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "merges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "r": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "c": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "rs": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "cs": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "r",
+                "c",
+                "rs",
+                "cs"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "column_widths": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 40,
+              "maximum": 1200
+            }
+          },
+          "table_width_px": {
+            "type": "integer",
+            "minimum": 120,
+            "maximum": 4000
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "94fd6ee6daa3a8b5"
+    },
+    "tree": {
+      "type": "tree",
+      "label": "트리 다이어그램",
+      "description": "노드·엣지 계층도 — 조직도, 분류 체계, 결정 트리, 파일 트리 등 (트리맵과 데이터 동일, 시각만 다름)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "트리"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "parent": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "subtitle": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 32
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "orientation": {
+            "type": "string",
+            "enum": [
+              "vertical",
+              "horizontal"
+            ]
+          },
+          "node_shape": {
+            "type": "string",
+            "enum": [
+              "rect",
+              "circle"
+            ]
+          },
+          "edge_style": {
+            "type": "string",
+            "enum": [
+              "curve",
+              "step",
+              "straight"
+            ]
+          },
+          "color_by_group": {
+            "type": "boolean"
+          },
+          "node_padding_x": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 80
+          },
+          "node_padding_y": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 80
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "64a461e8b3490a10"
+    },
+    "treemap": {
+      "type": "treemap",
+      "label": "트리맵",
+      "description": "계층 데이터의 비중을 사각형 면적으로 — 비용 분해, 시장 점유, BoM 등",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "트리맵"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "parent": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 32
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "colorscale": {
+            "type": "string",
+            "enum": [
+              "Viridis",
+              "Plasma",
+              "Cividis",
+              "Hot",
+              "Blues",
+              "Reds",
+              "Greens",
+              "RdBu",
+              "Bluered",
+              "Portland",
+              "Jet"
+            ]
+          },
+          "reverse_scale": {
+            "type": "boolean"
+          },
+          "text_info": {
+            "type": "string",
+            "enum": [
+              "label",
+              "label+value",
+              "label+value+percent_parent",
+              "label+value+percent_root",
+              "label+percent_root",
+              "value",
+              "none"
+            ]
+          },
+          "branchvalues": {
+            "type": "string",
+            "enum": [
+              "remainder",
+              "total"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "2a8bfb524cb79b37"
+    },
+    "video": {
+      "type": "video",
+      "label": "동영상",
+      "description": "업로드한 동영상 파일을 웹에서 재생 (mp4 / webm / mov / ogg / m4v)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "max_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "autoplay": {
+            "type": "boolean"
+          },
+          "loop": {
+            "type": "boolean"
+          },
+          "muted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "max_count"
+        ],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "동영상",
+        "max_count": 1
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "max_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "autoplay": {
+            "type": "boolean"
+          },
+          "loop": {
+            "type": "boolean"
+          },
+          "muted": {
+            "type": "boolean"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "filename": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "mime_type": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              },
+              "required": [
+                "file_id"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 0,
+            "maxItems": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "4e2650de8dcec89a"
+    },
+    "waffle": {
+      "type": "waffle",
+      "label": "와플 차트",
+      "description": "비율을 격자 100칸 (또는 N칸) 으로 — 점유율·달성률·인구 비중 등 (파이 대안, 작은 % 비교에 강함)",
+      "has_content": true,
+      "props_schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "default_props": {
+        "label": "비중"
+      },
+      "content_schema": {
+        "type": "object",
+        "properties": {
+          "caption": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "caption_skip_autofill": {
+            "type": "boolean"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "color": {
+                  "type": "string",
+                  "maxLength": 32
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "cols": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "grid_rows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "shape": {
+            "type": "string",
+            "enum": [
+              "square",
+              "circle"
+            ]
+          },
+          "fill_direction": {
+            "type": "string",
+            "enum": [
+              "row",
+              "column"
+            ]
+          },
+          "show_legend": {
+            "type": "boolean"
+          },
+          "show_value_per_cell": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "content_schema_error": null,
+      "hash": "667a3de2d457def4"
+    }
+  }
+}

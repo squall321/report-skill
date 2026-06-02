@@ -1,0 +1,60 @@
+{
+  "template_id": "release-note",
+  "version": 1,
+  "name": "릴리스 노트",
+  "description": "버전별 변경사항 요약",
+  "category": "release",
+  "schema": {
+    "blocks": [
+      {
+        "id": "meta",
+        "type": "key_value",
+        "props": {
+          "items": [
+            {
+              "key": "version",
+              "type": "text",
+              "label": "버전",
+              "required": true
+            },
+            {
+              "key": "released_at",
+              "type": "date",
+              "label": "릴리스일",
+              "required": true
+            }
+          ],
+          "label": "릴리스 정보"
+        }
+      },
+      {
+        "id": "highlights",
+        "type": "rich_text",
+        "props": {
+          "label": "주요 변경",
+          "required": true
+        }
+      },
+      {
+        "id": "features",
+        "type": "bulleted_list",
+        "props": {
+          "label": "기능"
+        }
+      },
+      {
+        "id": "fixes",
+        "type": "bulleted_list",
+        "props": {
+          "label": "버그 수정"
+        }
+      }
+    ],
+    "version": "widget-v1"
+  },
+  "owner_workspace_slugs": null,
+  "is_published": true,
+  "is_latest": true,
+  "created_by_user_id": 1,
+  "created_at": "2026-05-25T20:42:09.864097"
+}

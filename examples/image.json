@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "widget_type": "image",
+  "for_schema_hash": "043eb9126c700cbf",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "max_count": 0,
+      "aspect_ratio": "TODO",
+      "files": [
+        {
+          "file_id": "TODO",
+          "caption": "TODO",
+          "alt": "TODO"
+        }
+      ],
+      "annotations": [
+        {
+          "type": "vline",
+          "id": "TODO",
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "x_from": 0,
+            "x_to": 0,
+            "y_from": 0
+          },
+          "coord_space": "data",
+          "label": {
+            "text": "TODO",
+            "position": "auto"
+          },
+          "style": {
+            "color": "TODO",
+            "opacity": 0,
+            "border": "solid",
+            "z": "front"
+          }
+        }
+      ]
+    },
+    "props": {
+      "label": "이미지",
+      "max_count": 1
+    }
+  },
+  "expected_content": {
+    "caption": "TODO",
+    "max_count": 0,
+    "aspect_ratio": "TODO",
+    "files": [
+      {
+        "file_id": "TODO",
+        "caption": "TODO",
+        "alt": "TODO"
+      }
+    ],
+    "annotations": [
+      {
+        "type": "vline",
+        "id": "TODO",
+        "geometry": {
+          "x": 0,
+          "y": 0,
+          "x_from": 0,
+          "x_to": 0,
+          "y_from": 0
+        },
+        "coord_space": "data",
+        "label": {
+          "text": "TODO",
+          "position": "auto"
+        },
+        "style": {
+          "color": "TODO",
+          "opacity": 0,
+          "border": "solid",
+          "z": "front"
+        }
+      }
+    ]
+  },
+  "notes": "TODO: hand-review this example for `image` (이미지). The input/expected_content fields are auto-generated placeholders and almost certainly need to be replaced with realistic data."
+}

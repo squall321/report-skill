@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "widget_type": "attachment",
+  "for_schema_hash": "293ca01811a90b3c",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "max_count": 0,
+      "files": [
+        {
+          "file_id": "TODO",
+          "filename": "TODO",
+          "size": 0
+        }
+      ]
+    },
+    "props": {
+      "label": "첨부",
+      "max_count": 5
+    }
+  },
+  "expected_content": {
+    "caption": "TODO",
+    "max_count": 0,
+    "files": [
+      {
+        "file_id": "TODO",
+        "filename": "TODO",
+        "size": 0
+      }
+    ]
+  },
+  "notes": "TODO: hand-review this example for `attachment` (첨부 파일). The input/expected_content fields are auto-generated placeholders and almost certainly need to be replaced with realistic data."
+}

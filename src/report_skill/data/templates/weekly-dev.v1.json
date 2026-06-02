@@ -1,0 +1,86 @@
+{
+  "template_id": "weekly-dev",
+  "version": 1,
+  "name": "개발 주간 보고",
+  "description": "팀 단위 주간 진행상황 / 이슈 / 다음 주 계획",
+  "category": "periodic",
+  "schema": {
+    "blocks": [
+      {
+        "id": "meta",
+        "type": "key_value",
+        "props": {
+          "label": "메모"
+        }
+      },
+      {
+        "id": "summary",
+        "type": "rich_text",
+        "props": {
+          "label": "주간 요약",
+          "required": true,
+          "placeholder": "이번 주 핵심 내용을 3-5줄로"
+        }
+      },
+      {
+        "id": "progress",
+        "type": "bulleted_list",
+        "props": {
+          "label": "진행 항목",
+          "min_items": 1,
+          "placeholder": "완료 / 진행 중 작업"
+        }
+      },
+      {
+        "id": "issues",
+        "type": "table",
+        "props": {
+          "label": "이슈 / 리스크",
+          "columns": [
+            {
+              "key": "issue",
+              "type": "text",
+              "label": "이슈",
+              "required": true
+            },
+            {
+              "key": "severity",
+              "type": "select",
+              "label": "심각도",
+              "options": [
+                "낮음",
+                "보통",
+                "높음"
+              ],
+              "required": true
+            },
+            {
+              "key": "owner",
+              "type": "text",
+              "label": "담당"
+            },
+            {
+              "key": "due",
+              "type": "date",
+              "label": "마감"
+            }
+          ]
+        }
+      },
+      {
+        "id": "next_week",
+        "type": "bulleted_list",
+        "props": {
+          "label": "다음 주 계획",
+          "min_items": 1
+        }
+      }
+    ],
+    "version": "widget-v1"
+  },
+  "owner_workspace_slugs": null,
+  "is_published": true,
+  "is_latest": true,
+  "created_by_user_id": 1,
+  "created_at": "2026-05-25T20:42:09.864081"
+}

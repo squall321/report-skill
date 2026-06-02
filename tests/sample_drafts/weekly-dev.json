@@ -1,0 +1,30 @@
+{
+  "title": "5월 4주차 백엔드 주간보고 (스킬 자동 생성)",
+  "report_date": "2026-05-26",
+  "tags": ["weekly", "backend"],
+  "blocks": {
+    "meta": {
+      "team": "백엔드",
+      "sprint": "Sprint-23",
+      "lead": "박국진"
+    },
+    "summary": "이번 주는 API 통합과 PostgreSQL 스키마 마이그레이션을 진행했다. 스테이징 환경 배포에 성공했고, 다음 주는 결제 API 통합과 캐시 최적화가 핵심.",
+    "progress": [
+      "REST API 엔드포인트 5개 신규 추가 (orders, refunds, settlements)",
+      "PostgreSQL 스키마 v2 마이그레이션 완료 (28건 적용)",
+      "단위 테스트 커버리지 85% 도달",
+      "Skill 앱 P0/P1 골격 완성"
+    ],
+    "issues": [
+      {"issue": "타사 결제 API 연동 지연", "severity": "높음", "owner": "김철수", "due": "2026-05-31"},
+      {"issue": "로컬 캐시 성능 저하", "severity": "중간", "owner": "이영희", "due": "2026-05-29"},
+      {"issue": "테스트 시드 데이터 부족", "severity": "낮음", "owner": "박민수", "due": "2026-06-03"}
+    ],
+    "next_week": [
+      "결제 API 통합 (담당: 김철수)",
+      "캐시 레이어 최적화 (담당: 이영희)",
+      "통합 테스트 시드 데이터 확보",
+      "P2 시각 위젯 어댑터 6종 추가"
+    ]
+  }
+}

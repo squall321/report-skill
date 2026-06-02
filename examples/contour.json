@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "widget_type": "contour",
+  "for_schema_hash": "4846f4a68a48a11d",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "mode": "matrix",
+      "x_labels": [
+        "TODO"
+      ],
+      "y_labels": [
+        "TODO"
+      ]
+    },
+    "props": {
+      "label": "등고선"
+    }
+  },
+  "expected_content": {
+    "mode": "rows",
+    "rows": [
+      {
+        "x": 1.0,
+        "y": 1.0,
+        "z": 0.5
+      },
+      {
+        "x": 1.0,
+        "y": 2.0,
+        "z": 0.8
+      },
+      {
+        "x": 2.0,
+        "y": 1.0,
+        "z": 0.3
+      }
+    ]
+  },
+  "notes": "mined from report 3 (page#0 block=contour_demo)"
+}

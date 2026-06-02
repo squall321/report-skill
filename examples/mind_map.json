@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "widget_type": "mind_map",
+  "for_schema_hash": "8dd9e77c7164f042",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "rows": [
+        {
+          "label": "TODO",
+          "parent": "TODO",
+          "color": "TODO"
+        }
+      ],
+      "layout": "radial",
+      "branch_style": "taper"
+    },
+    "props": {
+      "label": "마인드맵"
+    }
+  },
+  "expected_content": {
+    "rows": [
+      {
+        "label": "중심 주제"
+      },
+      {
+        "label": "분야 A",
+        "parent": "중심 주제"
+      },
+      {
+        "label": "세부 1",
+        "parent": "분야 A"
+      },
+      {
+        "label": "세부 2",
+        "parent": "분야 A"
+      },
+      {
+        "label": "분야 B",
+        "parent": "중심 주제"
+      },
+      {
+        "label": "세부 3",
+        "parent": "분야 B"
+      },
+      {
+        "label": "분야 C",
+        "parent": "중심 주제"
+      }
+    ]
+  },
+  "notes": "mined from report 3 (page#0 block=concept_mindmap)"
+}

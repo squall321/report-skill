@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "widget_type": "quadrant",
+  "for_schema_hash": "54b40c679335a27b",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "mode": "bucket",
+      "bucket_items": [
+        {
+          "id": "TODO",
+          "quadrant": "tl",
+          "text": "TODO",
+          "color": "TODO",
+          "weight": 0
+        }
+      ],
+      "plot_items": [
+        {
+          "id": "TODO",
+          "y": 0,
+          "x": 0,
+          "label": "TODO",
+          "size": 0,
+          "color": "TODO"
+        }
+      ]
+    },
+    "props": {
+      "label": "SWOT 분석",
+      "default_mode": "bucket",
+      "preset": "swot",
+      "x_axis_title": "",
+      "y_axis_title": "",
+      "x_low_label": "내부",
+      "x_high_label": "외부",
+      "y_low_label": "부정",
+      "y_high_label": "긍정",
+      "quadrant_labels": {
+        "tl": "강점 (Strengths)",
+        "tr": "기회 (Opportunities)",
+        "bl": "약점 (Weaknesses)",
+        "br": "위협 (Threats)"
+      },
+      "quadrant_colors": {
+        "tl": "#dbeafe",
+        "tr": "#dcfce7",
+        "bl": "#fef3c7",
+        "br": "#fee2e2"
+      },
+      "show_grid_lines": true,
+      "show_axis_arrows": true,
+      "x_range": [
+        0,
+        100
+      ],
+      "y_range": [
+        0,
+        100
+      ],
+      "show_bubble_size": false
+    }
+  },
+  "expected_content": {
+    "mode": "plot",
+    "plot_items": [
+      {
+        "x": 0.85,
+        "y": 0.7,
+        "id": "p_1",
+        "label": "결제 모듈"
+      },
+      {
+        "x": 0.45,
+        "y": 0.3,
+        "id": "p_2",
+        "label": "캐시 최적화"
+      },
+      {
+        "x": 0.55,
+        "y": 0.4,
+        "id": "ui",
+        "label": "관리자 UI 개선"
+      },
+      {
+        "x": 0.9,
+        "y": 0.85,
+        "id": "ai",
+        "label": "AI 보고서 자동화"
+      }
+    ]
+  },
+  "notes": "mined from report 2 (page#1 block=priority_matrix)"
+}

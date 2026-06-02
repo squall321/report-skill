@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "widget_type": "key_value",
+  "for_schema_hash": "9df6dc1a3c1bae54",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "items": [
+        {
+          "key": "TODO",
+          "label": "TODO",
+          "type": "text",
+          "options": [
+            "TODO"
+          ],
+          "required": false,
+          "multi": false
+        }
+      ]
+    },
+    "props": {
+      "label": "메모"
+    }
+  },
+  "expected_content": {
+    "author": "박국진",
+    "status": "draft",
+    "rfc_number": "0042"
+  },
+  "notes": "mined from report 2 (page#2 block=meta)"
+}

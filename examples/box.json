@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "widget_type": "box",
+  "for_schema_hash": "2283dac36cd92005",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "unit": "TODO",
+      "x_axis_title": "TODO",
+      "y_axis_title": "TODO"
+    },
+    "props": {
+      "label": "박스플롯"
+    }
+  },
+  "expected_content": {
+    "rows": [
+      {
+        "group": "A",
+        "value": 80.0
+      },
+      {
+        "group": "A",
+        "value": 90.0
+      },
+      {
+        "group": "A",
+        "value": 100.0
+      },
+      {
+        "group": "A",
+        "value": 110.0
+      },
+      {
+        "group": "A",
+        "value": 120.0
+      },
+      {
+        "group": "B",
+        "value": 150.0
+      },
+      {
+        "group": "B",
+        "value": 160.0
+      },
+      {
+        "group": "B",
+        "value": 165.0
+      },
+      {
+        "group": "B",
+        "value": 170.0
+      },
+      {
+        "group": "B",
+        "value": 180.0
+      }
+    ]
+  },
+  "notes": "mined from report 3 (page#0 block=latency_box)"
+}

@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "widget_type": "scatter",
+  "for_schema_hash": "b3f2182ed56576e2",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "mode": "scatter",
+      "x_column_key": "TODO",
+      "series": [
+        {
+          "x_key": "TODO",
+          "y_key": "TODO",
+          "label": "TODO",
+          "color": "TODO"
+        }
+      ],
+      "x_axis_title": "TODO"
+    },
+    "props": {
+      "label": "산점도",
+      "mode": "scatter_line",
+      "x_column_key": "x",
+      "columns": [
+        {
+          "key": "x",
+          "label": "X",
+          "type": "number"
+        },
+        {
+          "key": "y",
+          "label": "Y",
+          "type": "number"
+        }
+      ]
+    }
+  },
+  "expected_content": {
+    "mode": "scatter_line",
+    "rows": [
+      {
+        "x": 1.5,
+        "y": 2.3
+      },
+      {
+        "x": 2.0,
+        "y": 3.1
+      },
+      {
+        "x": 3.5,
+        "y": 4.8
+      },
+      {
+        "x": 4.2,
+        "y": 5.5
+      }
+    ],
+    "series": [
+      {
+        "label": "Y",
+        "x_key": "x",
+        "y_key": "y"
+      }
+    ],
+    "caption": "XY 산점도",
+    "columns": [
+      {
+        "key": "x",
+        "type": "number",
+        "label": "X"
+      },
+      {
+        "key": "y",
+        "type": "number",
+        "label": "Y"
+      }
+    ],
+    "x_column_key": "x"
+  },
+  "notes": "mined from report 3 (page#0 block=xy_scatter)"
+}

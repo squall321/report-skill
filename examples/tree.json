@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "widget_type": "tree",
+  "for_schema_hash": "64a461e8b3490a10",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "rows": [
+        {
+          "label": "TODO",
+          "parent": "TODO",
+          "subtitle": "TODO",
+          "color": "TODO"
+        }
+      ],
+      "orientation": "vertical",
+      "node_shape": "rect"
+    },
+    "props": {
+      "label": "트리"
+    }
+  },
+  "expected_content": {
+    "rows": [
+      {
+        "label": "Payment"
+      },
+      {
+        "label": "Gateway",
+        "parent": "Payment"
+      },
+      {
+        "label": "Stripe",
+        "parent": "Gateway"
+      },
+      {
+        "label": "Internal",
+        "parent": "Gateway"
+      },
+      {
+        "label": "Outbox",
+        "parent": "Payment"
+      },
+      {
+        "label": "Publisher",
+        "parent": "Outbox"
+      },
+      {
+        "label": "Consumer",
+        "parent": "Outbox"
+      },
+      {
+        "label": "Webhook",
+        "parent": "Payment"
+      },
+      {
+        "label": "Receiver",
+        "parent": "Webhook"
+      },
+      {
+        "label": "Validator",
+        "parent": "Webhook"
+      }
+    ]
+  },
+  "notes": "mined from report 2 (page#2 block=module_tree)"
+}

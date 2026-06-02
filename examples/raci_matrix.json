@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "widget_type": "raci_matrix",
+  "for_schema_hash": "4f10efa63147e36a",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "roles": [
+        {
+          "key": "TODO",
+          "label": "TODO",
+          "group": "TODO"
+        }
+      ],
+      "rows": [
+        {
+          "label": "TODO",
+          "note": "TODO",
+          "assignments": {}
+        }
+      ]
+    },
+    "props": {
+      "label": "RACI 매트릭스",
+      "default_roles": [
+        {
+          "key": "modeling",
+          "label": "",
+          "group": "모델링"
+        },
+        {
+          "key": "analysis",
+          "label": "",
+          "group": "분석"
+        },
+        {
+          "key": "develop",
+          "label": "",
+          "group": "개발"
+        },
+        {
+          "key": "design",
+          "label": "",
+          "group": "설계"
+        }
+      ]
+    }
+  },
+  "expected_content": {
+    "rows": [
+      {
+        "label": "API 설계",
+        "assignments": {
+          "pm": "C",
+          "qa": "I",
+          "dev": "R",
+          "lead": "A"
+        }
+      },
+      {
+        "label": "단위 테스트",
+        "assignments": {
+          "pm": "I",
+          "qa": "C",
+          "dev": "R",
+          "lead": "A"
+        }
+      },
+      {
+        "label": "통합 테스트",
+        "assignments": {
+          "pm": "I",
+          "qa": "R",
+          "dev": "C",
+          "lead": "A"
+        }
+      }
+    ],
+    "roles": [
+      {
+        "key": "pm",
+        "label": "PM"
+      },
+      {
+        "key": "dev",
+        "label": "Dev"
+      },
+      {
+        "key": "qa",
+        "label": "QA"
+      },
+      {
+        "key": "lead",
+        "label": "Lead"
+      }
+    ]
+  },
+  "notes": "mined from report 2 (page#1 block=ownership_raci)"
+}

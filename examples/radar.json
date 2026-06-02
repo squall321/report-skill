@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "widget_type": "radar",
+  "for_schema_hash": "f053b5caed92a224",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "axis_labels": [
+        "TODO"
+      ],
+      "series": [
+        {
+          "label": "TODO",
+          "color": "TODO"
+        }
+      ],
+      "values": [
+        [
+          0
+        ]
+      ]
+    },
+    "props": {
+      "label": "레이더 차트"
+    }
+  },
+  "expected_content": {
+    "series": [
+      {
+        "label": "자체 구축"
+      },
+      {
+        "label": "Stripe"
+      }
+    ],
+    "values": [
+      [
+        9.0,
+        9.0,
+        3.0,
+        4.0,
+        7.0
+      ],
+      [
+        4.0,
+        5.0,
+        8.0,
+        8.0,
+        9.0
+      ]
+    ],
+    "axis_labels": [
+      "비용절감",
+      "통제력",
+      "초기리스크",
+      "유지보수",
+      "확장성"
+    ]
+  },
+  "notes": "mined from report 2 (page#2 block=performance_radar)"
+}

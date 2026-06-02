@@ -1,0 +1,12 @@
+{
+  "widget_type": "key_value",
+  "props": {},
+  "raw_input": {
+    "Team": "백엔드",
+    "Sprint Number": "Sprint-23",
+    "LEAD_NAME": "박국진",
+    "release-date": "2026-05-31"
+  },
+  "should_normalize": true,
+  "note": "8B model emits TitleCase / SCREAMING_SNAKE keys; to_slug normalizes them to ^[a-z][a-z0-9_]*$"
+}

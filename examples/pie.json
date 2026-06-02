@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "widget_type": "pie",
+  "for_schema_hash": "6ce89234e2e70095",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "unit": "TODO",
+      "rows": [
+        {
+          "label": "TODO",
+          "value": 0,
+          "color": "TODO"
+        }
+      ],
+      "chart_type": "pie"
+    },
+    "props": {
+      "label": "비중"
+    }
+  },
+  "expected_content": {
+    "rows": [
+      {
+        "label": "높음",
+        "value": 3.0
+      },
+      {
+        "label": "중간",
+        "value": 7.0
+      },
+      {
+        "label": "낮음",
+        "value": 12.0
+      }
+    ]
+  },
+  "notes": "mined from report 2 (page#0 block=severity_breakdown)"
+}

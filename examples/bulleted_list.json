@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "widget_type": "bulleted_list",
+  "for_schema_hash": "5bbf43a25b2ec75f",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "items": [
+        "TODO"
+      ]
+    },
+    "props": {
+      "label": "항목"
+    }
+  },
+  "expected_content": {
+    "items": [
+      "PCI-DSS 준수 비용 증가",
+      "결제 실패 시 retry 로직 복잡도",
+      "초기 3개월간 안정성 우려"
+    ]
+  },
+  "notes": "mined from report 2 (page#2 block=risks)"
+}

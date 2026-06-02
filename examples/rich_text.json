@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "widget_type": "rich_text",
+  "for_schema_hash": "a3e326468221b9b5",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "markdown": "TODO",
+      "items": [
+        {
+          "depth": 0,
+          "text": "TODO",
+          "html": "TODO",
+          "relation": "TODO"
+        }
+      ]
+    },
+    "props": {
+      "label": "내용",
+      "required": false
+    }
+  },
+  "expected_content": {
+    "markdown": "이 보고서는 mining 용 샘플로, 다양한 시각 위젯이 정상 콘텐츠를 가진 상태로 저장됨."
+  },
+  "notes": "mined from report 3 (page#0 block=summary)"
+}

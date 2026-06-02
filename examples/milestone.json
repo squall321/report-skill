@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "widget_type": "milestone",
+  "for_schema_hash": "761c6f5f46ff1f01",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "start_date": "2026-01-01",
+      "end_date": "2026-01-01",
+      "items": [
+        {
+          "label": "TODO",
+          "date": "2026-01-01",
+          "note": "TODO",
+          "status": "pending"
+        }
+      ],
+      "annotations": [
+        {
+          "type": "vline",
+          "id": "TODO",
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "x_from": 0,
+            "x_to": 0,
+            "y_from": 0
+          },
+          "coord_space": "data",
+          "label": {
+            "text": "TODO",
+            "position": "auto"
+          },
+          "style": {
+            "color": "TODO",
+            "opacity": 0,
+            "border": "solid",
+            "z": "front"
+          }
+        }
+      ]
+    },
+    "props": {
+      "label": "마일스톤"
+    }
+  },
+  "expected_content": {
+    "items": [
+      {
+        "date": "2026-05-29",
+        "label": "캐시 최적화 완료",
+        "status": "pending"
+      },
+      {
+        "date": "2026-05-31",
+        "label": "결제 API 통합",
+        "status": "pending"
+      },
+      {
+        "date": "2026-06-05",
+        "label": "스테이징 회귀 테스트",
+        "status": "pending"
+      },
+      {
+        "date": "2026-08-01",
+        "label": "프로덕션 안정화",
+        "status": "pending"
+      },
+      {
+        "date": "2026-08-22",
+        "label": "외부감사 1차",
+        "status": "pending"
+      },
+      {
+        "date": "2026-09-15",
+        "label": "확장팩 출시",
+        "status": "pending"
+      },
+      {
+        "date": "2026-11-01",
+        "label": "11월 점검",
+        "status": "pending"
+      },
+      {
+        "date": "2026-11-15",
+        "label": "외부보고",
+        "status": "pending"
+      },
+      {
+        "date": "2026-12-01",
+        "label": "12월 정기",
+        "status": "pending"
+      },
+      {
+        "date": "2027-01-15",
+        "label": "신년 킥오프",
+        "status": "pending"
+      }
+    ]
+  },
+  "notes": "mined from report 2 (page#0 block=upcoming_milestones)"
+}

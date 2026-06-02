@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "widget_type": "progress_bar",
+  "for_schema_hash": "cff748ca138c47b1",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "default_max": 0,
+      "unit": "TODO",
+      "items": [
+        {
+          "label": "TODO",
+          "value": 0,
+          "max": 0,
+          "note": "TODO",
+          "status": "pending"
+        }
+      ]
+    },
+    "props": {
+      "label": "진행률",
+      "default_max": 100,
+      "unit": "%"
+    }
+  },
+  "expected_content": {
+    "items": [
+      {
+        "max": 10.0,
+        "label": "피처 A",
+        "value": 7.0
+      },
+      {
+        "max": 100.0,
+        "label": "피처 B",
+        "value": 50.0
+      },
+      {
+        "max": 100.0,
+        "label": "피처 C",
+        "value": 90.0
+      }
+    ]
+  },
+  "notes": "mined from report 3 (page#0 block=feature_progress)"
+}

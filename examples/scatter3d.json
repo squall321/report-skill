@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "widget_type": "scatter3d",
+  "for_schema_hash": "e62c8d15a653a145",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "mode": "scatter3d",
+      "colorscale": "Viridis",
+      "series": [
+        {
+          "x_key": "TODO",
+          "z_key": "TODO",
+          "y_key": "TODO",
+          "label": "TODO",
+          "kind": "scatter3d",
+          "color_key": "TODO"
+        }
+      ],
+      "x_axis_title": "TODO"
+    },
+    "props": {
+      "label": "3D 산점도",
+      "columns": [
+        {
+          "key": "x",
+          "label": "X",
+          "type": "number"
+        },
+        {
+          "key": "y",
+          "label": "Y",
+          "type": "number"
+        },
+        {
+          "key": "z",
+          "label": "Z",
+          "type": "number"
+        }
+      ]
+    }
+  },
+  "expected_content": {
+    "mode": "scatter3d",
+    "rows": [
+      {
+        "x": 1.0,
+        "y": 2.0,
+        "z": 3.0
+      },
+      {
+        "x": 2.0,
+        "y": 3.0,
+        "z": 5.0
+      },
+      {
+        "x": 4.0,
+        "y": 1.0,
+        "z": 2.0
+      }
+    ],
+    "series": [
+      {
+        "kind": "scatter3d",
+        "label": "3D 산점도",
+        "x_key": "x",
+        "y_key": "y",
+        "z_key": "z"
+      }
+    ],
+    "caption": "3D 산점도",
+    "columns": [
+      {
+        "key": "x",
+        "type": "number",
+        "label": "X"
+      },
+      {
+        "key": "y",
+        "type": "number",
+        "label": "Y"
+      },
+      {
+        "key": "z",
+        "type": "number",
+        "label": "Z"
+      }
+    ]
+  },
+  "notes": "mined from report 3 (page#0 block=xyz_scatter3d)"
+}

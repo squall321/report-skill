@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "widget_type": "equation",
+  "for_schema_hash": "3855bdf9c88f90d1",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "latex": "TODO",
+      "display_mode": "display",
+      "number": "TODO"
+    },
+    "props": {
+      "label": "수식"
+    }
+  },
+  "expected_content": {
+    "latex": "ROI = \\frac{\\text{연간 절감액} - \\text{개발 비용}}{\\text{개발 비용}} \\times 100"
+  },
+  "notes": "mined from report 2 (page#2 block=decision_equation)"
+}

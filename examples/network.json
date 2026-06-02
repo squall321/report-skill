@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "widget_type": "network",
+  "for_schema_hash": "f9ff5ea8f55f7d92",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "nodes": [
+        {
+          "id": "TODO",
+          "label": "TODO",
+          "group": "TODO",
+          "value": 0,
+          "color": "TODO"
+        }
+      ],
+      "edges": [
+        {
+          "target": "TODO",
+          "source": "TODO",
+          "weight": 0,
+          "label": "TODO",
+          "directed": false
+        }
+      ],
+      "directed": false
+    },
+    "props": {
+      "label": "네트워크"
+    }
+  },
+  "expected_content": {
+    "edges": [
+      {
+        "source": "API",
+        "target": "DB"
+      },
+      {
+        "source": "API",
+        "target": "Cache"
+      },
+      {
+        "source": "Worker",
+        "target": "DB"
+      },
+      {
+        "source": "Worker",
+        "target": "Queue"
+      },
+      {
+        "source": "Cache",
+        "target": "DB"
+      }
+    ],
+    "nodes": [
+      {
+        "id": "API"
+      },
+      {
+        "id": "DB"
+      },
+      {
+        "id": "Cache"
+      },
+      {
+        "id": "Worker"
+      },
+      {
+        "id": "Queue"
+      }
+    ]
+  },
+  "notes": "mined from report 3 (page#0 block=service_network)"
+}

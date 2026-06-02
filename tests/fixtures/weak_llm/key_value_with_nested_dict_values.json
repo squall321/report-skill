@@ -1,0 +1,11 @@
+{
+  "widget_type": "key_value",
+  "props": {},
+  "raw_input": {
+    "team": {"name": "be", "size": 3},
+    "sprint": "Sprint-23",
+    "members": ["박국진", "이영희", "김철수"]
+  },
+  "should_normalize": true,
+  "note": "weak LLM nests an object as a value (not allowed by schema scalar union). _coerce_scalar stringifies dicts so the value survives; arrays of scalars pass through untouched"
+}

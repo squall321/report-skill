@@ -1,0 +1,90 @@
+{
+  "template_id": "weekly-biz",
+  "version": 1,
+  "name": "영업 주간 보고",
+  "description": "영업 파이프라인 / 신규 미팅 / 클로징 현황",
+  "category": "periodic",
+  "schema": {
+    "blocks": [
+      {
+        "id": "meta",
+        "type": "key_value",
+        "props": {
+          "items": [
+            {
+              "key": "period",
+              "type": "text",
+              "label": "보고 기간",
+              "required": true
+            },
+            {
+              "key": "owner",
+              "type": "text",
+              "label": "작성자",
+              "required": true
+            }
+          ],
+          "label": "보고 정보"
+        }
+      },
+      {
+        "id": "pipeline",
+        "type": "table",
+        "props": {
+          "label": "주요 파이프라인",
+          "columns": [
+            {
+              "key": "account",
+              "type": "text",
+              "label": "고객사",
+              "required": true
+            },
+            {
+              "key": "stage",
+              "type": "select",
+              "label": "단계",
+              "options": [
+                "리드",
+                "제안",
+                "협상",
+                "클로징"
+              ],
+              "required": true
+            },
+            {
+              "key": "amount",
+              "type": "number",
+              "label": "예상금액"
+            },
+            {
+              "key": "next_action",
+              "type": "text",
+              "label": "다음 액션"
+            }
+          ]
+        }
+      },
+      {
+        "id": "new_meetings",
+        "type": "bulleted_list",
+        "props": {
+          "label": "신규 미팅"
+        }
+      },
+      {
+        "id": "closing",
+        "type": "rich_text",
+        "props": {
+          "label": "클로징 현황",
+          "placeholder": "이번 주 마감/예정 건"
+        }
+      }
+    ],
+    "version": "widget-v1"
+  },
+  "owner_workspace_slugs": null,
+  "is_published": true,
+  "is_latest": true,
+  "created_by_user_id": 1,
+  "created_at": "2026-05-25T20:42:09.864088"
+}

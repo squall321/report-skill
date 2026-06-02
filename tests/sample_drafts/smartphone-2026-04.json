@@ -1,0 +1,114 @@
+{
+  "title": "2026년 4월 스마트폰 시장 트렌드 — 프리미엄 쏠림 + 메모리 압박 + 폴더블 재도약",
+  "report_date": "2026-04-30",
+  "tags": ["market", "smartphone", "MX", "Q1-2026", "monthly"],
+  "blocks": {
+    "meta": {
+      "title": "2026년 4월 스마트폰 시장 트렌드",
+      "author": "MX 시장조사",
+      "rfc_number": "MKT-2026-04",
+      "status": "review",
+      "period": "2026 Q1 (4월 기준 분석)"
+    },
+    "motivation": "2026년 4월 스마트폰 시장의 핵심 분위기는 **수요 둔화 + 메모리 가격 상승 + 원가 압박**이다. Counterpoint·IDC 모두 Q1 2026 글로벌 출하량이 전년 대비 감소했다고 발표했으며, 주요 원인으로 DRAM/NAND 메모리 부족과 가격 상승을 지목한다.\n\n결과적으로 시장은 \"새로운 폼팩터로 폭발 성장\"하는 국면이 아닌, **부품 원가 상승을 제품 가격·믹스·마진으로 흡수해야 하는 방어 국면**으로 진입했다. 본 보고서는 이 국면에서 삼성/MX 가 가져갈 전략 포인트를 정리한다.",
+    "design": "**프리미엄 쏠림이 강화되는 시장 구조.**\n\n*Counterpoint(출하량 기준):* Apple 이 Q1 글로벌 1위, 점유율 21% (+5% YoY). 전체 시장이 줄어드는 흐름 속에서 프리미엄 브랜드의 상대적 강세가 두드러진다.\n\n*StatCounter(웹 사용 기반 점유율, 2026.04):* 글로벌 — Apple 32.55%, Samsung 19.11%, Xiaomi 8.69%, Oppo 5.59%, Vivo 5.55%. 단, 출하량과는 다른 지표임에 유의.\n\n*한국 시장:* Samsung 54.42%, Apple 32.15%. **국내 기반은 여전히 견고**하지만, 글로벌에서는 Apple 의 프리미엄 흡수력, 중국 업체의 가격 경쟁, 메모리 원가 상승이 동시에 작용 중. 삼성도 (1) 프리미엄 유지 (2) 중저가 수익성 관리 (3) AI 기능 차별화의 3축 전략이 필요하다.",
+    "alternatives": "**AI폰 — 차별화이자 원가 압박 요인.**\n\n온디바이스 AI는 여전히 핵심 마케팅 포인트지만, 4월 이후 시장에서는 단순 수요 촉진 요소만이 아니다. AI 데이터센터 수요가 메모리 공급을 압박 → 스마트폰용 메모리 가격 상승 → BOM 비용 증가의 역설. AI 인프라 붐이 스마트폰 단가 인상 가능성을 키우는 구도다.\n\n**폴더블 — 2026년 재도약 구간.**\n\n전체 시장이 둔화되는 가운데 상대적으로 기대가 남아 있는 영역. IDC 는 2026년 글로벌 폴더블 시장이 **Apple의 첫 폴더블 진입 기대와 함께 +30% YoY 성장** 가능성을 전망. Counterpoint 는 2026년 폴더블 내에서 **북 타입 비중이 65%** 까지 증가할 것으로 본다.\n\n중요 포인트: 기존 플립의 \"패션/컴팩트\" 수요에서 **북 타입 중심의 생산성·대화면·프리미엄 ASP** 로 무게 이동.",
+    "risks": [
+      "메모리(DRAM/NAND) 가격 상승 지속 — BOM 부담 증가, 출하량 위축 압박",
+      "AI 데이터센터 메모리 수요 vs 스마트폰 메모리 공급 충돌 — 단가 인상 불가피 시나리오",
+      "Apple 의 프리미엄 흡수력 확대로 글로벌 ASP 경쟁 가중",
+      "중국 업체(샤오미 등)의 해외 확장·프리미엄화 시도로 중저가 마진 잠식 가능",
+      "Xiaomi 의 Q1 2026 출하량 -19%·매출 -12.5% 시그널 — 중국 내수 침체가 글로벌로 확장될 위험",
+      "Apple 의 첫 폴더블 진입 시 북 타입 시장 선점 경쟁 격화"
+    ]
+  },
+  "extra_blocks": [
+    {
+      "id": "global_share_chart",
+      "type": "chart",
+      "props": {
+        "label": "글로벌 모바일 벤더 점유율 (StatCounter, 2026.04)",
+        "chart_type": "bar",
+        "x_column_key": "vendor",
+        "columns": [
+          {"key": "vendor", "label": "벤더", "type": "text"},
+          {"key": "share", "label": "점유율 %", "type": "number"}
+        ]
+      },
+      "input": [
+        {"vendor": "Apple", "share": 32.55},
+        {"vendor": "Samsung", "share": 19.11},
+        {"vendor": "Xiaomi", "share": 8.69},
+        {"vendor": "Oppo", "share": 5.59},
+        {"vendor": "Vivo", "share": 5.55}
+      ]
+    },
+    {
+      "id": "korea_vs_global",
+      "type": "chart",
+      "props": {
+        "label": "한국 vs 글로벌 — Apple/Samsung 점유율 (StatCounter, 2026.04)",
+        "chart_type": "bar",
+        "x_column_key": "vendor",
+        "columns": [
+          {"key": "vendor", "label": "벤더", "type": "text"},
+          {"key": "korea", "label": "한국 %", "type": "number"},
+          {"key": "global", "label": "글로벌 %", "type": "number"}
+        ]
+      },
+      "input": [
+        {"vendor": "Samsung", "korea": 54.42, "global": 19.11},
+        {"vendor": "Apple", "korea": 32.15, "global": 32.55}
+      ]
+    },
+    {
+      "id": "foldable_mix",
+      "type": "pie",
+      "props": {"label": "2026 폴더블 폼팩터 비중 전망 (Counterpoint)"},
+      "input": {"북 타입 (생산성·대화면)": 65, "기타 (플립 등)": 35}
+    },
+    {
+      "id": "xiaomi_q1_change",
+      "type": "progress_bar",
+      "props": {"label": "Xiaomi Q1 2026 YoY 변화 (마이너스 = 감소율)"},
+      "input": {
+        "출하량 감소": {"current": 19, "max": 30},
+        "스마트폰 매출 감소": {"current": 12.5, "max": 30}
+      }
+    },
+    {
+      "id": "key_2026_milestones",
+      "type": "milestone",
+      "props": {"label": "2026 시장 핵심 이벤트 (전망)"},
+      "input": [
+        {"date": "2026-04-30", "label": "Q1 출하량 발표 — Apple 1위 + 시장 감소 확인", "status": "done"},
+        {"date": "2026-06-30", "label": "메모리 가격 추가 인상 압박 점검", "status": "pending"},
+        {"date": "2026-09-01", "label": "Apple 신제품 발표 — 폴더블 진입 여부 주시", "status": "pending"},
+        {"date": "2026-12-31", "label": "연간 폴더블 시장 +30% YoY 달성 여부 평가", "status": "pending"}
+      ]
+    },
+    {
+      "id": "competitive_compare",
+      "type": "comparison",
+      "props": {
+        "label": "주요 경쟁 진영 비교 (2026 Q1 시점)",
+        "cases": [
+          {"key": "apple", "label": "Apple"},
+          {"key": "samsung", "label": "Samsung"},
+          {"key": "china", "label": "중국 (Xiaomi/Oppo/Vivo)"}
+        ]
+      },
+      "input": {
+        "Q1 글로벌 위치": {"apple": "출하량 1위, 점유율 21% (+5% YoY)", "samsung": "프리미엄 유지, 글로벌 압박 ↑", "china": "출하량/매출 감소 (Xiaomi -19% / -12.5%)"},
+        "핵심 차별화": {"apple": "생태계 + 프리미엄 ASP + 폴더블 진입 임박", "samsung": "AI 경험 + 폴더블(특히 북 타입) + 한국 기반 54%", "china": "해외 확장 + 카메라/AI 차별화 + 프리미엄화"},
+        "원가 압박 대응": {"apple": "ASP 인상 흡수력", "samsung": "프리미엄+중저가 믹스 관리", "china": "내수 침체 → 해외/프리미엄 피벗"}
+      }
+    },
+    {
+      "id": "mx_takeaway",
+      "type": "rich_text",
+      "props": {"label": "삼성/MX 관점 — 한 줄 요약"},
+      "input": "**좋은 하드웨어**만으로는 부족하다. 지금은 (1) **AI 경험 차별화**, (2) **북 타입 폴더블 생산성**, (3) **원가 상승을 이겨낼 프리미엄 가치 설계**, (4) **중저가 라인업 수익성 방어** — 이 네 가지의 동시 실행이 핵심이다."
+    }
+  ]
+}

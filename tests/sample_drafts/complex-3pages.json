@@ -1,0 +1,165 @@
+{
+  "title": "5월 4주차 종합 보고 — 멀티 페이지 + 시각 위젯 다수",
+  "report_date": "2026-05-26",
+  "tags": ["weekly", "complex", "skill-test"],
+  "pages": [
+    {
+      "template_id": "weekly-dev",
+      "name": "백엔드 주간",
+      "blocks": {
+        "meta": {"team": "백엔드", "sprint": "Sprint-23", "lead": "박국진"},
+        "summary": "이번 주는 API 통합과 PostgreSQL 스키마 마이그레이션을 진행했다. 다음 주는 결제 API와 캐시 최적화가 핵심.",
+        "progress": [
+          "REST API 엔드포인트 5개 신규 추가",
+          "PostgreSQL 스키마 v2 마이그레이션 완료",
+          "단위 테스트 커버리지 85% 도달"
+        ],
+        "issues": [
+          {"issue": "타사 결제 API 연동 지연", "severity": "높음", "owner": "김철수", "due": "2026-05-31"},
+          {"issue": "로컬 캐시 성능 저하", "severity": "중간", "owner": "이영희", "due": "2026-05-29"}
+        ],
+        "next_week": ["결제 API 통합", "캐시 레이어 최적화"]
+      },
+      "extra_blocks": [
+        {
+          "id": "revenue_trend",
+          "type": "chart",
+          "props": {
+            "label": "월별 매출 추이",
+            "chart_type": "line",
+            "x_column_key": "month",
+            "columns": [
+              {"key": "month", "label": "월", "type": "text"},
+              {"key": "revenue", "label": "매출 (백만)", "type": "number"}
+            ]
+          },
+          "input": [
+            {"month": "1월", "revenue": 120},
+            {"month": "2월", "revenue": 145},
+            {"month": "3월", "revenue": 168},
+            {"month": "4월", "revenue": 152},
+            {"month": "5월", "revenue": 190}
+          ]
+        },
+        {
+          "id": "severity_breakdown",
+          "type": "pie",
+          "props": {"label": "이슈 심각도 분포"},
+          "input": {"높음": 3, "중간": 7, "낮음": 12}
+        },
+        {
+          "id": "upcoming_milestones",
+          "type": "milestone",
+          "props": {"label": "다가오는 마일스톤"},
+          "input": [
+            {"date": "2026-05-29", "label": "캐시 최적화 완료", "status": "pending"},
+            {"date": "2026-05-31", "label": "결제 API 통합", "status": "pending"},
+            {"date": "2026-06-05", "label": "스테이징 회귀 테스트", "status": "pending"}
+          ]
+        }
+      ]
+    },
+    {
+      "template_id": "meeting-decision",
+      "name": "주간 회의 결정",
+      "blocks": {
+        "meta": {"date": "2026-05-23", "attendees": "박국진, 이영희, 김철수", "facilitator": "박국진"},
+        "context": "다음 분기 우선순위 정리.",
+        "options": [
+          {"option": "결제 모듈 우선", "pros": "수익 즉시", "cons": "리스크 높음"},
+          {"option": "캐시 우선", "pros": "안정성", "cons": "단기 임팩트 작음"}
+        ],
+        "decision": "결제 모듈을 우선으로 결정. 캐시는 P2 로 연기.",
+        "follow_up": [
+          "결제 API 스펙 정의 (김철수)",
+          "스테이징 환경 부하 테스트 (이영희)"
+        ]
+      },
+      "extra_blocks": [
+        {
+          "id": "ownership_raci",
+          "type": "raci_matrix",
+          "props": {"label": "결제 모듈 RACI"},
+          "input": {
+            "API 설계": {"PM": "C", "Dev": "R", "QA": "I", "Lead": "A"},
+            "단위 테스트": {"PM": "I", "Dev": "R", "QA": "C", "Lead": "A"},
+            "통합 테스트": {"PM": "I", "Dev": "C", "QA": "R", "Lead": "A"}
+          }
+        },
+        {
+          "id": "priority_matrix",
+          "type": "quadrant",
+          "props": {"label": "우선순위 매트릭스 (가치 vs 난이도)"},
+          "input": [
+            {"label": "결제 모듈", "x": 0.85, "y": 0.70},
+            {"label": "캐시 최적화", "x": 0.45, "y": 0.30},
+            {"label": "관리자 UI 개선", "x": 0.55, "y": 0.40},
+            {"label": "AI 보고서 자동화", "x": 0.90, "y": 0.85}
+          ]
+        }
+      ]
+    },
+    {
+      "template_id": "rfc",
+      "name": "RFC: 결제 모듈 아키텍처",
+      "blocks": {
+        "meta": {"author": "박국진", "status": "draft", "rfc_number": "0042"},
+        "motivation": "타사 결제 API 의존 비용이 분기당 800만원 발생. 사내 모듈로 전환 시 연간 절감 효과 약 2,400만원 예상.",
+        "design": "REST 기반 결제 게이트웨이 추상화 레이어 + Webhook 처리 파이프라인. PostgreSQL outbox 패턴으로 이벤트 일관성 보장.",
+        "alternatives": "(1) 기존 외부 API 유지 — 비용 지속 (2) Stripe 전환 — 마이그레이션 리스크 (3) 자체 구축 — 본 안",
+        "risks": [
+          "PCI-DSS 준수 비용 증가",
+          "결제 실패 시 retry 로직 복잡도",
+          "초기 3개월간 안정성 우려"
+        ]
+      },
+      "extra_blocks": [
+        {
+          "id": "design_flow",
+          "type": "flowchart",
+          "props": {"label": "결제 처리 흐름"},
+          "input": ["수신", "검증", "게이트웨이 호출", "outbox 기록", "Webhook 응답"]
+        },
+        {
+          "id": "module_tree",
+          "type": "tree",
+          "props": {"label": "모듈 구조"},
+          "input": {
+            "Payment": {
+              "Gateway": {"Stripe": {}, "Internal": {}},
+              "Outbox": {"Publisher": {}, "Consumer": {}},
+              "Webhook": {"Receiver": {}, "Validator": {}}
+            }
+          }
+        },
+        {
+          "id": "fund_flow",
+          "type": "sankey",
+          "props": {"label": "자금 흐름"},
+          "input": [
+            {"source": "고객", "target": "게이트웨이", "value": 1000},
+            {"source": "게이트웨이", "target": "수수료", "value": 30},
+            {"source": "게이트웨이", "target": "정산 계좌", "value": 970},
+            {"source": "정산 계좌", "target": "운영비", "value": 400},
+            {"source": "정산 계좌", "target": "투자 풀", "value": 570}
+          ]
+        },
+        {
+          "id": "performance_radar",
+          "type": "radar",
+          "props": {"label": "옵션 비교 (자체 구축 vs Stripe)"},
+          "input": [
+            {"name": "자체 구축", "values": {"비용절감": 9, "통제력": 9, "초기리스크": 3, "유지보수": 4, "확장성": 7}},
+            {"name": "Stripe", "values": {"비용절감": 4, "통제력": 5, "초기리스크": 8, "유지보수": 8, "확장성": 9}}
+          ]
+        },
+        {
+          "id": "decision_equation",
+          "type": "equation",
+          "props": {"label": "ROI 산출 공식"},
+          "input": "ROI = \\frac{\\text{연간 절감액} - \\text{개발 비용}}{\\text{개발 비용}} \\times 100"
+        }
+      ]
+    }
+  ]
+}

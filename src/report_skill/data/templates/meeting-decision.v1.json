@@ -1,0 +1,91 @@
+{
+  "template_id": "meeting-decision",
+  "version": 1,
+  "name": "의사결정 회의록",
+  "description": "결정사항·배경·반대의견·후속조치를 구조화",
+  "category": "meeting",
+  "schema": {
+    "blocks": [
+      {
+        "id": "meta",
+        "type": "key_value",
+        "props": {
+          "items": [
+            {
+              "key": "title",
+              "type": "text",
+              "label": "회의 제목",
+              "required": true
+            },
+            {
+              "key": "date",
+              "type": "date",
+              "label": "일자",
+              "required": true
+            },
+            {
+              "key": "attendees",
+              "type": "text",
+              "label": "참석자"
+            }
+          ],
+          "label": "회의 정보"
+        }
+      },
+      {
+        "id": "context",
+        "type": "rich_text",
+        "props": {
+          "label": "배경",
+          "required": true
+        }
+      },
+      {
+        "id": "options",
+        "type": "table",
+        "props": {
+          "label": "검토 옵션",
+          "columns": [
+            {
+              "key": "option",
+              "type": "text",
+              "label": "옵션",
+              "required": true
+            },
+            {
+              "key": "pros",
+              "type": "text",
+              "label": "장점"
+            },
+            {
+              "key": "cons",
+              "type": "text",
+              "label": "단점"
+            }
+          ]
+        }
+      },
+      {
+        "id": "decision",
+        "type": "rich_text",
+        "props": {
+          "label": "결정",
+          "required": true
+        }
+      },
+      {
+        "id": "follow_up",
+        "type": "bulleted_list",
+        "props": {
+          "label": "후속 조치"
+        }
+      }
+    ],
+    "version": "widget-v1"
+  },
+  "owner_workspace_slugs": null,
+  "is_published": true,
+  "is_latest": true,
+  "created_by_user_id": 1,
+  "created_at": "2026-05-25T20:42:09.864099"
+}

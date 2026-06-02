@@ -1,0 +1,208 @@
+"""Thin HTTP client for the ReportArchive API.
+
+Handles login (caches the JWT for the process lifetime), attaches the
+required `Authorization` and `X-Workspace-Slug` headers, and unwraps the
+standard `{success, data, message, errors}` envelope.
+"""
+from __future__ import annotations
+
+from typing import Any, Optional
+
+import httpx
+
+from report_skill.config import settings
+
+
+class ApiError(RuntimeError):
+    def __init__(self, message: str, *, status_code: int, payload: Any = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.payload = payload
+
+
+class ReportArchiveClient:
+    """Synchronous httpx-based client. One instance per process is fine."""
+
+    def __init__(self) -> None:
+        self._token: Optional[str] = None
+        self._user_id: Optional[int] = None
+        self._http = httpx.Client(
+            base_url=settings.report_api_base_url,
+            timeout=httpx.Timeout(30.0, read=60.0),
+        )
+
+    # ---- auth ---------------------------------------------------------- #
+
+    def login(self) -> dict:
+        """Authenticate the service account. Idempotent (re-logging overwrites)."""
+        env = self._post("/auth/login", json={
+            "email": settings.report_api_email,
+            "password": settings.report_api_password,
+        }, _no_auth=True)
+        self._token = env["access_token"]
+        self._user_id = env["user_id"]
+        return env
+
+    def ensure_logged_in(self) -> None:
+        if not self._token:
+            self.login()
+
+    # ---- public endpoints ---------------------------------------------- #
+
+    def fetch_widgets(self) -> dict:
+        """GET /widgets — returns {schema_version, widgets:[...]}.
+
+        Note: each widget entry contains props_schema but NOT content_schema
+        (which is computed server-side as a Python function of props). Use
+        the bridge script for the latter.
+        """
+        return self.get("/widgets")
+
+    def fetch_templates(self, *, latest_only: bool = True) -> list[dict]:
+        params = {"latest_only": "true"} if latest_only else None
+        env = self.get("/templates", params=params)
+        return env if isinstance(env, list) else env.get("items", env)
+
+    def fetch_template(self, template_id: str, version: Optional[int] = None,
+                       *, allow_cache: bool = False) -> dict:
+        """GET a template. When `allow_cache=True`, falls back to the local
+        `.skill-cache/templates/` snapshot (and then the bundled
+        `data/templates/` baseline) if the API is unreachable — used by
+        the offline export flow so callers can normalize/validate without
+        a live server."""
+        try:
+            if version is not None:
+                return self.get(f"/templates/{template_id}/versions/{version}")
+            return self.get(f"/templates/{template_id}")
+        except (ApiError, httpx.RequestError) as exc:
+            if not allow_cache:
+                raise
+            from report_skill import catalog as _catalog
+            cached = _catalog.load_cached_template(template_id, version)
+            if cached is None:
+                raise FileNotFoundError(
+                    f"template '{template_id}' not in offline cache or "
+                    f"bundled data/templates/. Either run "
+                    f"`report-skill templates sync` (online), or ship a "
+                    f"bundled snapshot. (origin: {exc})"
+                ) from exc
+            return cached
+
+    def create_report(self, payload: dict) -> dict:
+        """POST /reports — returns the created Report record."""
+        return self.post("/reports", json=payload)
+
+    def upload_file(self, path, *, mime_type: Optional[str] = None) -> dict:
+        """POST /files (multipart) — returns the FileMeta dict (file_id, filename, size, mime_type, ...).
+
+        Streams the file from disk; goes through the same auth + workspace-slug
+        header path as every other request. `mime_type` is auto-detected from
+        the extension when omitted.
+        """
+        from pathlib import Path as _Path
+        import mimetypes as _mime
+
+        p = _Path(path)
+        if not p.is_file():
+            raise FileNotFoundError(f"upload source not found: {p}")
+        mt = mime_type or _mime.guess_type(p.name)[0] or "application/octet-stream"
+
+        self.ensure_logged_in()
+        headers = {
+            "X-Workspace-Slug": settings.report_api_workspace_slug,
+            "Authorization": f"Bearer {self._token}",
+        }
+        with p.open("rb") as fh:
+            resp = self._http.post(
+                "/files",
+                files={"file": (p.name, fh, mt)},
+                headers=headers,
+            )
+
+        try:
+            body = resp.json()
+        except Exception:
+            resp.raise_for_status()
+            raise ApiError(
+                f"POST /files returned non-JSON ({resp.status_code})",
+                status_code=resp.status_code,
+            )
+
+        if isinstance(body, dict) and "success" in body:
+            if body.get("success"):
+                return body.get("data") or {}
+            raise ApiError(
+                body.get("message") or "POST /files failed",
+                status_code=resp.status_code,
+                payload=body,
+            )
+        if resp.is_error:
+            raise ApiError(
+                f"POST /files returned {resp.status_code}",
+                status_code=resp.status_code,
+                payload=body,
+            )
+        return body if isinstance(body, dict) else {}
+
+    # ---- low-level wrappers -------------------------------------------- #
+
+    def get(self, path: str, *, params: Optional[dict] = None) -> Any:
+        return self._request("GET", path, params=params)
+
+    def post(self, path: str, *, json: Optional[dict] = None) -> Any:
+        return self._request("POST", path, json=json)
+
+    def _post(self, path: str, *, json: Optional[dict] = None, _no_auth: bool = False) -> Any:
+        return self._request("POST", path, json=json, _no_auth=_no_auth)
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Optional[dict] = None,
+        json: Optional[dict] = None,
+        _no_auth: bool = False,
+    ) -> Any:
+        if not _no_auth:
+            self.ensure_logged_in()
+
+        headers: dict[str, str] = {"X-Workspace-Slug": settings.report_api_workspace_slug}
+        if self._token and not _no_auth:
+            headers["Authorization"] = f"Bearer {self._token}"
+
+        resp = self._http.request(method, path, params=params, json=json, headers=headers)
+
+        try:
+            body = resp.json()
+        except Exception:
+            resp.raise_for_status()
+            return None
+
+        # Standard envelope: {success, data, message, errors}
+        if isinstance(body, dict) and "success" in body:
+            if body.get("success"):
+                return body.get("data")
+            raise ApiError(
+                body.get("message") or f"{method} {path} failed",
+                status_code=resp.status_code,
+                payload=body,
+            )
+
+        # Non-envelope endpoints (eg. health) — just return body
+        if resp.is_error:
+            raise ApiError(
+                f"{method} {path} returned {resp.status_code}",
+                status_code=resp.status_code,
+                payload=body,
+            )
+        return body
+
+    def close(self) -> None:
+        self._http.close()
+
+    def __enter__(self) -> "ReportArchiveClient":
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.close()

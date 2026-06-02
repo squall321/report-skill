@@ -1,0 +1,136 @@
+{
+  "template_id": "incident",
+  "version": 1,
+  "name": "인시던트 보고",
+  "description": "장애 발생 후 사후 분석 (postmortem)",
+  "category": "incident",
+  "schema": {
+    "blocks": [
+      {
+        "id": "meta",
+        "type": "key_value",
+        "props": {
+          "items": [
+            {
+              "key": "title",
+              "type": "text",
+              "label": "제목",
+              "required": true
+            },
+            {
+              "key": "occurred_at",
+              "type": "text",
+              "label": "발생 시각",
+              "required": true
+            },
+            {
+              "key": "severity",
+              "type": "select",
+              "label": "심각도",
+              "options": [
+                "S1",
+                "S2",
+                "S3",
+                "S4"
+              ],
+              "required": true
+            },
+            {
+              "key": "duration",
+              "type": "text",
+              "label": "지속 시간"
+            }
+          ],
+          "label": "장애 개요"
+        }
+      },
+      {
+        "id": "overview",
+        "type": "rich_text",
+        "props": {
+          "label": "개요",
+          "required": true,
+          "placeholder": "무슨 일이 일어났는가"
+        }
+      },
+      {
+        "id": "timeline",
+        "type": "table",
+        "props": {
+          "label": "타임라인",
+          "columns": [
+            {
+              "key": "time",
+              "type": "text",
+              "label": "시각",
+              "required": true
+            },
+            {
+              "key": "event",
+              "type": "text",
+              "label": "사건",
+              "required": true
+            }
+          ]
+        }
+      },
+      {
+        "id": "root_cause",
+        "type": "rich_text",
+        "props": {
+          "label": "근본 원인",
+          "required": true
+        }
+      },
+      {
+        "id": "action_items",
+        "type": "table",
+        "props": {
+          "label": "조치 항목",
+          "columns": [
+            {
+              "key": "action",
+              "type": "text",
+              "label": "조치",
+              "required": true
+            },
+            {
+              "key": "owner",
+              "type": "text",
+              "label": "담당"
+            },
+            {
+              "key": "due",
+              "type": "date",
+              "label": "마감"
+            },
+            {
+              "key": "status",
+              "type": "select",
+              "label": "상태",
+              "options": [
+                "대기",
+                "진행",
+                "완료"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "evidence",
+        "type": "image",
+        "props": {
+          "label": "증거 자료 (그래프/스크린샷)",
+          "max_count": 6
+        }
+      }
+    ],
+    "version": "widget-v1"
+  },
+  "owner_workspace_slugs": null,
+  "is_published": true,
+  "is_latest": true,
+  "created_by_user_id": 1,
+  "created_at": "2026-05-25T20:42:09.864094"
+}

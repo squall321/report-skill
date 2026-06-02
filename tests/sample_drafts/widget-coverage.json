@@ -1,0 +1,101 @@
+{
+  "title": "위젯 커버리지 샘플 (mine-from-report 용)",
+  "report_date": "2026-05-27",
+  "tags": ["coverage", "examples"],
+  "blocks": {
+    "summary": "이 보고서는 mining 용 샘플로, 다양한 시각 위젯이 정상 콘텐츠를 가진 상태로 저장됨."
+  },
+  "extra_blocks": [
+    {
+      "id": "section_heading",
+      "type": "heading",
+      "props": {"label": "헤딩"},
+      "input": "분기 요약"
+    },
+    {
+      "id": "as_is_to_be",
+      "type": "comparison",
+      "props": {
+        "label": "AS-IS / TO-BE 비교",
+        "cases": [{"key": "as_is", "label": "AS-IS"}, {"key": "to_be", "label": "TO-BE"}]
+      },
+      "input": {
+        "비용": {"as_is": "월 200만원", "to_be": "월 80만원"},
+        "위험도": {"as_is": "높음", "to_be": "낮음"},
+        "유연성": {"as_is": "제한적", "to_be": "확장 가능"}
+      }
+    },
+    {
+      "id": "xy_scatter",
+      "type": "scatter",
+      "props": {"label": "XY 산점도"},
+      "input": [{"x": 1.5, "y": 2.3}, {"x": 2.0, "y": 3.1}, {"x": 3.5, "y": 4.8}, {"x": 4.2, "y": 5.5}]
+    },
+    {
+      "id": "xyz_scatter3d",
+      "type": "scatter3d",
+      "props": {"label": "3D 산점도"},
+      "input": [{"x": 1, "y": 2, "z": 3}, {"x": 2, "y": 3, "z": 5}, {"x": 4, "y": 1, "z": 2}]
+    },
+    {
+      "id": "team_heatmap",
+      "type": "heatmap",
+      "props": {"label": "팀x시간대 부하"},
+      "input": [[1, 2, 3, 5], [2, 4, 6, 8], [3, 6, 9, 12]]
+    },
+    {
+      "id": "contour_demo",
+      "type": "contour",
+      "props": {"label": "Contour 데모"},
+      "input": [{"x": 1, "y": 1, "z": 0.5}, {"x": 1, "y": 2, "z": 0.8}, {"x": 2, "y": 1, "z": 0.3}]
+    },
+    {
+      "id": "perf_distribution",
+      "type": "density",
+      "props": {"label": "응답시간 분포"},
+      "input": {"A 서비스": [120, 135, 142, 150, 158, 165], "B 서비스": [200, 220, 240, 235, 245]}
+    },
+    {
+      "id": "latency_box",
+      "type": "box",
+      "props": {"label": "지연 박스플롯"},
+      "input": {"A": [80, 90, 100, 110, 120], "B": [150, 160, 165, 170, 180]}
+    },
+    {
+      "id": "completion_waffle",
+      "type": "waffle",
+      "props": {"label": "완료율 분포"},
+      "input": {"완료": 60, "진행중": 25, "대기": 15}
+    },
+    {
+      "id": "feature_progress",
+      "type": "progress_bar",
+      "props": {"label": "피처별 진행률"},
+      "input": {"피처 A": {"current": 7, "max": 10}, "피처 B": 50, "피처 C": {"current": 90, "max": 100}}
+    },
+    {
+      "id": "tech_treemap",
+      "type": "treemap",
+      "props": {"label": "기술 영역 비중"},
+      "input": {"Tech": {"Engineering": 60, "Design": 40}, "Ops": {"DevOps": 30, "SRE": 20}}
+    },
+    {
+      "id": "circle_packing",
+      "type": "packing",
+      "props": {"label": "포트폴리오 비중"},
+      "input": {"제품 A": {"feat1": 30, "feat2": 25}, "제품 B": {"feat3": 20, "feat4": 15}}
+    },
+    {
+      "id": "service_network",
+      "type": "network",
+      "props": {"label": "서비스 의존 그래프"},
+      "input": {"API": ["DB", "Cache"], "Worker": ["DB", "Queue"], "Cache": ["DB"]}
+    },
+    {
+      "id": "concept_mindmap",
+      "type": "mind_map",
+      "props": {"label": "컨셉 마인드맵"},
+      "input": {"중심 주제": {"분야 A": ["세부 1", "세부 2"], "분야 B": ["세부 3"], "분야 C": {}}}
+    }
+  ]
+}

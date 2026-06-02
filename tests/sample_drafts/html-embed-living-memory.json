@@ -1,0 +1,10 @@
+{
+  "extra_blocks": [
+    {
+      "id": "living_memory_slides",
+      "type": "html_embed",
+      "props": {"label": "Living Memory — 사진이 그날을 안다 (슬라이드)"},
+      "input": {"local_path": "d:/ReportArchive/living_memory.html", "caption": "센서·CAE·VAI 통합 데모 슬라이드"}
+    }
+  ]
+}

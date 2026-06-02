@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "widget_type": "heading",
+  "for_schema_hash": "63a5047aba79fb63",
+  "input": {
+    "raw": {
+      "text": "TODO",
+      "level": 1,
+      "text_style": {
+        "font_size_px": 0,
+        "size": "xs",
+        "font_family": "sans",
+        "align": "left",
+        "weight": "normal"
+      },
+      "margin_bottom_px": 0
+    },
+    "props": {
+      "level": 2
+    }
+  },
+  "expected_content": {
+    "text": "분기 요약"
+  },
+  "notes": "mined from report 3 (page#0 block=section_heading)"
+}

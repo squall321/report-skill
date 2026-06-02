@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "widget_type": "waffle",
+  "for_schema_hash": "667a3de2d457def4",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "unit": "TODO",
+      "rows": [
+        {
+          "label": "TODO",
+          "value": 0,
+          "color": "TODO"
+        }
+      ],
+      "cols": 0
+    },
+    "props": {
+      "label": "비중"
+    }
+  },
+  "expected_content": {
+    "rows": [
+      {
+        "label": "완료",
+        "value": 60.0
+      },
+      {
+        "label": "진행중",
+        "value": 25.0
+      },
+      {
+        "label": "대기",
+        "value": 15.0
+      }
+    ]
+  },
+  "notes": "mined from report 3 (page#0 block=completion_waffle)"
+}

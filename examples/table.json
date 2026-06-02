@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "widget_type": "table",
+  "for_schema_hash": "5871d7779b23a3cb",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "columns": [
+        {
+          "key": "TODO",
+          "label": "TODO",
+          "type": "text",
+          "options": [
+            "TODO"
+          ],
+          "required": false,
+          "multi": false
+        }
+      ],
+      "rows": [
+        {}
+      ]
+    },
+    "props": {
+      "label": "표",
+      "columns": [
+        {
+          "key": "name",
+          "label": "이름",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "value",
+          "label": "값",
+          "type": "text"
+        }
+      ]
+    }
+  },
+  "expected_content": {
+    "rows": [
+      {
+        "cons": "리스크 높음",
+        "pros": "수익 즉시",
+        "option": "결제 모듈 우선"
+      },
+      {
+        "cons": "단기 임팩트 작음",
+        "pros": "안정성",
+        "option": "캐시 우선"
+      }
+    ]
+  },
+  "notes": "mined from report 2 (page#1 block=options)"
+}

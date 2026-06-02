@@ -1,0 +1,32 @@
+{
+  "blocks": {
+    "meta": {"team": "백엔드", "week": "5월 4주차"},
+    "achievements": "API 통합 + 마이그레이션 완료. 캐시 작업 다음 주.",
+    "next_goals": [
+      "결제 API 회귀 테스트",
+      "PCI-DSS 점검 통과",
+      "캐시 레이어 벤치마크"
+    ]
+  },
+  "extra_blocks": [
+    {
+      "id": "weekly_metric",
+      "type": "progress_bar",
+      "props": {"label": "주간 핵심 지표 달성률"},
+      "input": {
+        "API 통합": {"current": 100, "max": 100},
+        "단위 테스트": {"current": 85, "max": 100},
+        "캐시 작업": {"current": 30, "max": 100}
+      }
+    },
+    {
+      "id": "team_radar",
+      "type": "radar",
+      "props": {"label": "팀 역량 매핑"},
+      "input": [
+        {"name": "백엔드", "values": {"기술력": 9, "속도": 8, "안정성": 9, "협업": 7}},
+        {"name": "프론트", "values": {"기술력": 7, "속도": 9, "안정성": 6, "협업": 8}}
+      ]
+    }
+  ]
+}

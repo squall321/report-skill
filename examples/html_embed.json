@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "widget_type": "html_embed",
+  "for_schema_hash": "eee786f59f9f67f9",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "file_id": "TODO",
+      "filename": "TODO",
+      "height_px": 0
+    },
+    "props": {
+      "label": "HTML"
+    }
+  },
+  "expected_content": {
+    "caption": "TODO",
+    "caption_skip_autofill": false,
+    "file_id": "TODO",
+    "filename": "TODO",
+    "height_px": 0
+  },
+  "notes": "TODO: hand-review this example for `html_embed` (HTML 임베드). The input/expected_content fields are auto-generated placeholders and almost certainly need to be replaced with realistic data."
+}

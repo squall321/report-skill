@@ -1,0 +1,16 @@
+{
+  "widget_type": "table",
+  "props": {
+    "columns": [
+      {"key": "issue", "label": "이슈", "type": "text"},
+      {"key": "severity", "label": "심각도", "type": "select",
+       "options": ["낮음", "보통", "높음"]}
+    ]
+  },
+  "raw_input": [
+    {"issue": "결제 지연", "severity": "critical"},
+    {"issue": "테스트 부족", "severity": "중간"}
+  ],
+  "should_normalize": true,
+  "note": "weak LLM emits English 'critical' (off-enum) and the near-miss '중간'. force_enum falls back to middle option '보통' when no nearest match found"
+}

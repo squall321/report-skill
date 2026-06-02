@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "widget_type": "comparison",
+  "for_schema_hash": "41e6392bd77e1bf7",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "cases": [
+        {
+          "key": "TODO",
+          "label": "TODO"
+        }
+      ],
+      "horizontal_scroll": false,
+      "max_cases": 0
+    },
+    "props": {
+      "label": "비교 표",
+      "cases": [
+        {
+          "key": "as_is",
+          "label": "AS-IS"
+        },
+        {
+          "key": "to_be",
+          "label": "TO-BE"
+        }
+      ],
+      "horizontal_scroll": false,
+      "max_cases": 6,
+      "image_max_height_px": 240
+    }
+  },
+  "expected_content": {
+    "rows": [
+      {
+        "key": "row_0",
+        "kind": "text",
+        "label": "비용",
+        "values": {
+          "as_is": "월 200만원",
+          "to_be": "월 80만원"
+        }
+      },
+      {
+        "key": "row_1",
+        "kind": "text",
+        "label": "위험도",
+        "values": {
+          "as_is": "높음",
+          "to_be": "낮음"
+        }
+      },
+      {
+        "key": "row_2",
+        "kind": "text",
+        "label": "유연성",
+        "values": {
+          "as_is": "제한적",
+          "to_be": "확장 가능"
+        }
+      }
+    ]
+  },
+  "notes": "mined from report 3 (page#0 block=as_is_to_be)"
+}

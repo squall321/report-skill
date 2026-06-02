@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "widget_type": "flowchart",
+  "for_schema_hash": "0c7b77d69a6307b2",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "orientation": "horizontal",
+      "items": [
+        {
+          "label": "TODO",
+          "description": "TODO"
+        }
+      ]
+    },
+    "props": {
+      "label": "순서도",
+      "orientation": "horizontal"
+    }
+  },
+  "expected_content": {
+    "items": [
+      {
+        "label": "수신"
+      },
+      {
+        "label": "검증"
+      },
+      {
+        "label": "게이트웨이 호출"
+      },
+      {
+        "label": "outbox 기록"
+      },
+      {
+        "label": "Webhook 응답"
+      }
+    ]
+  },
+  "notes": "mined from report 2 (page#2 block=design_flow)"
+}

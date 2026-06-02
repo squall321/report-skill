@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "widget_type": "heatmap",
+  "for_schema_hash": "ee51c5266469123b",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "x_labels": [
+        "TODO"
+      ],
+      "y_labels": [
+        "TODO"
+      ],
+      "matrix": [
+        [
+          0
+        ]
+      ]
+    },
+    "props": {
+      "label": "히트맵"
+    }
+  },
+  "expected_content": {
+    "matrix": [
+      [
+        1.0,
+        2.0,
+        3.0,
+        5.0
+      ],
+      [
+        2.0,
+        4.0,
+        6.0,
+        8.0
+      ],
+      [
+        3.0,
+        6.0,
+        9.0,
+        12.0
+      ]
+    ]
+  },
+  "notes": "mined from report 3 (page#0 block=team_heatmap)"
+}

@@ -1,0 +1,17 @@
+{
+  "widget_type": "table",
+  "props": {
+    "columns": [
+      {"key": "month", "label": "월", "type": "text"},
+      {"key": "revenue", "label": "매출 (백만원)", "type": "number"}
+    ]
+  },
+  "raw_input": [
+    {"month": "1월", "revenue": "120"},
+    {"month": "2월", "revenue": "1,450"},
+    {"month": "3월", "revenue": 168},
+    {"month": "4월", "revenue": "약 152 정도"}
+  ],
+  "should_normalize": true,
+  "note": "weak LLM emits revenue as strings (sometimes commas/units). coerce_number salvages '1,450' → 1450.0; unparseable '약 152 정도' becomes raw string (schema row.additionalProperties:true keeps row valid)"
+}

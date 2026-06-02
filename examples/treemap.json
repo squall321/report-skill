@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "widget_type": "treemap",
+  "for_schema_hash": "2a8bfb524cb79b37",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "unit": "TODO",
+      "rows": [
+        {
+          "label": "TODO",
+          "parent": "TODO",
+          "value": 0,
+          "color": "TODO"
+        }
+      ],
+      "colorscale": "Viridis"
+    },
+    "props": {
+      "label": "트리맵"
+    }
+  },
+  "expected_content": {
+    "rows": [
+      {
+        "label": "Tech"
+      },
+      {
+        "label": "Engineering",
+        "value": 60.0,
+        "parent": "Tech"
+      },
+      {
+        "label": "Design",
+        "value": 40.0,
+        "parent": "Tech"
+      },
+      {
+        "label": "Ops"
+      },
+      {
+        "label": "DevOps",
+        "value": 30.0,
+        "parent": "Ops"
+      },
+      {
+        "label": "SRE",
+        "value": 20.0,
+        "parent": "Ops"
+      }
+    ]
+  },
+  "notes": "mined from report 3 (page#0 block=tech_treemap)"
+}

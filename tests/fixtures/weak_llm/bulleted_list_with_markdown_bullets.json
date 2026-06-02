@@ -1,0 +1,7 @@
+{
+  "widget_type": "bulleted_list",
+  "props": {},
+  "raw_input": "- 결제 API 통합 완료\n- 캐시 레이어 최적화\n* 단위 테스트 보강\n1) 통합 테스트 시드 데이터 확보\n2. P2 시각 위젯 어댑터 6종 추가",
+  "should_normalize": true,
+  "note": "weak LLMs ignore JSON-array instructions and emit one big markdown string; strip_bullet must clean each line"
+}

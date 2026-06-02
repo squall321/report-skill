@@ -1,0 +1,12 @@
+{
+  "blocks": {
+    "summary": "(업데이트) 결제 API 통합이 예상보다 빠르게 진행되었음. 다음 주 회귀 테스트 + 캐시 작업 병행 가능.",
+    "issues": [
+      {"issue": "결제 API 연동 — 해결됨", "severity": "낮음", "owner": "김철수", "due": "2026-05-29"},
+      {"issue": "캐시 성능 — 진행 중", "severity": "보통", "owner": "이영희", "due": "2026-06-02"},
+      {"issue": "신규 발견: PCI-DSS 점검", "severity": "높음", "owner": "박국진", "due": "2026-06-10"}
+    ]
+  },
+  "status": "in_progress",
+  "tags": ["weekly", "backend", "updated"]
+}

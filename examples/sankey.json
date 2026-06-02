@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "widget_type": "sankey",
+  "for_schema_hash": "8c7a216bd6aa00d1",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "caption_skip_autofill": false,
+      "nodes": [
+        {
+          "label": "TODO",
+          "color": "TODO"
+        }
+      ],
+      "links": [
+        {
+          "target": "TODO",
+          "source": "TODO",
+          "value": 0,
+          "color": "TODO"
+        }
+      ],
+      "arrangement": "snap"
+    },
+    "props": {
+      "label": "Sankey 다이어그램",
+      "arrangement": "snap",
+      "node_pad": 16,
+      "node_thickness": 18
+    }
+  },
+  "expected_content": {
+    "links": [
+      {
+        "value": 1000.0,
+        "source": "고객",
+        "target": "게이트웨이"
+      },
+      {
+        "value": 30.0,
+        "source": "게이트웨이",
+        "target": "수수료"
+      },
+      {
+        "value": 970.0,
+        "source": "게이트웨이",
+        "target": "정산 계좌"
+      },
+      {
+        "value": 400.0,
+        "source": "정산 계좌",
+        "target": "운영비"
+      },
+      {
+        "value": 570.0,
+        "source": "정산 계좌",
+        "target": "투자 풀"
+      }
+    ],
+    "nodes": [
+      {
+        "label": "고객"
+      },
+      {
+        "label": "게이트웨이"
+      },
+      {
+        "label": "수수료"
+      },
+      {
+        "label": "정산 계좌"
+      },
+      {
+        "label": "운영비"
+      },
+      {
+        "label": "투자 풀"
+      }
+    ]
+  },
+  "notes": "mined from report 2 (page#2 block=fund_flow)"
+}

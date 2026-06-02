@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "widget_type": "chart",
+  "for_schema_hash": "6fbcc75ed6cde4e1",
+  "input": {
+    "raw": {
+      "caption": "TODO",
+      "chart_type": "bar",
+      "x_column_key": "TODO",
+      "x_axis_title": "TODO",
+      "y_axis_title": "TODO"
+    },
+    "props": {
+      "label": "그래프",
+      "chart_type": "bar",
+      "x_column_key": "category",
+      "columns": [
+        {
+          "key": "category",
+          "label": "구분",
+          "type": "text"
+        },
+        {
+          "key": "value",
+          "label": "값",
+          "type": "number"
+        }
+      ]
+    }
+  },
+  "expected_content": {
+    "rows": [
+      {
+        "month": "1월",
+        "revenue": 120.0
+      },
+      {
+        "month": "2월",
+        "revenue": 145.0
+      },
+      {
+        "month": "3월",
+        "revenue": 168.0
+      },
+      {
+        "month": "4월",
+        "revenue": 152.0
+      },
+      {
+        "month": "5월",
+        "revenue": 190.0
+      }
+    ],
+    "caption": "월별 매출 추이",
+    "columns": [
+      {
+        "key": "month",
+        "type": "text",
+        "label": "월"
+      },
+      {
+        "key": "revenue",
+        "type": "number",
+        "label": "매출 (백만)"
+      }
+    ],
+    "chart_type": "line",
+    "x_column_key": "month"
+  },
+  "notes": "mined from report 2 (page#0 block=revenue_trend)"
+}
