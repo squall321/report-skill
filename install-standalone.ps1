@@ -3,9 +3,11 @@
   Install the standalone report-skill (.exe variant — no Python required).
 
 .DESCRIPTION
-  Drops the two .exe binaries into a stable location, adds it to your user
-  PATH, sets PYTHONIOENCODING + REPORT_SKILL_ENV user env vars, copies
-  Claude Code slash commands to your global skills directory (with backups),
+  Drops the two onedir binary trees (report-skill\ and report-skill-mcp\,
+  each containing the entry .exe + _internal\) into a stable location,
+  adds both entry dirs to your user PATH so bare-name invocation works,
+  sets PYTHONIOENCODING + REPORT_SKILL_ENV user env vars, copies Claude
+  Code slash commands to your global skills directory (with backups),
   writes .env, and runs a smoke test.
 
   Re-runnable. Idempotent for binaries / PATH / env vars / skills (backups
@@ -36,6 +38,18 @@
 
 .PARAMETER SkipGlobalSkills
   Don't copy .claude/skills/*.md to %USERPROFILE%\.claude\skills\.
+
+.PARAMETER AddDefenderExclusion
+  Opt-in. When set, the installer attempts to register $InstallDir as a
+  Windows Defender exclusion path via Add-MpPreference. This eliminates
+  AV-scan latency on the bundled PyInstaller .exe (cold start can be
+  several seconds otherwise) but REQUIRES an elevated (Admin) shell.
+  If the current shell is not elevated, the installer prints a warning
+  and continues — it does NOT block the install. Default: off.
+
+  Security caveat: some organizations forbid users from adding AV
+  exclusions. Do not pass this switch on managed / corporate machines
+  without checking your IT policy first.
 #>
 [CmdletBinding()]
 param(
@@ -46,7 +60,8 @@ param(
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "report-skill"),
     [switch]$Force,
     [switch]$SkipPath,
-    [switch]$SkipGlobalSkills
+    [switch]$SkipGlobalSkills,
+    [switch]$AddDefenderExclusion
 )
 
 $ErrorActionPreference = 'Stop'
@@ -60,15 +75,60 @@ $InstallDir = $InstallDir.TrimEnd('\','/')
 
 Write-Host "==> report-skill standalone installer" -ForegroundColor Cyan
 
-# --- 1. copy binaries ---
+# --- 1. copy binaries (onedir layout) ---
+# Each shipped binary is a DIRECTORY tree:
+#   <src>\report-skill\report-skill.exe         + _internal\...
+#   <src>\report-skill-mcp\report-skill-mcp.exe + _internal\...
+# We install each tree under bin\ so the entry .exe ends up at
+#   <InstallDir>\bin\report-skill\report-skill.exe
+#   <InstallDir>\bin\report-skill-mcp\report-skill-mcp.exe
+# Both subdirs are added to PATH below so bare-name invocation still works.
 $binDir = Join-Path $InstallDir "bin"
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-foreach ($exe in "report-skill.exe", "report-skill-mcp.exe") {
-    $from = Join-Path $src $exe
-    if (-not (Test-Path $from)) { throw "missing $exe alongside install-standalone.ps1" }
-    Copy-Item $from -Destination (Join-Path $binDir $exe) -Force
+$entryDirs = @()
+foreach ($name in "report-skill", "report-skill-mcp") {
+    $srcTree = Join-Path $src $name
+    $exePath = Join-Path $srcTree "$name.exe"
+    if (-not (Test-Path $exePath)) {
+        throw "missing $name\$name.exe alongside install-standalone.ps1 — bundle layout drift?"
+    }
+    $dstTree = Join-Path $binDir $name
+    # Hard-replace: PyInstaller hashes pyd/pyc filenames per build, so merging
+    # an old _internal\ on top of a new one would leave dangling stragglers.
+    if (Test-Path $dstTree) { Remove-Item -Recurse -Force $dstTree }
+    Copy-Item $srcTree -Destination $binDir -Recurse -Force
+    $entryDirs += $dstTree
 }
-Write-Host "    binaries installed -> $binDir" -ForegroundColor DarkGray
+Write-Host "    binaries installed -> $binDir\{report-skill, report-skill-mcp}\" -ForegroundColor DarkGray
+
+# --- 1b. (opt-in) register InstallDir as a Windows Defender exclusion ---
+# Off by default; only runs when the caller passes -AddDefenderExclusion.
+# Requires an elevated shell — Add-MpPreference silently no-ops or throws
+# for non-admin users. We don't elevate ourselves: we just warn and move on
+# so the install completes even when the user can't (or shouldn't) add an
+# AV exclusion (managed machines, corporate policy, etc.).
+if ($AddDefenderExclusion) {
+    $principal = New-Object Security.Principal.WindowsPrincipal(
+        [Security.Principal.WindowsIdentity]::GetCurrent())
+    $isAdmin = $principal.IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+    if ($isAdmin) {
+        try {
+            Add-MpPreference -ExclusionPath $InstallDir -ErrorAction Stop
+            Write-Host "    Defender exclusion added -> $InstallDir" -ForegroundColor DarkGray
+        } catch {
+            Write-Warning "Add-MpPreference failed: $($_.Exception.Message)"
+            Write-Host "    (continuing — exclusion is optional)" -ForegroundColor DarkGray
+        }
+    } else {
+        Write-Warning "-AddDefenderExclusion requires an elevated shell."
+        Write-Host "    To add the exclusion, either:" -ForegroundColor DarkGray
+        Write-Host "      (a) right-click setup.bat -> Run as administrator, or" -ForegroundColor DarkGray
+        Write-Host "      (b) skip this step — install will still work, .exe cold" -ForegroundColor DarkGray
+        Write-Host "          start may just be a bit slower while AV scans it." -ForegroundColor DarkGray
+        Write-Host "    (continuing without exclusion)" -ForegroundColor DarkGray
+    }
+}
 
 # --- 2. add to user PATH (with normalization for idempotency) ---
 function Normalize-PathEntry([string]$p) {
@@ -79,17 +139,31 @@ function Normalize-PathEntry([string]$p) {
 if (-not $SkipPath) {
     $cur = [Environment]::GetEnvironmentVariable("PATH", "User")
     $parts = $cur -split ';' | Where-Object { $_ -ne '' }
+    # Build a lookup of normalized existing entries once — O(n) instead of O(n*m).
+    $existingNorm = @{}
+    foreach ($p in $parts) { $existingNorm[(Normalize-PathEntry $p)] = $true }
+    # Drop any stale legacy $binDir entry from pre-onedir installs — the
+    # entry .exe no longer lives at bin\ root, so leaving it on PATH is
+    # harmless but confusing in `where.exe report-skill` diagnostics.
     $binDirNorm = Normalize-PathEntry $binDir
-    $hasIt = $false
-    foreach ($p in $parts) {
-        if ((Normalize-PathEntry $p) -eq $binDirNorm) { $hasIt = $true; break }
+    $added = @()
+    foreach ($entryDir in $entryDirs) {
+        $norm = Normalize-PathEntry $entryDir
+        if (-not $existingNorm.ContainsKey($norm)) {
+            $parts += $entryDir
+            $existingNorm[$norm] = $true
+            $added += $entryDir
+        }
     }
-    if (-not $hasIt) {
-        [Environment]::SetEnvironmentVariable("PATH", (($parts + $binDir) -join ';'), "User")
-        $env:PATH = "$env:PATH;$binDir"  # affect THIS session too
-        Write-Host "    added $binDir to user PATH (open a new terminal to see it elsewhere)" -ForegroundColor DarkGray
+    if ($added.Count -gt 0) {
+        [Environment]::SetEnvironmentVariable("PATH", ($parts -join ';'), "User")
+        foreach ($a in $added) {
+            $env:PATH = "$env:PATH;$a"  # affect THIS session too
+            Write-Host "    added $a to user PATH" -ForegroundColor DarkGray
+        }
+        Write-Host "    (open a new terminal to see PATH changes elsewhere)" -ForegroundColor DarkGray
     } else {
-        Write-Host "    $binDir already on user PATH" -ForegroundColor DarkGray
+        Write-Host "    PATH already contains both entry dirs" -ForegroundColor DarkGray
     }
 }
 
@@ -281,7 +355,8 @@ $env:REPORT_SKILL_ENV = $envFile
 # --- 7. smoke test ---
 Write-Host ""
 Write-Host "==> smoke test: report-skill ping" -ForegroundColor Cyan
-$exe = Join-Path $binDir "report-skill.exe"
+# Onedir layout: bin\report-skill\report-skill.exe (sibling _internal\)
+$exe = Join-Path $binDir "report-skill\report-skill.exe"
 & $exe ping
 $pingExit = $LASTEXITCODE
 if ($pingExit -ne 0) {

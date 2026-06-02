@@ -3,16 +3,22 @@
   Build standalone .exe binaries (no Python required on receiver).
 
 .DESCRIPTION
-  Uses PyInstaller --onefile to bundle the entire skill — Python runtime,
-  all dependencies, the bundled widget catalog + templates — into two
-  single-file executables:
+  Uses PyInstaller --onedir (with --noupx and --contents-directory _internal)
+  to bundle the entire skill — Python runtime, all dependencies, the bundled
+  widget catalog + templates — into two directory trees:
 
-    dist\exe\report-skill.exe       (~25 MB)
-    dist\exe\report-skill-mcp.exe   (~25 MB)
+    dist\exe\report-skill\report-skill.exe          + _internal\...
+    dist\exe\report-skill-mcp\report-skill-mcp.exe  + _internal\...
 
-  Both work on any Windows 10+ machine with zero prerequisites.
+  Onedir avoids the --onefile bootloader's TEMP-extract step, which is the
+  root cause of intermittent first-run startup failures (the bootloader
+  raced AV scanners on _MEIxxxxx and sometimes lost). --noupx removes
+  another common AV false-positive trigger and improves cold-start.
 
-  Run AFTER (or instead of) build_release.ps1 — the .exe artifacts get
+  Each directory is fully self-contained — to ship, just zip the parent
+  release dir. Both work on any Windows 10+ machine with zero prerequisites.
+
+  Run AFTER (or instead of) build_release.ps1 — the artifacts get
   zipped separately into report-skill-standalone-vX.Y.Z.zip.
 
 .PARAMETER NoRefresh
@@ -90,7 +96,9 @@ Write-Host "==> building report-skill.exe (CLI)" -ForegroundColor Cyan
 $prev = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 $null = & $pyinstaller `
-    --onefile --noconfirm `
+    --onedir --noconfirm --noupx `
+    --contents-directory "_internal" `
+    --copy-metadata report-skill `
     --name report-skill `
     --distpath $exeDist `
     --workpath $buildDir `
@@ -110,7 +118,9 @@ Write-Host "==> building report-skill-mcp.exe (MCP server)" -ForegroundColor Cya
 $prev = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 $null = & $pyinstaller `
-    --onefile --noconfirm `
+    --onedir --noconfirm --noupx `
+    --contents-directory "_internal" `
+    --copy-metadata report-skill `
     --name report-skill-mcp `
     --distpath $exeDist `
     --workpath $buildDir `
@@ -122,11 +132,21 @@ $null = & $pyinstaller `
 $ErrorActionPreference = $prev
 if ($LASTEXITCODE -ne 0) { throw "pyinstaller MCP exit=$LASTEXITCODE" }
 
-$cli = Join-Path $exeDist "report-skill.exe"
-$mcp = Join-Path $exeDist "report-skill-mcp.exe"
+# Onedir layout: dist\exe\<name>\<name>.exe  (sibling: _internal\)
+$cliDir = Join-Path $exeDist "report-skill"
+$mcpDir = Join-Path $exeDist "report-skill-mcp"
+$cli    = Join-Path $cliDir "report-skill.exe"
+$mcp    = Join-Path $mcpDir "report-skill-mcp.exe"
+if (-not (Test-Path $cli)) { throw "CLI exe missing at $cli — pyinstaller layout drift?" }
+if (-not (Test-Path $mcp)) { throw "MCP exe missing at $mcp — pyinstaller layout drift?" }
+function Get-DirSizeMB([string]$p) {
+    $bytes = (Get-ChildItem $p -Recurse -File -ErrorAction SilentlyContinue |
+              Measure-Object -Property Length -Sum).Sum
+    return [math]::Round($bytes/1MB,1)
+}
 "==> built:"
-"    $cli  ($([math]::Round((Get-Item $cli).Length/1MB,1)) MB)"
-"    $mcp  ($([math]::Round((Get-Item $mcp).Length/1MB,1)) MB)"
+"    $cliDir  ($(Get-DirSizeMB $cliDir) MB total)"
+"    $mcpDir  ($(Get-DirSizeMB $mcpDir) MB total)"
 
 # --- 5. assemble standalone release ---
 $relName = "report-skill-standalone-v$Version"
@@ -134,7 +154,14 @@ $relDir = Join-Path $repo "dist\release-standalone\$relName"
 Remove-Item -Recurse -Force (Join-Path $repo "dist\release-standalone") -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $relDir | Out-Null
 
-Copy-Item $cli, $mcp -Destination $relDir
+# Onedir output is two directory trees — copy them recursively into the release dir.
+# Each tree is self-contained: <name>\<name>.exe + <name>\_internal\...
+foreach ($srcDir in @($cliDir, $mcpDir)) {
+    $leaf = Split-Path -Leaf $srcDir
+    $dst  = Join-Path $relDir $leaf
+    if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
+    Copy-Item $srcDir -Destination $relDir -Recurse -Force
+}
 $skillsSrc = Join-Path $repo ".claude\skills"
 if (Test-Path $skillsSrc) {
     $skillsDst = Join-Path $relDir ".claude\skills"

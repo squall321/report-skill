@@ -1,14 +1,25 @@
-# report-skill (standalone .exe release)
+﻿# report-skill (standalone .exe release)
 
 External skill layer that publishes reports to a remote **ReportArchive**
 instance. This is the **standalone .exe variant** — two PyInstaller
-single-file binaries that run on any Windows 10/11 machine with **zero
+**onedir** binary trees that run on any Windows 10/11 machine with **zero
 prerequisites**. No Python install, no pip, no venv.
 
-Pick this variant when handing the skill to analysts, PMs, or field
-engineers who shouldn't have to set up a Python environment. If you have
-Python 3.11+ already and want the smaller (~170 KB) install, use the
-wheel variant (`report-skill-vX.Y.Z.zip`) instead.
+## Which variant should I install?
+
+Two distributions ship side-by-side on the GitHub Releases page. **Choose
+the wheel if Python is available; choose standalone otherwise.** Both
+expose the same CLI / MCP / slash-command surface — they only differ in
+how the runtime is delivered.
+
+| Situation | Pick |
+|-----------|------|
+| You have Python 3.11+ on PATH (developer machine, admin / scripting environment) | **Wheel** — `report-skill-vX.Y.Z.zip` (~170 KB). `pip install` the bundled `.whl`; the OS Python interpreter executes — no PyInstaller bootloader → less AV interaction, smaller install, easier patches. |
+| Python is not available, or you can't install it (locked-down corporate machine, analyst / PM laptop, field deploy) | **Standalone** — `report-skill-standalone-vX.Y.Z.zip` (~37 MB). Two onedir trees, frozen Python runtime, double-click `setup.bat` to install. |
+| Locked-down environment with aggressive AV | **Wheel preferred.** A signed Python.org interpreter has high AV trust, while frozen .exe bundles trigger heuristics more often. If standalone is the only option, pass `-AddDefenderExclusion` to `setup.bat` (Admin shell required) to register the install dir as a Defender exclusion. |
+
+Each receiver decides at install time — the GitHub Release page lists
+both archives so you can hand the right one to the right user.
 
 ## What's in this archive
 

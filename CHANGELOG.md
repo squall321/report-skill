@@ -1,4 +1,82 @@
-# Changelog
+﻿# Changelog
+
+## 0.2.0 — 2026-06-03
+
+Second batch of field-reported fixes (`report-skill_수정요청서_2026-06-03.md`).
+Addresses the intermittent .exe startup failures that blocked CLI use during
+the v0.1.0 verification window, plus six smaller refinements.
+
+### PyInstaller migration (root cause of "Access is denied" / no-output runs)
+
+- **CR-3 — `--onefile` → `--onedir`.** Onefile bundles re-extract ~19 MB to
+  `%TEMP%\_MEIxxxxx` on every launch, racing Defender's real-time scanner.
+  About half of launches lost the race on the test machine, surfacing as
+  silent no-ops or `Access is denied`. Onedir lays the runtime out once at
+  install time so subsequent launches just exec the entry .exe — no
+  per-run extract, no race. Two trees ship:
+  `bin\report-skill\report-skill.exe` and `bin\report-skill-mcp\report-skill-mcp.exe`,
+  each with a sibling `_internal\` directory.
+- **CR-5 — `--noupx`.** PyInstaller auto-packs with UPX when it's on PATH;
+  UPX'd binaries are an AV-heuristic magnet. Build now passes `--noupx`
+  to both pyinstaller invocations regardless of host state.
+
+### Distribution + installer
+
+- **Installer copies directory trees, not single files.** `install-standalone.ps1`
+  now copies the two onedir trees into `%LOCALAPPDATA%\report-skill\bin\`,
+  hard-replacing any prior `_internal\` (PyInstaller hashes pyd/pyc names
+  per build — merging would leave dangling stragglers). Both entry
+  directories are appended to user PATH so `report-skill` and
+  `report-skill-mcp` still work bare-name.
+- **CR-6 — `-AddDefenderExclusion` opt-in switch.** Off by default. When
+  passed (and the shell is elevated), the installer calls
+  `Add-MpPreference -ExclusionPath $InstallDir`. Non-admin shell: prints a
+  warning and continues. `setup.bat` forwards all args (`%*`) so
+  `setup.bat -AddDefenderExclusion` works.
+- **CR-7 — Receiver doc divergence.** `docs/RECEIVER-STANDALONE.md` now
+  opens with a "Which variant should I install?" table:
+  wheel preferred when Python is available, standalone otherwise. The
+  AV-heavy environment row explicitly recommends the wheel + offers
+  `-AddDefenderExclusion` as the standalone fallback.
+
+### Render order
+
+- **CR-8 — Heading extras float to top of `blocks_order` by default.** A
+  `heading` widget added as an `extra_block` used to land at the bottom
+  of the page (extras appended after template blocks). Now the auto-
+  computed `blocks_order` partitions extras into `heading` vs
+  `non-heading`: headings prepend, non-headings append. Explicit per-page
+  `blocks_order` still wins. Relative order among headings (and among
+  non-headings) is preserved from the input extras list.
+
+### Version observability
+
+- **CR-9 — Single source of truth for `__version__`.** Replaced the
+  hardcoded `__version__ = "0.0.1"` in `src/report_skill/__init__.py` with
+  `importlib.metadata.version("report-skill")`. Falls back to
+  `"0.0.0+unknown"` when imported from a source tree without `pip install
+  -e .`. No more drift between `pyproject.toml` and the runtime constant.
+- **CR-10 — `--version` flag + MCP version surfacing.** `report-skill
+  --version` now prints `report-skill X.Y.Z` and exits (Typer eager
+  callback on the root app). The MCP `ping` tool now returns
+  `{"status":"ok","version":"X.Y.Z","logged_in_as":...}` so clients can
+  verify the deployed version without OOB checks.
+
+### Known limitations (deferred to a later release)
+
+- **CR-4 — Authenticode code signing** is still pending. Requires a PFX
+  certificate the project doesn't currently hold. Once a cert is
+  available, add `signtool sign /fd SHA256 /tr <timestamp>` to the tail
+  of `build_exe.ps1` for both entry .exe files. Signed onedir binaries
+  combined with `--noupx` should drop SmartScreen / Defender heuristic
+  flags close to zero.
+
+### Verified status from v0.1.0 (no action needed)
+
+- CR-1 (`report update` data loss) — fix from 0.1.0 stands.
+- CR-2 (empty template blocks rendered as blank boxes) — fix from 0.1.0
+  stands.
+- key_value Korean keys → items[] auto-conversion — fix from 0.1.0 stands.
 
 ## 0.1.0 — 2026-06-02
 

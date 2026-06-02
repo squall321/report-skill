@@ -52,6 +52,28 @@ app.add_typer(cli_templates.app, name="templates")
 console = Console()
 
 
+def _version_callback(value: bool) -> None:
+    """Print version and exit. Eager so it works before any subcommand parsing."""
+    if value:
+        from report_skill import __version__
+        console.print(f"report-skill {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _root(
+    version: Optional[bool] = typer.Option(
+        None, "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit.",
+    ),
+) -> None:
+    """External skill layer over ReportArchive."""
+    # Root callback exists solely to host --version. No-op otherwise.
+    return
+
+
 @app.command()
 def ping():
     """Verify the service account can log in and the API is reachable."""

@@ -91,9 +91,18 @@ def build_create_payload_multi(
             schema_blocks = (tpl.get("schema") or {}).get("blocks") or []
             template_order = [b["id"] for b in schema_blocks
                               if isinstance(b, dict) and b.get("id") in content]
-            extra_order = [e["id"] for e in extras
-                           if isinstance(e, dict) and e.get("id")]
-            blocks_order = template_order + extra_order
+            # CR-8 — heading extras float to the top of the page by default
+            # so titles/section dividers introduced as extras land above the
+            # filled template body instead of getting appended at the bottom.
+            # Relative order among headings (and among non-headings) is
+            # preserved from the input extras list.
+            heading_extras_order = [e["id"] for e in extras
+                                    if isinstance(e, dict) and e.get("id")
+                                    and e.get("type") == "heading"]
+            non_heading_extras_order = [e["id"] for e in extras
+                                        if isinstance(e, dict) and e.get("id")
+                                        and e.get("type") != "heading"]
+            blocks_order = heading_extras_order + template_order + non_heading_extras_order
 
         page_payloads.append({
             "template_id": tpl["template_id"],

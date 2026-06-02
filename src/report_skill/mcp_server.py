@@ -350,9 +350,11 @@ def _text(payload: Any) -> list[TextContent]:
 
 
 def _do_ping(_args: dict) -> Any:
+    from report_skill import __version__
     with ReportArchiveClient() as c:
         env = c.login()
-    return {"status": "ok", "logged_in_as": env.get("email"), "user_id": env.get("user_id")}
+    return {"status": "ok", "version": __version__,
+            "logged_in_as": env.get("email"), "user_id": env.get("user_id")}
 
 
 def _do_templates_list(args: dict) -> Any:

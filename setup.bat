@@ -22,7 +22,7 @@ echo.
 echo ===============================================
 echo.
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-standalone.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-standalone.ps1" %*
 set EC=%ERRORLEVEL%
 
 echo.
