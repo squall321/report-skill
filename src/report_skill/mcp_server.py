@@ -168,11 +168,16 @@ TOOLS: list[Tool] = [
     ),
     _tool(
         "report_update",
-        "Patch specific blocks of an existing report. Other blocks preserved. Auto edit-lock.",
+        "Patch specific blocks of an existing report. Other blocks preserved. Auto edit-lock. "
+        "CR-11: new extras added via extra_blocks are auto-merged into the page's "
+        "blocks_order so they actually render. Pass an explicit blocks_order to override.",
         {
             "report_id": {"type": "integer"},
             "blocks": {"type": "object"},
             "extra_blocks": {"type": "array", "items": {"type": "object"}},
+            "blocks_order": {"type": "array", "items": {"type": "string"},
+                             "description": "explicit per-page render order; "
+                                            "overrides the auto-merge of new extras"},
             "title": {"type": "string"},
             "phase": {"type": "string", "enum": ["drafting", "reviewing", "finalized"]},
             "lifecycle": {"type": "string", "enum": ["single_shot", "ongoing"]},
@@ -222,13 +227,19 @@ TOOLS: list[Tool] = [
     ),
     _tool(
         "report_add_page",
-        "Append a new page to an existing report. New template allowed.",
+        "Append a new page to an existing report. New template allowed. "
+        "CR-11: the new page's blocks_order is auto-computed (heading extras top, "
+        "filled template blocks middle, non-heading extras bottom) so empty "
+        "template blocks stay hidden. Pass explicit blocks_order to override.",
         {
             "report_id": {"type": "integer"},
             "template_id": {"type": "string"},
             "blocks": {"type": "object"},
             "name": {"type": "string"},
             "extra_blocks": {"type": "array", "items": {"type": "object"}},
+            "blocks_order": {"type": "array", "items": {"type": "string"},
+                             "description": "explicit per-page render order; "
+                                            "overrides the CR-2/CR-8 auto-compute"},
         },
         ["report_id", "template_id", "blocks"],
     ),
@@ -667,6 +678,9 @@ def _do_report_update(args: dict) -> Any:
             page_index=page_index,
             block_patches=result.content,
             add_extra_blocks=new_extras,
+            # CR-11 — explicit override; when None, update_blocks auto-merges
+            # new extras into the page's existing blocks_order.
+            blocks_order=args.get("blocks_order"),
             title=args.get("title"),
             phase=args.get("phase"),
             lifecycle=args.get("lifecycle"),
@@ -704,6 +718,10 @@ def _do_report_add_page(args: dict) -> Any:
             name=args.get("name"),
             content=result.content,
             extra_blocks=result.extra_blocks,
+            # CR-11 — pass the fetched template so add_page can auto-compute
+            # blocks_order, and any explicit override from the caller.
+            template=tpl,
+            blocks_order=args.get("blocks_order"),
         )
     return {"id": updated.get("id"), "pages": len(updated.get("pages") or []),
             "view_url": f"http://localhost:3001/reports/{updated.get('id')}"}

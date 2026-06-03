@@ -1,5 +1,60 @@
 ﻿# Changelog
 
+## 0.3.1 — 2026-06-04
+
+CR-11 fix — `blocks_order` is now maintained on the edit paths
+(`report add-page`, `report update`, MCP `report_add_page`, MCP
+`report_update`), not just on `report create`. Previously the CR-2 +
+CR-8 auto-compute logic lived inside `build_create_payload_multi` and
+nothing called it from the edit flows, so:
+
+- new pages added via `add-page` shipped with no `blocks_order`, which
+  the backend interprets as "show every template block" — and the
+  receiver saw the empty `progress`/`issues`/`next_week` blank-box
+  render that CR-2 was supposed to fix
+- new extras added via `report update` got their content stored but
+  never showed up in the rendered report because their ids were
+  missing from the page's `blocks_order` (backend hides anything not
+  listed)
+
+### What changed
+
+- New helpers in `report_builder.py`:
+  - `compute_blocks_order(template, content, extras, explicit=None)` —
+    extracted from the inline create-flow code so add-page can call
+    the exact same logic. Honors `explicit` verbatim when set.
+  - `merge_blocks_order(existing, add_ids)` — appends new ids that
+    aren't already present, preserving the user's ordering. Used by
+    `update_blocks` when new extras are introduced.
+- `report_ops.add_page` now accepts `template` + `blocks_order`. When
+  `template` is supplied (the CLI/MCP always passes the fetched template
+  dict now), the new page's `blocks_order` is auto-computed via
+  `compute_blocks_order`. Explicit `blocks_order` overrides.
+- `report_ops.update_blocks` now accepts `blocks_order`. When set, it
+  REPLACES the page's blocks_order verbatim. When unset and
+  `add_extra_blocks` is supplied, new extra ids are auto-merged into
+  the page's existing order at the end via `merge_blocks_order`.
+- CLI `report add-page` passes the fetched template + `draft.blocks_order`
+  to `add_page`. CLI `report update` passes `draft.blocks_order` to
+  `update_blocks`.
+- MCP `report_add_page` + `report_update` tools gain an optional
+  `blocks_order` argument with the same semantics.
+
+### Why this is a 0.3.1 (patch) not 0.4.0 (minor)
+
+Pure correctness fix on existing surfaces. No new commands, no new MCP
+tools, no breaking changes. The two new args (`blocks_order` on update
+and add-page) are optional with backward-compatible defaults — old
+callers continue to work, just now with correct render order.
+
+### Verified
+
+- pytest 280/280 stays green.
+- compute_blocks_order: heading extras float to top + filled template
+  blocks middle + non-heading extras bottom, explicit override honored.
+- merge_blocks_order: appends new ids past the existing order, idempotent
+  on duplicates.
+
 ## 0.3.0 — 2026-06-03
 
 LLM-driven revision flow — closes the gap between v0.2.0's two halves

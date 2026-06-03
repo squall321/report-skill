@@ -885,6 +885,10 @@ def report_update(
                 page_index=page_index,
                 block_patches=scoped_content,
                 add_extra_blocks=new_extras,
+                # CR-11 — propagate explicit per-page blocks_order if the
+                # draft set one; otherwise let update_blocks auto-merge any
+                # new extra ids into the page's existing order.
+                blocks_order=draft.get("blocks_order"),
                 title=title or draft.get("title"),
                 phase=phase or draft.get("phase"),
                 lifecycle=lifecycle or draft.get("lifecycle"),
@@ -934,6 +938,10 @@ def report_add_page(
             raise typer.Exit(2)
 
         try:
+            # CR-11 — pass the fetched template (so add_page can auto-compute
+            # blocks_order) and any explicit draft.blocks_order override. Without
+            # this, the new page's blocks_order stays empty and the backend
+            # falls back to showing every template block as a blank box.
             updated = report_ops.add_page(
                 client, report_id,
                 template_id=tpl["template_id"],
@@ -941,6 +949,8 @@ def report_add_page(
                 name=name,
                 content=result.content,
                 extra_blocks=result.extra_blocks,
+                template=tpl,
+                blocks_order=draft.get("blocks_order"),
             )
         except ApiError as e:
             console.print(f"[red]PATCH /reports/{report_id} failed ({e.status_code}):[/red] {e}")

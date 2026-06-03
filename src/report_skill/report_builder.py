@@ -22,6 +22,62 @@ def normalize_phase(value: Optional[str]) -> Optional[str]:
     return _LEGACY_STATUS_TO_PHASE.get(value, value)
 
 
+def compute_blocks_order(
+    template: dict,
+    content: dict,
+    extras: list,
+    *,
+    explicit: Optional[list] = None,
+) -> list:
+    """Compute a page's `blocks_order` per the CR-2 + CR-8 rules.
+
+    Returns `explicit` verbatim if provided. Otherwise auto-computes:
+        heading extras (input order)
+        + filled template blocks (template's natural order)
+        + non-heading extras (input order)
+
+    CR-2: filled template blocks only — empty ones stay out so the backend
+    hides them, preventing the blank-box render.
+    CR-8: heading extras float to the top so titles/dividers land above
+    the body. Relative order within each group is preserved from input.
+
+    Used by `build_create_payload_multi` (create flow) AND by edit-flow
+    code paths (CR-11): `report_ops.add_page` and `report_ops.update_blocks`.
+    """
+    if explicit is not None:
+        return list(explicit)
+    schema_blocks = (template.get("schema") or {}).get("blocks") or []
+    template_order = [b["id"] for b in schema_blocks
+                      if isinstance(b, dict) and b.get("id") in content]
+    heading_extras_order = [e["id"] for e in extras
+                            if isinstance(e, dict) and e.get("id")
+                            and e.get("type") == "heading"]
+    non_heading_extras_order = [e["id"] for e in extras
+                                if isinstance(e, dict) and e.get("id")
+                                and e.get("type") != "heading"]
+    return heading_extras_order + template_order + non_heading_extras_order
+
+
+def merge_blocks_order(existing: list, add_ids: list) -> list:
+    """Append `add_ids` to `existing` blocks_order, skipping ids already present.
+
+    Preserves the user's existing block ordering entirely; new ids land at
+    the end in input order. Used by `report_ops.update_blocks` (CR-11) when
+    the caller adds new extras to a page that already has a settled order.
+
+    Callers that want a more sophisticated insertion (e.g. heading above
+    body on update) can pass an explicit `blocks_order` in their draft
+    instead — that path bypasses this merge.
+    """
+    out = list(existing or [])
+    seen = {bid for bid in out if bid}
+    for bid in add_ids or []:
+        if bid and bid not in seen:
+            out.append(bid)
+            seen.add(bid)
+    return out
+
+
 def build_create_payload(
     template: dict,
     content: dict,
@@ -77,32 +133,11 @@ def build_create_payload_multi(
         content = p["content"]
         extras = p.get("extra_blocks") or []
 
-        # CR-2 fix — derive blocks_order so empty template blocks stay
-        # hidden in the rendered report. Without this the backend defaults
-        # to showing every template block (including the ones the user
-        # didn't fill), which surfaces blank boxes and pushes extras out
-        # of the user's intended order.
-        # Honor an explicit per-page override if the caller passed one;
-        # otherwise auto-compute from (template blocks the user filled in
-        # template natural order) + (extras in input order).
-        if p.get("blocks_order") is not None:
-            blocks_order = list(p["blocks_order"])
-        else:
-            schema_blocks = (tpl.get("schema") or {}).get("blocks") or []
-            template_order = [b["id"] for b in schema_blocks
-                              if isinstance(b, dict) and b.get("id") in content]
-            # CR-8 — heading extras float to the top of the page by default
-            # so titles/section dividers introduced as extras land above the
-            # filled template body instead of getting appended at the bottom.
-            # Relative order among headings (and among non-headings) is
-            # preserved from the input extras list.
-            heading_extras_order = [e["id"] for e in extras
-                                    if isinstance(e, dict) and e.get("id")
-                                    and e.get("type") == "heading"]
-            non_heading_extras_order = [e["id"] for e in extras
-                                        if isinstance(e, dict) and e.get("id")
-                                        and e.get("type") != "heading"]
-            blocks_order = heading_extras_order + template_order + non_heading_extras_order
+        # CR-2 + CR-8 — auto-compute blocks_order (see compute_blocks_order
+        # docstring). Honors p["blocks_order"] when explicitly set.
+        blocks_order = compute_blocks_order(
+            tpl, content, extras, explicit=p.get("blocks_order"),
+        )
 
         page_payloads.append({
             "template_id": tpl["template_id"],

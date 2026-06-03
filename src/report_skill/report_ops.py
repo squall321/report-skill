@@ -84,6 +84,7 @@ def update_blocks(
     page_index: int = 0,
     block_patches: Optional[dict[str, Any]] = None,
     add_extra_blocks: Optional[list[dict]] = None,
+    blocks_order: Optional[list] = None,
     title: Optional[str] = None,
     phase: Optional[str] = None,
     lifecycle: Optional[str] = None,
@@ -97,6 +98,10 @@ def update_blocks(
     - `add_extra_blocks`: each {id, type, props, content?} gets appended to
       that page's extra_blocks array AND its content gets stored under the
       id in content.
+    - `blocks_order` (CR-11): if provided, REPLACES the page's blocks_order
+      verbatim. Use this when the caller wants explicit control over render
+      order. When None, new extras (from add_extra_blocks) are merged into
+      the existing blocks_order at the end so they actually render.
     - `title`/`status`/`tags`: optional top-level field updates.
 
     Returns the updated Report record.
@@ -115,14 +120,31 @@ def update_blocks(
         for bid, ctn in block_patches.items():
             content[bid] = ctn
 
+    # CR-11 — when add_extra_blocks is supplied, merge the new ids into the
+    # page's existing blocks_order so the new extras actually render. The
+    # backend hides anything missing from blocks_order, so without this the
+    # new heading/chart/etc would never appear even though it's in content.
+    new_extra_ids: list = []
     if add_extra_blocks:
         extras = list(page.get("extra_blocks") or [])
         for b in add_extra_blocks:
             extras.append({k: v for k, v in b.items()
                            if k in ("id", "type", "props", "layout")})
+            if b.get("id"):
+                new_extra_ids.append(b["id"])
             if "content" in b and b.get("id"):
                 content[b["id"]] = b["content"]
         page["extra_blocks"] = extras
+
+    # Explicit blocks_order override wins over the auto-merge. Otherwise we
+    # auto-merge new extras into the existing order (preserves the user's
+    # ordering and just appends the new ids at the end).
+    if blocks_order is not None:
+        page["blocks_order"] = list(blocks_order)
+    elif new_extra_ids:
+        from report_skill.report_builder import merge_blocks_order
+        current_order = page.get("blocks_order") or []
+        page["blocks_order"] = merge_blocks_order(current_order, new_extra_ids)
 
     page["content"] = content
     pages[page_index] = page
@@ -152,12 +174,21 @@ def add_page(
     name: Optional[str] = None,
     content: Optional[dict] = None,
     extra_blocks: Optional[list[dict]] = None,
+    template: Optional[dict] = None,
+    blocks_order: Optional[list] = None,
 ) -> dict:
     """Append a new page to an existing report.
 
     The new page can use a DIFFERENT template than existing pages —
     multi-page reports legitimately mix layouts (cover + detail + appendix
     etc.). Returns the updated Report record.
+
+    CR-11 — if `template` is supplied (the fetched template dict), the
+    page's `blocks_order` is auto-computed via `compute_blocks_order` so
+    empty template blocks stay hidden and heading extras float to top
+    (same rules as create). Explicit `blocks_order` overrides the auto
+    computation. When `template` is None, no blocks_order is set — the
+    backend keeps its old default (all template blocks visible).
     """
     current = fetch_report(client, report_id)
     pages = list(current.get("pages", []))
@@ -171,6 +202,13 @@ def add_page(
         new_page["name"] = name
     if extra_blocks:
         new_page["extra_blocks"] = extra_blocks
+
+    if template is not None or blocks_order is not None:
+        from report_skill.report_builder import compute_blocks_order
+        new_page["blocks_order"] = compute_blocks_order(
+            template or {}, content or {}, extra_blocks or [],
+            explicit=blocks_order,
+        )
 
     pages.append(new_page)
     with edit_lock(client, report_id):
