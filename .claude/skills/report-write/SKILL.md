@@ -200,7 +200,38 @@ Add `--allow-failures` only if the user explicitly opts in. Return the printed `
 
 ## Flow B — UPDATE an existing report
 
-For "fix the X block", "change the title", "update issues":
+Two paths depending on whether the user gave you the new content verbatim
+or asked you to *figure out* the new content from a natural-language
+instruction.
+
+### B1. LLM-driven revision (preferred when the user described the change in prose)
+
+For "summary 블록 더 간결하게", "이슈에서 결제 API 항목 제거", "phase를 reviewing으로 + 다음 주 계획 한 줄 추가":
+
+```powershell
+report-skill report revise <report-id> "<자연어 수정 지시>" --block-ids summary,issues [--page 0]
+# or to let the LLM look at every filled block:
+report-skill report revise <report-id> "<지시>" --all [--page 0]
+# preview the patch without POSTing:
+report-skill report revise <report-id> "<지시>" --block-ids summary --dry-run
+```
+
+For each target block: the CLI fetches its current content, prompts the
+configured LLM (Anthropic / OpenAI / Ollama / bridge) with `(current +
+instruction + schema)`, validates the result against the widget's
+content_schema, and PATCHes ONLY blocks whose content actually changed.
+CR-1 `scoped_content` protection applies — blocks not listed in
+`--block-ids` (and unchanged when `--all`) stay intact on the server.
+
+When `--all` and the instruction only touches one block, the others come
+back unchanged and are silently skipped — no false patches.
+
+Prefer `revise` for ambiguous prose; prefer `update` (B2 below) when the
+user gave you a specific draft to push.
+
+### B2. Manual patch (when the user handed you exact JSON or you constructed it yourself)
+
+For "fix the X block", "change the title", "update issues" with a concrete patch in hand:
 
 ```powershell
 report-skill report update <report-id> -i <patch>.json [--page 0]

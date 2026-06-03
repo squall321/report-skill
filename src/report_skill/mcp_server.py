@@ -183,6 +183,31 @@ TOOLS: list[Tool] = [
         ["report_id"],
     ),
     _tool(
+        "report_revise",
+        "LLM-driven block-level revision of an existing report. For each target "
+        "block: fetch current content, prompt the LLM with (current + instruction "
+        "+ schema), validate, PATCH only blocks whose content actually changed. "
+        "CR-1 scoped_content protection applies — blocks not in block_ids "
+        "(and not changed when revise_all=true) are left untouched on the server. "
+        "Either block_ids or revise_all must be set. Requires an LLM provider "
+        "(ANTHROPIC_API_KEY / OPENAI_API_KEY / OLLAMA_BASE_URL / bridge).",
+        {
+            "report_id": {"type": "integer"},
+            "instruction": {"type": "string",
+                            "description": "natural-language revision instruction"},
+            "block_ids": {"type": "array", "items": {"type": "string"},
+                          "description": "block ids on the page to revise"},
+            "revise_all": {"type": "boolean", "default": False,
+                           "description": "revise every filled block on the page (LLM may "
+                                          "return some unchanged; patch contains only diffs)"},
+            "page_index": {"type": "integer", "default": 0},
+            "dry_run": {"type": "boolean", "default": False,
+                        "description": "return the patch JSON without PATCHing"},
+            "max_tokens": {"type": "integer", "default": 800},
+        },
+        ["report_id", "instruction"],
+    ),
+    _tool(
         "report_append",
         "Merge incoming content into existing blocks via per-widget append strategy "
         "(milestone dedupe by date+label, table append rows, bulleted_list dedupe, etc). "
@@ -853,6 +878,111 @@ def _do_report_export(args: dict) -> Any:
     }
 
 
+def _do_report_revise(args: dict) -> Any:
+    """LLM-driven block-level revision of an existing report (CR-1 protected)."""
+    from report_skill import examples as examples_mod
+    from report_skill import llm as llm_mod
+    from report_skill import prompt as prompt_mod
+    from report_skill.llm import LLMError
+    from report_skill.adapters.base import NormalizeError
+
+    if not llm_mod.is_configured():
+        raise RuntimeError(
+            "no LLM provider configured (set ANTHROPIC_API_KEY / OPENAI_API_KEY / "
+            "OLLAMA_BASE_URL / SKILL_LLM_PROVIDER=bridge)"
+        )
+
+    rid = int(args["report_id"])
+    instruction = args["instruction"]
+    block_ids = list(args.get("block_ids") or [])
+    revise_all = bool(args.get("revise_all", False))
+    page_index = int(args.get("page_index", 0))
+    dry_run = bool(args.get("dry_run", False))
+    max_tokens = int(args.get("max_tokens", 800))
+
+    if not block_ids and not revise_all:
+        raise ValueError("either block_ids or revise_all is required")
+
+    snap = schemas.load()
+    with ReportArchiveClient() as c:
+        existing = report_ops.fetch_report(c, rid)
+        pages = existing.get("pages") or []
+        if page_index >= len(pages):
+            raise IndexError(f"page_index {page_index} out of range ({len(pages)} pages)")
+        page = pages[page_index]
+        tpl = c.fetch_template(page["template_id"], page["template_version"])
+        tpl_blocks = (tpl.get("schema") or {}).get("blocks") or []
+        tpl_by_id = {b["id"]: b for b in tpl_blocks if isinstance(b, dict)}
+        current_content = page.get("content") or {}
+
+        if revise_all:
+            block_ids = [bid for bid in tpl_by_id
+                         if bid in current_content and current_content[bid]]
+        unknown = [bid for bid in block_ids if bid not in tpl_by_id]
+        if unknown:
+            raise ValueError(f"unknown block id(s) on page {page_index}: {unknown}")
+
+        provider = llm_mod.get_provider()
+        patch: dict = {}
+        results = []
+        for bid in block_ids:
+            bdef = tpl_by_id[bid]
+            wtype = bdef["type"]
+            schema = schemas.content_schema(snap, wtype)
+            props = schemas.resolved_props(bdef, snap)
+            example = examples_mod.load_example(wtype)
+            cur = current_content.get(bid) or {}
+
+            spec = prompt_mod.BlockSpec(
+                block_id=bid, widget_type=wtype, props=props, content_schema=schema,
+            )
+            messages = prompt_mod.build_block_revise_prompt(
+                spec, current_content=cur, revision_instruction=instruction,
+                example=example.get("expected_content") if example else None,
+            )
+            try:
+                reply = provider.generate(messages, max_tokens=max_tokens, json_mode=True)
+                parsed = llm_mod.extract_json(reply)
+            except LLMError as e:
+                results.append({"block_id": bid, "status": "llm_error", "detail": str(e)})
+                continue
+            if parsed is None:
+                results.append({"block_id": bid, "status": "no_json"})
+                continue
+            adapter = orchestrator.ADAPTERS.get(wtype)
+            if adapter is None:
+                results.append({"block_id": bid, "status": "no_adapter", "widget": wtype})
+                continue
+            try:
+                normalized = adapter.normalize(parsed, props)
+            except (NormalizeError, Exception) as e:
+                results.append({"block_id": bid, "status": "validation_failed", "detail": str(e)})
+                continue
+            if normalized == cur:
+                results.append({"block_id": bid, "status": "unchanged"})
+                continue
+            patch[bid] = normalized
+            results.append({"block_id": bid, "status": "revised"})
+
+        if not patch:
+            return {"id": rid, "patched": [], "results": results, "note": "no blocks changed"}
+
+        if dry_run:
+            return {"id": rid, "dry_run": True, "patch": patch, "results": results}
+
+        updated = report_ops.update_blocks(
+            c, rid, page_index=page_index, block_patches=patch,
+        )
+    return {
+        "id": updated.get("id"),
+        "title": updated.get("title"),
+        "revision": updated.get("revision"),
+        "patched_blocks": list(patch.keys()),
+        "results": results,
+        "view_url": f"http://localhost:3001/reports/{updated.get('id')}",
+    }
+
+
 def _do_report_import(args: dict) -> Any:
     """POST a previously-exported ReportCreate payload."""
     from pathlib import Path as _Path
@@ -882,6 +1012,7 @@ _DISPATCH = {
     "tier_show": _do_tier_show,
     "report_create": _do_report_create,
     "report_update": _do_report_update,
+    "report_revise": _do_report_revise,
     "report_append": _do_report_append,
     "report_add_page": _do_report_add_page,
     "report_delete": _do_report_delete,

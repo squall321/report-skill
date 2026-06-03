@@ -953,6 +953,193 @@ def report_add_page(
     console.print(f"  view: http://localhost:3001/reports/{updated.get('id')}")
 
 
+@report_app.command("revise")
+def report_revise(
+    report_id: int = typer.Argument(..., help="report id to revise"),
+    instruction: str = typer.Argument(..., help="natural-language revision instruction"),
+    block_ids: Optional[str] = typer.Option(
+        None, "--block-ids",
+        help="comma-separated block ids to revise (eg 'summary,issues'). "
+             "Either --block-ids or --all is required.",
+    ),
+    revise_all: bool = typer.Option(
+        False, "--all",
+        help="revise every filled block on the page (LLM may return some unchanged "
+             "— the patch only contains blocks that actually changed)",
+    ),
+    page_index: int = typer.Option(0, "--page", help="0-based page index"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run",
+        help="print the resulting patch JSON without POSTing",
+    ),
+    max_tokens: int = typer.Option(800, "--max-tokens"),
+):
+    """LLM-driven block-level revision of an existing report.
+
+    For each target block: fetch its current content, prompt the LLM with
+    (current content + revision instruction + schema), validate the result,
+    and PATCH only the blocks whose content actually changed.
+
+    CR-1 scoped_content protection applies — blocks not listed in --block-ids
+    (and not changed when --all) are left untouched on the server.
+
+    Examples:
+      report revise 42 "summary에 PostgreSQL 15 마이그레이션 결과 한 줄 추가" --block-ids summary
+      report revise 42 "이슈에서 결제 API 항목 제거" --block-ids issues
+      report revise 42 "phase를 reviewing으로, summary를 더 간결하게" --all --dry-run
+    """
+    from report_skill import examples as examples_mod
+    from report_skill import llm as llm_mod
+    from report_skill import prompt as prompt_mod
+    from report_skill.llm import LLMError
+
+    if not block_ids and not revise_all:
+        console.print("[red]either --block-ids or --all is required[/red]")
+        raise typer.Exit(1)
+    if not llm_mod.is_configured():
+        console.print(
+            "[red]no LLM provider configured.[/red]\n"
+            "  set ANTHROPIC_API_KEY / OPENAI_API_KEY / OLLAMA_BASE_URL / SKILL_LLM_PROVIDER=bridge"
+        )
+        raise typer.Exit(1)
+
+    try:
+        snapshot = schemas.load()
+    except schemas.SnapshotMissing as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    target_ids = [s.strip() for s in (block_ids or "").split(",") if s.strip()]
+
+    with ReportArchiveClient() as client:
+        try:
+            existing = report_ops.fetch_report(client, report_id)
+        except ApiError as e:
+            console.print(f"[red]fetch report {report_id} failed:[/red] {e}")
+            raise typer.Exit(1)
+
+        pages = existing.get("pages") or []
+        if page_index >= len(pages):
+            console.print(f"[red]report {report_id} only has {len(pages)} page(s)[/red]")
+            raise typer.Exit(1)
+
+        page = pages[page_index]
+        try:
+            tpl = client.fetch_template(page["template_id"], page["template_version"])
+        except ApiError as e:
+            console.print(f"[red]template fetch failed:[/red] {e}")
+            raise typer.Exit(1)
+
+        tpl_blocks = (tpl.get("schema") or {}).get("blocks") or []
+        tpl_blocks_by_id = {b["id"]: b for b in tpl_blocks if isinstance(b, dict)}
+        current_content: dict = page.get("content") or {}
+
+        # Default --all to every block the user actually filled on this page
+        # (skip empty template blocks — nothing to revise).
+        if revise_all:
+            target_ids = [bid for bid in tpl_blocks_by_id
+                          if bid in current_content and current_content[bid]]
+            if not target_ids:
+                console.print("[yellow]no filled blocks on this page to revise[/yellow]")
+                raise typer.Exit(0)
+
+        # Validate that every target id exists on this page.
+        unknown = [bid for bid in target_ids if bid not in tpl_blocks_by_id]
+        if unknown:
+            console.print(f"[red]unknown block id(s) on page {page_index}:[/red] {unknown}")
+            console.print(f"  available: {list(tpl_blocks_by_id.keys())}")
+            raise typer.Exit(1)
+
+        provider = llm_mod.get_provider()
+        console.print(f"[dim]provider={provider.name}  blocks={target_ids}[/dim]")
+
+        patch: dict[str, Any] = {}
+        unchanged_count = 0
+        failed_count = 0
+
+        for bid in target_ids:
+            block_def = tpl_blocks_by_id[bid]
+            wtype = block_def["type"]
+            schema = schemas.content_schema(snapshot, wtype)
+            props = schemas.resolved_props(block_def, snapshot)
+            example = examples_mod.load_example(wtype)
+            cur = current_content.get(bid) or {}
+
+            spec = prompt_mod.BlockSpec(
+                block_id=bid, widget_type=wtype, props=props, content_schema=schema,
+            )
+            messages = prompt_mod.build_block_revise_prompt(
+                spec,
+                current_content=cur,
+                revision_instruction=instruction,
+                example=example.get("expected_content") if example else None,
+            )
+
+            try:
+                reply = provider.generate(messages, max_tokens=max_tokens, json_mode=True)
+                parsed = llm_mod.extract_json(reply)
+            except LLMError as e:
+                console.print(f"  [red]{bid}: LLM error[/red] {e}")
+                failed_count += 1
+                continue
+            except (ValueError, KeyError) as e:
+                console.print(f"  [yellow]{bid}: parse failed[/yellow] {e}")
+                failed_count += 1
+                continue
+
+            if parsed is None:
+                console.print(f"  [yellow]{bid}: no JSON in reply[/yellow]")
+                failed_count += 1
+                continue
+
+            # Schema validate the new content.
+            adapter = orchestrator.ADAPTERS.get(wtype)
+            if adapter is None:
+                console.print(f"  [yellow]{bid}: no adapter for widget type '{wtype}'; skipping[/yellow]")
+                failed_count += 1
+                continue
+            try:
+                normalized = adapter.normalize(parsed, props)
+            except Exception as e:  # NormalizeError or anything the adapter raises
+                console.print(f"  [red]{bid}: revision failed schema validation[/red] {e}")
+                failed_count += 1
+                continue
+
+            if normalized == cur:
+                console.print(f"  [dim]= {bid}: unchanged (instruction did not apply)[/dim]")
+                unchanged_count += 1
+                continue
+
+            patch[bid] = normalized
+            console.print(f"  [green]✓[/green] {bid} revised")
+
+        if failed_count:
+            console.print(f"[yellow]{failed_count} block(s) failed[/yellow]")
+        if not patch:
+            console.print("[yellow]no blocks changed — nothing to patch[/yellow]")
+            raise typer.Exit(0)
+
+        if dry_run:
+            console.print(f"[dim]dry-run: patch covers {len(patch)} block(s):[/dim]")
+            console.print_json(json.dumps({"blocks": patch}, ensure_ascii=False))
+            raise typer.Exit(0)
+
+        # CR-1 scoped_content protection applies automatically: report_ops.update_blocks
+        # only writes the block ids we pass; everything else on the page stays intact.
+        try:
+            updated = report_ops.update_blocks(
+                client, report_id,
+                page_index=page_index,
+                block_patches=patch,
+            )
+        except ApiError as e:
+            console.print(f"[red]PATCH /reports/{report_id} failed:[/red] {e}")
+            raise typer.Exit(3)
+
+    console.print(f"[green]revised[/green]  report id={updated.get('id')}  "
+                  f"patched_blocks={list(patch.keys())}  unchanged={unchanged_count}")
+
+
 @report_app.command("append")
 def report_append(
     report_id: int = typer.Argument(...),

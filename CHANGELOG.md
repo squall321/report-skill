@@ -1,5 +1,96 @@
 ﻿# Changelog
 
+## 0.3.0 — 2026-06-03
+
+LLM-driven revision flow — closes the gap between v0.2.0's two halves
+("LLM creates from raw text" + "user/Claude Code crafts a patch and
+PATCHes"). Now a single command takes an existing report + a Korean/English
+revision instruction and applies the change with full CR-1 safety.
+
+### New: `report-skill report revise`
+
+```
+report-skill report revise <id> "<자연어 수정 지시>"
+  (--block-ids X,Y | --all) [--page N] [--dry-run] [--max-tokens 800]
+```
+
+For each target block: fetch the current content, prompt the LLM
+(Anthropic / OpenAI / Ollama / bridge) with `(current + instruction +
+content_schema)`, validate the LLM's output against the schema, and
+PATCH only the blocks whose content actually changed.
+
+CR-1 `scoped_content` protection applies — blocks not listed in
+`--block-ids` (and unchanged when `--all`) stay intact on the server.
+When `--all` and the instruction only touches one block, the others
+come back unchanged from the LLM and are silently skipped — no false
+patches.
+
+`--dry-run` prints the resulting patch JSON without POSTing, so the
+caller can review (and feed into `report update -i` later, or just sanity
+check) before committing.
+
+### New MCP tool: `report_revise`
+
+Same surface as the CLI command, exposed to Claude Desktop / Cursor /
+Continue / any MCP client. Schema:
+
+```json
+{
+  "report_id": 42,
+  "instruction": "summary에 PostgreSQL 15 마이그레이션 결과 한 줄 추가",
+  "block_ids": ["summary"],   // OR set revise_all=true
+  "page_index": 0,
+  "dry_run": false,
+  "max_tokens": 800
+}
+```
+
+Returns `{id, title, revision, patched_blocks, results, view_url}` on
+success; `{id, dry_run: true, patch, results}` on dry-run; `{id, patched:
+[], results, note: "no blocks changed"}` when the instruction didn't
+apply to any of the target blocks.
+
+### New prompt builder: `build_block_revise_prompt`
+
+`prompt.py` gains a fourth builder alongside `build_single_block_prompt`
+/ `build_batch_prompt` / `build_page_prompt`. The revise prompt explicitly
+includes:
+
+- the block's authoritative JSON-schema
+- the current block content (so the LLM knows what to preserve)
+- the user's verbatim revision instruction
+- explicit instructions: "preserve every field the user did NOT ask to
+  change", "if the request does not apply to THIS block, return the
+  current content unchanged"
+
+That last rule is what makes `--all` cheap and safe: blocks the
+instruction doesn't touch return verbatim, get equality-checked against
+the current state, and never reach the patch dict.
+
+### `/report-write` slash command updated
+
+Flow B now has two sub-flows:
+- **B1 — LLM-driven revision** (preferred when the user described the
+  change in prose): `report revise <id> "<지시>" --block-ids ...`
+- **B2 — Manual patch** (when the user handed you exact JSON):
+  `report update <id> -i patch.json` — the previous Flow B verbatim.
+
+Claude Code now picks B1 by default for vague / prose revision requests
+and B2 only when the user explicitly provided patch content.
+
+### Verified status from earlier releases
+
+- v0.1.0: CR-1 (data loss on update), CR-2 (blocks_order auto), key_value
+  Korean keys — all stand.
+- v0.2.0: CR-3/5 onedir+noupx, CR-6 Defender opt-in, CR-7 receiver doc,
+  CR-8 heading floating, CR-9 __version__ single source, CR-10 --version
+  flag + MCP version — all stand.
+- 280/280 deterministic tests pass.
+
+### Still deferred
+
+- CR-4 Authenticode code signing — waiting on PFX cert.
+
 ## 0.2.0 — 2026-06-03
 
 Second batch of field-reported fixes (`report-skill_수정요청서_2026-06-03.md`).

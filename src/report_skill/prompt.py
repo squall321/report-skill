@@ -187,6 +187,59 @@ def build_single_block_prompt(
     ]
 
 
+def build_block_revise_prompt(
+    spec: BlockSpec,
+    *,
+    current_content: Any,
+    revision_instruction: str,
+    example: Optional[dict] = None,
+    prior_attempt: Optional[dict] = None,
+    prior_errors: Optional[list[str]] = None,
+) -> list[dict]:
+    """Revise-tier prompt: take a block's current state and apply the user's
+    natural-language revision, preserving anything not mentioned.
+
+    Returns FULL new content (not a diff) so the result can be validated +
+    PATCHed through the same scoped_content path as `report update`.
+    """
+    sections = [_render_block_spec(spec, example)]
+    current_json = json.dumps(current_content, ensure_ascii=False, indent=2)
+    sections.append(
+        "### Current block content (what is in the report right now)\n"
+        + current_json
+    )
+    sections.append(
+        "### User revision request (verbatim)\n"
+        + (revision_instruction or "").strip()
+    )
+    sections.append(
+        "### Output\n"
+        "Return the FULL NEW JSON for this block (not a diff, not a delta).\n"
+        "Rules:\n"
+        "- Apply the user's revision exactly as requested.\n"
+        "- Preserve every field the user did NOT ask to change.\n"
+        "- If the user's request does not apply to THIS block, return the\n"
+        "  current content unchanged (verbatim copy).\n"
+        "- Output MUST satisfy the schema above.\n"
+        "- No prose, no markdown fences, no comments."
+    )
+
+    if prior_attempt is not None or prior_errors:
+        prior_blob = json.dumps(prior_attempt or {}, ensure_ascii=False, indent=2)
+        errs = prior_errors or ["(no detail captured)"]
+        sections.append(
+            "### Previous attempt (REJECTED — fix only these issues)\n"
+            f"Errors:\n- " + "\n- ".join(errs)
+            + "\nPrevious output was:\n" + prior_blob
+            + "\nReturn the corrected full content JSON, not a diff."
+        )
+
+    return [
+        {"role": "system", "content": SYSTEM_ROLE},
+        {"role": "user", "content": "\n\n".join(sections)},
+    ]
+
+
 def build_batch_prompt(
     specs: list[BlockSpec],
     *,
