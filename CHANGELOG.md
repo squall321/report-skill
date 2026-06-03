@@ -87,9 +87,18 @@ and B2 only when the user explicitly provided patch content.
   flag + MCP version — all stand.
 - 280/280 deterministic tests pass.
 
-### Still deferred
+### Not pursued
 
-- CR-4 Authenticode code signing — waiting on PFX cert.
+- **CR-4 Authenticode code signing** — out of scope for this project.
+  Sufficient for the intended internal distribution: CR-3 (onedir) +
+  CR-5 (--noupx) already eliminate the practical AV issues (verified
+  20/20 cold-start). The remaining SmartScreen "Unknown publisher"
+  warning is a one-time-per-machine click for internal users. If a
+  wider-audience release ever needs Authenticode, the cost (~$300/yr
+  EV cert or ~$10/mo Azure Trusted Signing) and the matching one-line
+  `signtool sign /fd SHA256 /tr <timestamp> ...` addition to
+  `build_exe.ps1` are well-understood — but not warranted for the
+  current scope.
 
 ## 0.2.0 — 2026-06-03
 
@@ -153,14 +162,15 @@ the v0.1.0 verification window, plus six smaller refinements.
   `{"status":"ok","version":"X.Y.Z","logged_in_as":...}` so clients can
   verify the deployed version without OOB checks.
 
-### Known limitations (deferred to a later release)
+### Not pursued
 
-- **CR-4 — Authenticode code signing** is still pending. Requires a PFX
-  certificate the project doesn't currently hold. Once a cert is
-  available, add `signtool sign /fd SHA256 /tr <timestamp>` to the tail
-  of `build_exe.ps1` for both entry .exe files. Signed onedir binaries
-  combined with `--noupx` should drop SmartScreen / Defender heuristic
-  flags close to zero.
+- **CR-4 — Authenticode code signing** — out of scope. Sufficient for
+  the internal distribution this project targets: CR-3 (onedir) + CR-5
+  (--noupx) already remove the practical AV issues. The remaining
+  SmartScreen "Unknown publisher" warning is a one-time click per
+  receiver. See the v0.3.0 "Not pursued" note for the rationale and the
+  one-line signtool integration path if a future wider release ever
+  needs it.
 
 ### Verified status from v0.1.0 (no action needed)
 
