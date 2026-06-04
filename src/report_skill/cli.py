@@ -581,11 +581,76 @@ def report_export(
     console.print(f"[dim]later, run: report-skill import {out_path}[/dim]")
 
 
+@report_app.command("dump")
+def report_dump(
+    report_id: int = typer.Argument(..., help="report id to dump"),
+    out_path: Optional[Path] = typer.Option(
+        None, "--out", "-o",
+        help="path to write the bundle.zip (default: bundle-report-<id>.zip in cwd)",
+    ),
+):
+    """Pack a report + every referenced media file into a portable bundle.zip.
+
+    Use this to move a report between ReportArchive instances: fetch the
+    report on server A, run `report dump <id> -o bundle.zip`, then on
+    server B run `report import bundle.zip` — files are re-uploaded
+    (getting fresh file_ids) and every reference inside the payload is
+    swapped automatically.
+
+    The bundle is self-contained: payload.json + files/<file_id> bytes +
+    files/manifest.json. No coordinated backend change required between
+    instances.
+    """
+    from report_skill import bundle as bundle_mod
+
+    target = out_path or Path(f"bundle-report-{report_id}.zip")
+    with ReportArchiveClient() as client:
+        try:
+            summary = bundle_mod.pack_report_bundle(
+                client, report_id, target,
+                log=lambda m: console.print(f"  [magenta]bundle[/] {m}"),
+            )
+        except ApiError as e:
+            console.print(f"[red]GET /reports/{report_id} failed:[/red] {e}")
+            raise typer.Exit(1)
+    console.print(f"\n[green]bundled[/green]  report id={summary['report_id']}  "
+                  f"title={summary.get('title')!r}  pages={summary['pages']}  "
+                  f"files={summary['files']}  "
+                  f"size={summary['bundle_size']} B")
+    if summary["missing_files"]:
+        console.print(f"[yellow]  missing on source server: {summary['missing_files']}[/yellow]")
+    console.print(f"  -> [cyan]report-skill report import {target}[/cyan]")
+
+
 @report_app.command("import")
 def report_import(
-    payload_path: Path = typer.Argument(..., help="path to a saved ReportCreate JSON payload"),
+    payload_path: Path = typer.Argument(..., help="path to a saved payload (.json) or bundle (.zip)"),
 ):
-    """Import a previously-exported report payload (POST to /api/reports)."""
+    """Import a previously-exported report payload OR a bundle.zip.
+
+    Auto-detects from the file extension:
+      .zip  → unpack bundle, re-upload files, swap file_ids, POST
+      .json → POST the payload verbatim (legacy path; assumes file_ids
+               are valid on this server)
+    """
+    if payload_path.suffix.lower() == ".zip":
+        from report_skill import bundle as bundle_mod
+        with ReportArchiveClient() as client:
+            try:
+                created = bundle_mod.import_bundle(
+                    client, payload_path,
+                    log=lambda m: console.print(f"  [magenta]bundle[/] {m}"),
+                )
+            except ApiError as e:
+                console.print(f"[red]bundle import failed ({e.status_code}):[/red] {e}")
+                raise typer.Exit(1)
+            except (FileNotFoundError, json.JSONDecodeError) as e:
+                console.print(f"[red]bundle malformed:[/red] {e}")
+                raise typer.Exit(1)
+        console.print(f"[green]imported[/green]  new id={created.get('id')}  "
+                      f"title={created.get('title')!r}")
+        console.print(f"  view: http://localhost:3001/reports/{created.get('id')}")
+        return
     return import_payload(payload_path)
 
 

@@ -369,9 +369,26 @@ TOOLS: list[Tool] = [
     ),
     _tool(
         "report_import",
-        "POST a previously-exported ReportCreate JSON payload to /api/reports.",
-        {"payload_path": {"type": "string", "description": "absolute path to the payload JSON file"}},
+        "Import a previously-saved payload OR bundle.zip. Auto-detects from "
+        "the file extension: .zip routes through the bundle path (re-upload "
+        "files, swap file_ids, POST), .json POSTs verbatim.",
+        {"payload_path": {"type": "string",
+                          "description": "absolute path to the payload .json OR bundle .zip"}},
         ["payload_path"],
+    ),
+    _tool(
+        "report_dump",
+        "Pack a report + every referenced media file into a portable bundle.zip "
+        "so it can be replayed on a different ReportArchive instance via "
+        "report_import. Self-contained: payload.json + files/manifest.json + "
+        "files/<file_id> bytes.",
+        {
+            "report_id": {"type": "integer"},
+            "out_path": {"type": "string",
+                         "description": "where to write bundle.zip "
+                                        "(default: cwd/bundle-report-<id>.zip)"},
+        },
+        ["report_id"],
     ),
 ]
 
@@ -1002,11 +1019,22 @@ def _do_report_revise(args: dict) -> Any:
 
 
 def _do_report_import(args: dict) -> Any:
-    """POST a previously-exported ReportCreate payload."""
+    """Import a previously-saved payload OR bundle.zip (auto-detected)."""
     from pathlib import Path as _Path
     p = _Path(args["payload_path"])
     if not p.is_file():
         raise FileNotFoundError(f"payload not found: {p}")
+    if p.suffix.lower() == ".zip":
+        from report_skill import bundle as bundle_mod
+        with ReportArchiveClient() as c:
+            created = bundle_mod.import_bundle(c, p)
+        return {
+            "id": created.get("id"),
+            "title": created.get("title"),
+            "revision": created.get("revision"),
+            "view_url": f"http://localhost:3001/reports/{created.get('id')}",
+            "mode": "bundle",
+        }
     payload = json.loads(p.read_text(encoding="utf-8"))
     with ReportArchiveClient() as c:
         created = c.create_report(payload)
@@ -1015,7 +1043,19 @@ def _do_report_import(args: dict) -> Any:
         "title": created.get("title"),
         "revision": created.get("revision"),
         "view_url": f"http://localhost:3001/reports/{created.get('id')}",
+        "mode": "json",
     }
+
+
+def _do_report_dump(args: dict) -> Any:
+    """Pack a report + referenced files into a bundle.zip."""
+    from pathlib import Path as _Path
+    from report_skill import bundle as bundle_mod
+    rid = int(args["report_id"])
+    out = _Path(args.get("out_path") or f"bundle-report-{rid}.zip")
+    with ReportArchiveClient() as c:
+        summary = bundle_mod.pack_report_bundle(c, rid, out)
+    return {**summary, "bundle_path": str(out)}
 
 
 _DISPATCH = {
@@ -1046,6 +1086,7 @@ _DISPATCH = {
     "catalog_sync_templates": _do_catalog_sync_templates,
     "report_export": _do_report_export,
     "report_import": _do_report_import,
+    "report_dump": _do_report_dump,
 }
 
 

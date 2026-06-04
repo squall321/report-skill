@@ -1,5 +1,78 @@
 ﻿# Changelog
 
+## 0.3.2 — 2026-06-04
+
+Cross-instance report portability via a self-contained `bundle.zip`.
+The existing `report import payload.json` flow breaks for any report
+with media (image / video / cad_3d / attachment) because `file_id` is
+server-local — instance B has no record of instance A's `f_abc123`.
+0.3.2 adds a bundle format that re-uploads the bytes on the target
+side and swaps every reference in the payload.
+
+### New: `report-skill report dump <id> -o bundle.zip`
+
+Fetches the report, downloads every referenced file via
+`GET /api/files/{file_id}` (the existing backend endpoint —
+report-skill-only change), and packs them into:
+
+```
+bundle.zip
+├── payload.json          # ReportCreate-ready (server fields stripped)
+└── files/
+    ├── manifest.json     # [{file_id, filename, mime_type, size}, ...]
+    ├── f_abc123          # raw bytes, named by ORIGINAL file_id
+    └── f_def456
+```
+
+`-o` is optional; defaults to `bundle-report-<id>.zip` in cwd.
+
+### Updated: `report-skill report import <path>`
+
+Auto-detects from the file extension:
+  - `.zip` → unpack bundle, re-upload each file (gets a fresh
+    file_id from the target server), swap every old file_id in the
+    payload, POST `/reports`
+  - `.json` → existing behavior (POST payload verbatim; assumes
+    file_ids are valid on this server)
+
+No new CLI command for import — the existing one auto-routes.
+
+### New MCP tool: `report_dump` + updated `report_import`
+
+`report_dump(report_id, out_path?)` → returns
+`{report_id, title, pages, files, missing_files, bundle_size,
+bundle_path}`. `report_import(payload_path)` now also accepts `.zip`
+and returns `mode: "bundle"|"json"` so callers can tell which path
+ran.
+
+### Bundle internals (for future maintainers)
+
+- `collect_file_ids(obj)` — recursive JSON-tree walk; handles dict
+  values (`evidence.file_id`) and array elements (`attachment.files[i].file_id`).
+- `swap_file_ids(obj, mapping)` — in-place swap; leaves ids not in
+  the mapping unchanged so callers can audit "missing on import".
+- `ready_for_recreate(report)` — strips server-managed fields
+  (`id`, `owner_id`, `created_at`, `revision`, page-level `id` /
+  `report_id` / `page_index`) so the fetched record is POST-ready.
+- `pack_report_bundle` + `import_bundle` — top-level functions that
+  the CLI and MCP both wrap.
+
+### What still requires source files
+
+Files the source server no longer holds (deleted or storage gone)
+land in `missing_files` in the dump summary. Import skips their
+`file_id` swap, so those blocks render with a broken file_id on the
+target. The dump output flags them so the operator knows.
+
+### Verified
+
+- pytest 280/280 stays green.
+- `collect_file_ids` walks nested attachment.files lists correctly.
+- `swap_file_ids` preserves unmapped ids verbatim.
+- `ready_for_recreate` drops `id`/`created_at`/`revision` while
+  keeping `title` / `pages` / per-page `content` / `blocks_order` /
+  `extra_blocks`.
+
 ## 0.3.1 — 2026-06-04
 
 CR-11 fix — `blocks_order` is now maintained on the edit paths

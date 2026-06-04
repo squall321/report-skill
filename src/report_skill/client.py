@@ -92,6 +92,46 @@ class ReportArchiveClient:
         """POST /reports — returns the created Report record."""
         return self.post("/reports", json=payload)
 
+    def download_file(self, file_id: str) -> tuple[bytes, str, str]:
+        """GET /files/{file_id} — returns (bytes, filename, mime_type).
+
+        Used by the `report dump` bundle path to round-trip media between
+        ReportArchive instances. The backend serves the raw file with the
+        original filename in `Content-Disposition` (RFC 6266 utf-8 form
+        when the name has non-ASCII chars). We prefer the structured
+        /meta endpoint for the filename + mime so we don't have to
+        unparse the header ourselves.
+        """
+        self.ensure_logged_in()
+        headers = {
+            "X-Workspace-Slug": settings.report_api_workspace_slug,
+            "Authorization": f"Bearer {self._token}",
+        }
+        meta_resp = self._http.get(f"/files/{file_id}/meta", headers=headers)
+        if meta_resp.is_error:
+            raise ApiError(
+                f"GET /files/{file_id}/meta returned {meta_resp.status_code}",
+                status_code=meta_resp.status_code,
+            )
+        try:
+            meta_body = meta_resp.json()
+        except Exception:
+            raise ApiError(
+                f"GET /files/{file_id}/meta returned non-JSON",
+                status_code=meta_resp.status_code,
+            )
+        meta = (meta_body.get("data") or meta_body or {}) if isinstance(meta_body, dict) else {}
+
+        bin_resp = self._http.get(f"/files/{file_id}", headers=headers)
+        if bin_resp.is_error:
+            raise ApiError(
+                f"GET /files/{file_id} returned {bin_resp.status_code}",
+                status_code=bin_resp.status_code,
+            )
+        filename = meta.get("filename") or f"{file_id}.bin"
+        mime_type = meta.get("mime_type") or bin_resp.headers.get("content-type") or "application/octet-stream"
+        return bin_resp.content, filename, mime_type
+
     def upload_file(self, path, *, mime_type: Optional[str] = None) -> dict:
         """POST /files (multipart) — returns the FileMeta dict (file_id, filename, size, mime_type, ...).
 
