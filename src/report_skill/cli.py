@@ -40,10 +40,14 @@ catalog_app = typer.Typer(no_args_is_help=True, help="Widget catalog cache + dif
 report_app = typer.Typer(no_args_is_help=True, help="Build / submit reports.")
 tier_app = typer.Typer(no_args_is_help=True, help="Adaptive AI tier (S/M/W).")
 bridge_app = typer.Typer(no_args_is_help=True, help="LLM bridge (Claude Code as the LLM via files).")
+tools_app = typer.Typer(no_args_is_help=True,
+                         help="Mention resolvers (reports / workspaces / entity-types / entities). "
+                              "Same surface as the MCP tools — use for one-shot CLI lookups.")
 app.add_typer(catalog_app, name="catalog")
 app.add_typer(report_app, name="report")
 app.add_typer(tier_app, name="tier")
 app.add_typer(bridge_app, name="bridge")
+app.add_typer(tools_app, name="tools")
 app.add_typer(cli_examples.app, name="examples")
 app.add_typer(cli_llm.app, name="llm")
 app.add_typer(cli_files.app, name="files")
@@ -579,6 +583,73 @@ def report_export(
     console.print(f"\n[green]exported[/green]  payload → {out_path}  "
                   f"({len(normalized_pages)} page(s))")
     console.print(f"[dim]later, run: report-skill import {out_path}[/dim]")
+
+
+@tools_app.command("reports-search")
+def tools_reports_search(
+    q: Optional[str] = typer.Option(None, "--q", "-q",
+                                     help="search keyword (title/owner/mount, NFKC + case-insensitive)"),
+    workspace_slug: Optional[str] = typer.Option(None, "--workspace-slug",
+                                                  help="restrict to reports whose home workspace exactly matches"),
+    owner_name: Optional[str] = typer.Option(None, "--owner",
+                                              help="restrict to owner_name substring"),
+    mount_slug: Optional[str] = typer.Option(None, "--mount-slug",
+                                              help="restrict to reports mounted on this board"),
+    date_from: Optional[str] = typer.Option(None, "--from", help="ISO date — report_date >="),
+    date_to: Optional[str] = typer.Option(None, "--to", help="ISO date — report_date <="),
+    limit: int = typer.Option(20, "--limit", min=1, max=50),
+):
+    """Resolve a free-text reference to report id candidates for
+    mention://report/<id>?ws=<slug>. Same logic as the MCP reports_search tool."""
+    from report_skill.mcp_server import _do_reports_search
+    rows = _do_reports_search({
+        "q": q, "workspace_slug": workspace_slug, "owner_name": owner_name,
+        "mount_slug": mount_slug, "date_from": date_from, "date_to": date_to,
+        "limit": limit,
+    })
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@tools_app.command("workspaces-list")
+def tools_workspaces_list(
+    q: Optional[str] = typer.Option(None, "--q", "-q",
+                                     help="substring over name+slug"),
+    kind: str = typer.Option("org", "--kind",
+                              help="all | org | personal | virtual (default org)"),
+):
+    """List workspace candidates for mention://dept/<slug>."""
+    from report_skill.mcp_server import _do_workspaces_list
+    rows = _do_workspaces_list({"q": q, "kind": kind})
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@tools_app.command("entity-types-list")
+def tools_entity_types_list():
+    """List entity-axis catalog (model_name, customer_name, …)."""
+    from report_skill.mcp_server import _do_entity_types_list
+    rows = _do_entity_types_list({})
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@tools_app.command("entities-list")
+def tools_entities_list(
+    q: Optional[str] = typer.Option(None, "--q", "-q",
+                                     help="substring over value/code/description"),
+    axis: Optional[str] = typer.Option(None, "--axis",
+                                        help="entity-type slug (e.g. model_name)"),
+    type_id: Optional[int] = typer.Option(None, "--type-id",
+                                           help="entity_type id (overrides --axis when both given)"),
+    include_deprecated: bool = typer.Option(False, "--include-deprecated"),
+    limit: int = typer.Option(50, "--limit", min=1, max=200),
+):
+    """Resolve free-text reference to entity id candidates for
+    mention://entity/<id>?axis=<slug>."""
+    from report_skill.mcp_server import _do_entities_list
+    rows = _do_entities_list({
+        "q": q, "axis": axis, "type_id": type_id,
+        "include_deprecated": include_deprecated, "limit": limit,
+    })
+    console.print_json(json.dumps(rows, ensure_ascii=False))
 
 
 @report_app.command("dump")

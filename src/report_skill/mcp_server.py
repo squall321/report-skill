@@ -390,6 +390,79 @@ TOOLS: list[Tool] = [
         },
         ["report_id"],
     ),
+    # ---- mention resolvers (LLM → mention://… id lookup) ------------- #
+    _tool(
+        "reports_search",
+        "Resolve a free-text reference (e.g. '지난 주 백엔드 주간보고') to candidate "
+        "report ids the LLM can plug into a `mention://report/<id>?ws=<slug>` link. "
+        "Wraps GET /api/reports/linkable; the adapter applies NFKC-normalized "
+        "case-insensitive substring matching over title + owner_name + "
+        "mount_workspaces[].name and ranks exact > title-substring > owner/mount > "
+        "recency. Never returns body content — call report_show after id resolution "
+        "if needed.",
+        {
+            "q": {"type": "string",
+                  "description": "search keyword (title / owner / mount); NFKC + case-insensitive substring"},
+            "workspace_slug": {"type": "string",
+                               "description": "restrict to reports whose home workspace_slug exactly matches"},
+            "owner_name": {"type": "string",
+                           "description": "restrict to reports whose owner_name contains this substring"},
+            "mount_slug": {"type": "string",
+                           "description": "restrict to reports mounted on this board workspace slug"},
+            "date_from": {"type": "string",
+                          "description": "ISO date — only reports with report_date >= this"},
+            "date_to": {"type": "string",
+                        "description": "ISO date — only reports with report_date <= this"},
+            "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 50},
+        },
+        [],
+    ),
+    _tool(
+        "workspaces_list",
+        "List department/workspace candidates the LLM can resolve to a "
+        "`mention://dept/<slug>` target. Wraps GET /api/workspaces. Filters by "
+        "kind (default 'org' — personal leaks user names, virtual owns no data) "
+        "and optional case-insensitive substring match over name+slug. Preserves "
+        "the server's (sort_order, slug) ordering for deterministic output.",
+        {
+            "q": {"type": "string",
+                  "description": "case-insensitive substring over name+slug"},
+            "kind": {"type": "string",
+                     "enum": ["all", "org", "personal", "virtual"],
+                     "default": "org",
+                     "description": "default 'org' is the only mention-eligible class"},
+        },
+        [],
+    ),
+    _tool(
+        "entity_types_list",
+        "List the entity-axis catalog (~7 rows: model_name, customer_name, etc.) "
+        "so the LLM knows which `axis=<slug>` values are valid before searching "
+        "entities. Wraps GET /api/entity-types. Cheap and stable — adapter caches "
+        "the result per-process so chained entity lookups only hit the network once.",
+        {},
+        [],
+    ),
+    _tool(
+        "entities_list",
+        "Resolve a free-text reference (e.g. 'HFP-X1', '현대모비스') to candidate "
+        "entity ids for a `mention://entity/<id>?axis=<slug>` link. Wraps "
+        "GET /api/entities?type_id=&q=&include_deprecated=&limit=. Accepts either "
+        "`axis` (entity_type slug — resolved to type_id via cached entity_types_list) "
+        "or `type_id` directly; type_id wins when both given. Excludes deprecated by "
+        "default. Hard-caps limit at 200.",
+        {
+            "q": {"type": "string",
+                  "description": "substring over value/code/description"},
+            "axis": {"type": "string",
+                     "description": "entity-type slug (e.g. 'model_name'); resolved to type_id via entity_types_list"},
+            "type_id": {"type": "integer",
+                        "description": "entity_type id (overrides axis when both given)"},
+            "include_deprecated": {"type": "boolean", "default": False},
+            "limit": {"type": "integer", "default": 50, "minimum": 1, "maximum": 200},
+        },
+        [],
+    ),
 ]
 
 
@@ -1058,6 +1131,190 @@ def _do_report_dump(args: dict) -> Any:
     return {**summary, "bundle_path": str(out)}
 
 
+# ---- mention resolvers ------------------------------------------------ #
+import unicodedata as _unicodedata
+
+
+def _nfkc_lower(s: str) -> str:
+    """NFKC-normalize + casefold for substring matching that's stable
+    across half/full-width digits and Korean composed/decomposed forms."""
+    return _unicodedata.normalize("NFKC", s or "").casefold()
+
+
+def _do_reports_search(args: dict) -> Any:
+    """Resolve free-text → report_id candidates for mention://report/<id>."""
+    q = _nfkc_lower(args.get("q") or "")
+    ws_exact = args.get("workspace_slug")
+    owner_sub = _nfkc_lower(args.get("owner_name") or "")
+    mount_exact = args.get("mount_slug")
+    date_from = args.get("date_from")
+    date_to = args.get("date_to")
+    limit = max(1, min(int(args.get("limit") or 20), 50))
+
+    with ReportArchiveClient() as c:
+        pool = c.fetch_linkable_reports()
+
+    def row_haystacks(r: dict) -> tuple[str, str, list[str]]:
+        title = r.get("title") or ""
+        owner = r.get("owner_name") or ""
+        mounts = [(m.get("name") or "") for m in (r.get("mount_workspaces") or [])
+                  if isinstance(m, dict)]
+        return title, owner, mounts
+
+    def passes_filters(r: dict) -> bool:
+        if ws_exact and (r.get("workspace_slug") or "") != ws_exact:
+            return False
+        if mount_exact:
+            mounts_slugs = {(m.get("slug") or "") for m in (r.get("mount_workspaces") or [])
+                            if isinstance(m, dict)}
+            if mount_exact not in mounts_slugs:
+                return False
+        if owner_sub:
+            if owner_sub not in _nfkc_lower(r.get("owner_name") or ""):
+                return False
+        if date_from and (r.get("report_date") or "") < date_from:
+            return False
+        if date_to and (r.get("report_date") or "") > date_to:
+            return False
+        return True
+
+    scored: list[tuple[int, str, dict]] = []
+    for r in pool:
+        if not passes_filters(r):
+            continue
+        title, _owner, mounts = row_haystacks(r)
+        title_n = _nfkc_lower(title)
+        rank = 99  # default = recency only
+        if q:
+            if title_n == q:
+                rank = 0
+            elif q in title_n:
+                rank = 1
+            elif q in _nfkc_lower(r.get("owner_name") or ""):
+                rank = 2
+            elif any(q in _nfkc_lower(m) for m in mounts):
+                rank = 3
+            else:
+                continue
+        scored.append((rank, r.get("report_date") or "", r))
+
+    # Sort: rank ascending, then recency desc (later dates first).
+    scored.sort(key=lambda t: (t[0], _neg_date(t[1])))
+    out: list[dict] = []
+    for _rank, _dt, r in scored[:limit]:
+        out.append({
+            "report_id": r.get("id"),
+            "title": r.get("title"),
+            "owner_name": r.get("owner_name"),
+            "report_date": r.get("report_date"),
+            "workspace_slug": r.get("workspace_slug"),
+            "mount_workspace_names": [m.get("name") for m in (r.get("mount_workspaces") or [])
+                                      if isinstance(m, dict) and m.get("name")],
+            "phase": r.get("phase"),
+            "report_type_name": r.get("report_type_name"),
+        })
+    return out
+
+
+def _neg_date(s: str) -> str:
+    """Sort helper — invert lexical date ordering so recency sorts ahead."""
+    # Easiest stable way: invert each char. The exact ordering doesn't
+    # matter for ties; we just want later dates earlier.
+    return "".join(chr(255 - ord(c)) for c in s) if s else ""
+
+
+def _do_workspaces_list(args: dict) -> Any:
+    """List workspaces filtered by kind + free-text substring."""
+    kind = args.get("kind") or "org"
+    q = _nfkc_lower(args.get("q") or "")
+    with ReportArchiveClient() as c:
+        rows = c.fetch_workspaces()
+    out: list[dict] = []
+    for w in rows:
+        if not isinstance(w, dict):
+            continue
+        wkind = w.get("kind") or "org"
+        if kind != "all" and wkind != kind:
+            continue
+        if q:
+            haystack = _nfkc_lower((w.get("name") or "") + " " + (w.get("slug") or ""))
+            if q not in haystack:
+                continue
+        out.append({
+            "slug": w.get("slug"),
+            "name": w.get("name"),
+            "kind": wkind,
+            "parent_slug": w.get("parent_slug"),
+        })
+    return out
+
+
+_ENTITY_TYPES_CACHE: list[dict] | None = None
+
+
+def _do_entity_types_list(_args: dict) -> Any:
+    """Return the entity-axis catalog; cached after first hit."""
+    global _ENTITY_TYPES_CACHE
+    if _ENTITY_TYPES_CACHE is None:
+        with ReportArchiveClient() as c:
+            _ENTITY_TYPES_CACHE = c.fetch_entity_types()
+    return [{
+        "id": t.get("id"),
+        "slug": t.get("slug"),
+        "label": t.get("label"),
+        "icon": t.get("icon"),
+        "multi": t.get("multi", False),
+        "sort_order": t.get("sort_order", 0),
+        "description": t.get("description"),
+    } for t in (_ENTITY_TYPES_CACHE or []) if isinstance(t, dict)]
+
+
+def _do_entities_list(args: dict) -> Any:
+    """Resolve free-text → entity_id candidates for mention://entity/<id>."""
+    axis = args.get("axis")
+    type_id = args.get("type_id")
+    q = args.get("q")
+    include_deprecated = bool(args.get("include_deprecated", False))
+    limit = max(1, min(int(args.get("limit") or 50), 200))
+
+    # If axis given and no type_id, resolve via cached entity_types.
+    if type_id is None and axis:
+        types = _do_entity_types_list({})
+        match = next((t for t in types if t.get("slug") == axis), None)
+        if match is None:
+            return []
+        type_id = match.get("id")
+    if type_id is None:
+        # Search across all axes — backend supports omitted type_id.
+        type_id_arg = None
+    else:
+        type_id_arg = int(type_id)
+
+    with ReportArchiveClient() as c:
+        rows = c.fetch_entities(
+            type_id=type_id_arg, q=q,
+            include_deprecated=include_deprecated, limit=limit,
+        )
+    # Decorate with axis_slug so the LLM has everything for the
+    # mention://entity/<id>?axis=<slug> link.
+    types_by_id = {t.get("id"): t for t in _do_entity_types_list({})}
+    out: list[dict] = []
+    for e in rows:
+        if not isinstance(e, dict):
+            continue
+        tid = e.get("type_id")
+        axis_slug = (types_by_id.get(tid) or {}).get("slug")
+        out.append({
+            "entity_id": e.get("id"),
+            "value": e.get("value"),
+            "code": e.get("code"),
+            "axis_slug": axis_slug,
+            "type_id": tid,
+            "status": e.get("status") or "active",
+        })
+    return out
+
+
 _DISPATCH = {
     "ping": _do_ping,
     "templates_list": _do_templates_list,
@@ -1077,6 +1334,10 @@ _DISPATCH = {
     "report_mount": _do_report_mount,
     "report_unmount": _do_report_unmount,
     "report_mounts": _do_report_mounts,
+    "reports_search": _do_reports_search,
+    "workspaces_list": _do_workspaces_list,
+    "entity_types_list": _do_entity_types_list,
+    "entities_list": _do_entities_list,
     "report_milestone_add": _do_report_milestone_add,
     "report_milestone_remove": _do_report_milestone_remove,
     "file_upload": _do_file_upload,

@@ -2,6 +2,21 @@
 `items[].text/html` shape so the frontend (DOMPurify sanitizing `<strong>` /
 `<em>` / `<u>` etc) actually renders the emphasis instead of showing the
 raw `**` markers.
+
+In addition to inline emphasis, the adapter understands the synthetic
+`mention://` URL scheme on markdown links and emits the exact `<a>` shape
+ReportArchive's ReportLinkMark expects. Three mention forms (see SKILL.md
+A3.5 for the user-facing guide):
+  - `[label](mention://report/<int_id>?ws=<workspace_slug>)`
+  - `[label](mention://dept/<workspace_slug>)`
+  - `[label](mention://entity/<int_id>?axis=<entity_type_slug>)`
+
+Ids must come from a prior resolver call (reports_search / workspaces_list
+/ entity_types_list / entities_list MCP tools or the equivalent CLI). The
+`mention://` URL never reaches the DOM — DOMPurify in
+ReportArchive/frontend/src/modules/templates/widgets/RichText.jsx strips
+`href`, and navigation runs through a delegated SPA click handler on the
+`data-mention-*` attrs.
 """
 from __future__ import annotations
 
@@ -13,12 +28,25 @@ from report_skill.adapters.base import NormalizeError, WidgetAdapter
 
 # Allowed HTML output tags match the frontend DOMPurify whitelist (see
 # <ReportArchive>/frontend/src/modules/templates/widgets/RichText.jsx):
-#   p, span, strong, em, u, s, del, br
-# We only emit the inline marks that markdown naturally carries.
+#   p, span, strong, em, u, s, del, br,
+#   a[data-mention-type][data-mention-id][data-mention-ws?][data-mention-axis?].
+# The `href` is intentionally `#` — DOMPurify strips it; the frontend
+# delegates navigation via a click handler keyed off the data-* attrs.
 _RE_BOLD = re.compile(r"\*\*([^\n*][^*]*?)\*\*", re.DOTALL)
 _RE_ITALIC = re.compile(r"(?<!\*)\*([^\n*][^*]*?)\*(?!\*)", re.DOTALL)
 _RE_STRIKE = re.compile(r"~~([^\n~][^~]*?)~~", re.DOTALL)
 _RE_UNDERLINE = re.compile(r"__([^\n_][^_]*?)__", re.DOTALL)
+
+# Mention link form: `[label](mention://<type>/<id>[?<qs>])`. The label may
+# contain anything except `]` or a newline (to keep the regex anchored).
+# Id is restricted to URL-safe chars; the query string allows `=` `&` plus
+# the same id alphabet. _mention_to_html() rejects ids that fail a strict
+# `^[A-Za-z0-9_-]+$` after parse, so a malformed match degrades to literal
+# escaped text rather than producing a broken anchor.
+_RE_MENTION = re.compile(
+    r"\[([^\]\n]+)\]\(mention://(report|dept|entity)/([A-Za-z0-9_-]+)(?:\?([A-Za-z0-9_=&-]+))?\)"
+)
+_RE_MID_SAFE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _escape_html(s: str) -> str:
@@ -28,56 +56,135 @@ def _escape_html(s: str) -> str:
              .replace('"', "&quot;"))
 
 
-def _md_inline_to_html(text: str) -> str:
-    """Convert inline markdown emphasis to HTML.
+def _parse_mention_query(qs: str | None) -> dict[str, str]:
+    """Parse the mention URL's query string into a `ws`/`axis` dict.
 
-    Order matters: bold (`**x**`) before italic (`*x*`) so the italic
-    regex doesn't greedily eat the bold markers. Underline (`__x__`)
-    before italic-underscore to keep the same separation.
+    Silently ignores unknown keys and empty values so an LLM sending
+    `?ws=&axis=foo` doesn't break — the irrelevant key just drops. Only
+    `ws` and `axis` are honored (those are the only data-* attrs
+    ReportLinkMark.js reads beyond type+id)."""
+    if not qs:
+        return {}
+    out: dict[str, str] = {}
+    for kv in qs.split("&"):
+        if "=" not in kv:
+            continue
+        k, v = kv.split("=", 1)
+        if k in ("ws", "axis") and v:
+            out[k] = v
+    return out
+
+
+def _mention_to_html(label: str, mtype: str, mid: str, qs: str | None) -> str:
+    """Emit the exact `<a>` shape ReportLinkMark's parseHTML expects.
+
+    Attribute order is fixed (type, id, ws?, axis?, class, href) so unit
+    tests can do byte-level substring assertions. The `class` is the CSS
+    hook the frontend uses (`{report|dept|entity}-mention`) and is always
+    emitted. `href="#"` is emitted for parity with the frontend renderHTML
+    but DOMPurify strips it — keeping it preserves the editor roundtrip.
+
+    If `mid` fails the strict URL-safe charset check, we DON'T emit an
+    anchor — we return the escaped literal markdown so the operator sees
+    the mistake instead of getting silent-broken navigation.
     """
-    # Tokenize markers BEFORE escaping so html-escaping the raw text
-    # doesn't corrupt our regex matches. We do this by replacing each
-    # marker with a sentinel, escaping the body, then re-inserting tags.
-    placeholders: dict[str, str] = {}
+    if not _RE_MID_SAFE.match(mid):
+        literal = f"[{label}](mention://{mtype}/{mid}" + (f"?{qs}" if qs else "") + ")"
+        return _escape_html(literal)
+    q = _parse_mention_query(qs)
+    attrs = [f'data-mention-type="{mtype}"', f'data-mention-id="{mid}"']
+    if mtype == "report" and q.get("ws"):
+        attrs.append(f'data-mention-ws="{q["ws"]}"')
+    if mtype == "entity" and q.get("axis"):
+        attrs.append(f'data-mention-axis="{q["axis"]}"')
+    attrs.append(f'class="{mtype}-mention"')
+    attrs.append('href="#"')
+    return f'<a {" ".join(attrs)}>{_escape_html(label)}</a>'
+
+
+_SENTINEL_RE = re.compile(r"\x00([a-z]+)(\d+)\x00")
+
+
+def _md_inline_to_html(text: str) -> str:
+    """Convert inline markdown emphasis + mention links to HTML.
+
+    Two-phase design:
+      1. STASH — every marker is replaced with a `\\x00<tag><n>\\x00`
+         sentinel and the original body (and mention extras) saved in a
+         shared `placeholders` dict. Order matters: mentions stashed
+         BEFORE bold so emphasis regexes can't chew into the URL or
+         label. Bold before italic so italic doesn't eat bold markers.
+         Underline (`__x__`) before italic-underscore for the same
+         separation.
+      2. DECODE — a single recursive `_decode` walks the stashed string;
+         plain text between sentinels gets html-escaped, sentinels get
+         replaced with their decoded form (a mention `<a>` or a `<tag>`
+         wrapping recursively-decoded body). The shared `placeholders`
+         dict is reachable from the recursion via closure, so a mention
+         nested inside bold (e.g. `**[label](mention://...)**`) decodes
+         correctly — the OLD design recursed `_md_inline_to_html(body)`
+         and created a fresh placeholders scope that couldn't see the
+         outer mention sentinel.
+    """
+    placeholders: dict[str, tuple[str, tuple]] = {}
     counter = {"n": 0}
 
-    def _stash(prefix: str, body: str) -> str:
+    def _stash(prefix: str, body: str, extras: tuple = ()) -> str:
         counter["n"] += 1
         token = f"\x00{prefix}{counter['n']}\x00"
-        placeholders[token] = body
+        placeholders[token] = (body, extras)
         return token
 
-    def _sub(pattern: re.Pattern, tag: str, source: str) -> str:
+    def _sub_emphasis(pattern: re.Pattern, tag: str, source: str) -> str:
         def repl(m: re.Match) -> str:
-            inner = m.group(1)
-            return _stash(tag, inner)
+            return _stash(tag, m.group(1))
         return pattern.sub(repl, source)
 
-    out = text
-    out = _sub(_RE_BOLD, "strong", out)
-    out = _sub(_RE_STRIKE, "del", out)
-    out = _sub(_RE_UNDERLINE, "u", out)
-    out = _sub(_RE_ITALIC, "em", out)
+    def _sub_mention(source: str) -> str:
+        def repl(m: re.Match) -> str:
+            label, mtype, mid, qs = m.group(1), m.group(2), m.group(3), m.group(4)
+            return _stash("mention", label, extras=(mtype, mid, qs))
+        return _RE_MENTION.sub(repl, source)
 
-    out = _escape_html(out)
+    stashed = text
+    stashed = _sub_mention(stashed)
+    stashed = _sub_emphasis(_RE_BOLD, "strong", stashed)
+    stashed = _sub_emphasis(_RE_STRIKE, "del", stashed)
+    stashed = _sub_emphasis(_RE_UNDERLINE, "u", stashed)
+    stashed = _sub_emphasis(_RE_ITALIC, "em", stashed)
 
-    for token, body in placeholders.items():
-        # Decode the tag name from token (we encoded it as the prefix).
-        # Token shape: \x00<tag><n>\x00 where <tag> is alpha and <n> digits.
-        m = re.match(r"\x00([a-z]+)(\d+)\x00", token)
-        if not m:
-            continue
-        tag = m.group(1)
-        body_html = _md_inline_to_html(body)  # recurse so nested marks work
-        out = out.replace(token, f"<{tag}>{body_html}</{tag}>")
-    return out
+    def _decode(s: str) -> str:
+        # Split on sentinel pattern. re.split with a 2-capture pattern
+        # returns: [literal, tag, num, literal, tag, num, ..., literal].
+        parts = _SENTINEL_RE.split(s)
+        out: list[str] = []
+        i = 0
+        while i < len(parts):
+            if i % 3 == 0:
+                out.append(_escape_html(parts[i]))
+                i += 1
+            else:
+                tag, num = parts[i], parts[i + 1]
+                token = f"\x00{tag}{num}\x00"
+                body, extras = placeholders.get(token, ("", ()))
+                if tag == "mention":
+                    out.append(_mention_to_html(body, *extras))
+                else:
+                    out.append(f"<{tag}>{_decode(body)}</{tag}>")
+                i += 2
+        return "".join(out)
+
+    return _decode(stashed)
 
 
 def _has_markdown_emphasis(text: str) -> bool:
     """Quick check whether a paragraph contains any markdown markers worth
     converting. Plain-text paragraphs stay in the `markdown` field (smaller
-    payload) — only marker-bearing text gets promoted to the items+html shape."""
-    return any(p.search(text) for p in (_RE_BOLD, _RE_ITALIC, _RE_STRIKE, _RE_UNDERLINE))
+    payload) — only marker-bearing text gets promoted to the items+html shape.
+
+    Mentions count too: a paragraph that contains ONLY a `[label](mention://...)`
+    must promote to the html-bearing form, otherwise the chip never renders."""
+    return any(p.search(text) for p in (_RE_BOLD, _RE_ITALIC, _RE_STRIKE, _RE_UNDERLINE, _RE_MENTION))
 
 
 def _split_paragraphs(text: str) -> list[str]:
@@ -99,9 +206,12 @@ def _string_to_items(text: str) -> list[dict]:
     items: list[dict] = []
     for para in _split_paragraphs(text):
         # Plain text for the `text` field — strip the markdown markers
-        # so search / accessibility tools see clean content.
+        # so search / accessibility tools see clean content. Mention links
+        # collapse to their label so search sees the human prose instead
+        # of the `mention://...` URL.
         plain = re.sub(r"\*\*|~~|__", "", para)
         plain = re.sub(r"(?<!\*)\*(?!\*)", "", plain)
+        plain = _RE_MENTION.sub(lambda m: m.group(1), plain)
         plain = plain[:2000]
 
         if _has_markdown_emphasis(para):

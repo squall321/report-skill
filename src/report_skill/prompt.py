@@ -52,6 +52,35 @@ SYSTEM_ROLE = (
 
 
 # --------------------------------------------------------------------------- #
+# Per-widget input shorthand hints — appended to the block spec by
+# `_render_block_spec` when the widget type benefits from extra guidance.
+# Only widgets whose adapter accepts a richer syntax than raw JSON earn
+# an entry; everything else is driven by the content_schema alone.
+# --------------------------------------------------------------------------- #
+_WIDGET_INPUT_HINTS: dict[str, str] = {
+    "rich_text": (
+        "Input shorthand accepted: plain prose with optional markdown emphasis "
+        "(**bold**, *em*, ~~strike~~, __underline__). To cross-reference another "
+        "report, a department/workspace, or a tagged entity, use the markdown-link "
+        "form with the `mention://` scheme:\n"
+        "  - `[표시 문구](mention://report/<int_id>?ws=<workspace_slug>)`\n"
+        "  - `[표시 문구](mention://dept/<workspace_slug>)`  (the slug IS the id; no `?ws=`)\n"
+        "  - `[표시 문구](mention://entity/<int_id>?axis=<type_slug>)`\n"
+        "The id MUST come from a prior `reports_search` / `workspaces_list` / "
+        "`entity_types_list` / `entities_list` MCP tool call — NEVER invent ids. "
+        "If a reference cannot be unambiguously resolved, write the plain label "
+        "without the link form.\n"
+        "Examples:\n"
+        "  본 보고서는 [2026-W22 백엔드 주간보고](mention://report/137?ws=backend) 의 후속이다.\n"
+        "  리뷰는 [DX팀](mention://dept/dx) 과 진행했다.\n"
+        "  검증 대상: [HFP-X1](mention://entity/412?axis=model_name) 모델.\n"
+        "Reserve mention chips for GENUINE cross-references — linkifying every "
+        "team or product name is a known AI tell (see SKILL.md style note)."
+    ),
+}
+
+
+# --------------------------------------------------------------------------- #
 # Schema → terse English paraphrase
 # --------------------------------------------------------------------------- #
 def describe_schema(schema: Any, depth: int = 0, *, max_depth: int = 4) -> str:
@@ -141,6 +170,10 @@ def _render_block_spec(spec: BlockSpec, example: Optional[dict] = None) -> str:
     parts.append("Content shape:\n" + schema_text)
     parts.append("Authoritative JSON-schema:\n" + schema_json)
 
+    hint = _WIDGET_INPUT_HINTS.get(spec.widget_type)
+    if hint:
+        parts.append("Input shorthand & mention syntax:\n" + hint)
+
     ex_content = _example_content(example)
     if ex_content is not None:
         parts.append(
@@ -218,6 +251,9 @@ def build_block_revise_prompt(
         "Rules:\n"
         "- Apply the user's revision exactly as requested.\n"
         "- Preserve every field the user did NOT ask to change.\n"
+        "- Preserve every existing mention link (`[label](mention://...)`)\n"
+        "  verbatim unless the user's instruction explicitly asks to change,\n"
+        "  remove, or re-target that mention.\n"
         "- If the user's request does not apply to THIS block, return the\n"
         "  current content unchanged (verbatim copy).\n"
         "- Output MUST satisfy the schema above.\n"

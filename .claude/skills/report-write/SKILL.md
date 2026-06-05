@@ -115,6 +115,8 @@ The ReportArchive frontend's rich_text widget renders the `markdown` field as pl
 
 When writing rich_text blocks: clean prose, the way a human analyst writes a paragraph. Reserve emphasis for genuinely critical phrases (≤1 per paragraph at most, and only when the reader truly needs the visual anchor). For lists with definitions, use a bulleted_list widget instead of bold-prefixed prose lines.
 
+**Cross-references use mention chips, not bare titles or raw URLs.** When prose names another report, a department/workspace, or a tagged entity, use the markdown-link form with the synthetic `mention://` scheme (see A3.5 below). The frontend renders these as live chips with click navigation; raw titles do not link, and raw URLs are not allowed by the DOMPurify allowlist (the `href` is stripped at render time).
+
 
 
 Single-page shape:
@@ -145,7 +147,7 @@ Per-widget input guidance — adapters are tolerant:
 | widget          | natural input shape                                                |
 |-----------------|--------------------------------------------------------------------|
 | heading         | `"제목 문자열"` or `{text, level?}`                                |
-| rich_text       | markdown string                                                    |
+| rich_text       | markdown string; supports @-mentions (see A3.5 below)              |
 | bulleted_list   | `["항목1", "항목2"]` or multi-line string with `-`/`*` bullets    |
 | key_value       | flat dict `{"team": "백엔드", "lead": "..."}`                      |
 | table           | list of dicts keyed by column.key, or markdown table string        |
@@ -160,6 +162,52 @@ Per-widget input guidance — adapters are tolerant:
 | sankey          | list of `{source, target, value}`                                  |
 | equation        | `"E = mc^2"` (LaTeX, no $$ wrappers needed)                        |
 | image/video/etc | requires `{file_id}` — adapter rejects raw paths/URLs              |
+
+### A3.5 Mentions in rich_text
+
+When a rich_text passage refers to another report, a department/workspace, or a tagged entity, use the markdown-link form with the synthetic `mention://` scheme so the frontend renders a live chip (with icon + click navigation) instead of a dead text fragment.
+
+Three forms — pick by reference type:
+
+- **Report**: `[표시 문구](mention://report/<int_id>?ws=<workspace_slug>)`
+- **Department / workspace**: `[표시 문구](mention://dept/<workspace_slug>)`  ← path segment IS the slug; no `?ws=`
+- **Entity** (tagged value like model name, customer): `[표시 문구](mention://entity/<int_id>?axis=<type_slug>)`
+
+Resolver chain — call BEFORE writing the prose, never invent ids:
+
+```powershell
+# 1. Report id
+report-skill tools reports-search --q "주간보고" --workspace-slug backend
+
+# 2. Department slug
+report-skill tools workspaces-list --q "dx" --kind org
+
+# 3a. Discover available entity axes (cached after first call)
+report-skill tools entity-types-list
+
+# 3b. Resolve an entity value
+report-skill tools entities-list --axis model_name --q "HFP-X1"
+```
+
+From an MCP client (Claude Desktop / Continue / Cursor) the four tools are exposed under the same names (`reports_search` / `workspaces_list` / `entity_types_list` / `entities_list`). Call them ONLY when an id is needed; if the user already typed an integer id, use it verbatim.
+
+Rules:
+
+- If `reports_search` returns >1 plausible match for the same fuzzy phrase, ASK the user to pick — do NOT silently choose the first row.
+- If the resolver returns zero matches, drop the link and write the plain label as ordinary prose (no markdown-link with a fake id).
+- For report mentions, `ws` is required for click-navigation; if `reports_search` returns a row with null/empty `workspace_slug`, treat it as un-mentionable.
+- Department mentions use the workspace slug AS the id — never write `mention://dept/<int>` and never add a `?ws=` query string for dept.
+- Entity mentions are display-only chips (no click navigation in v1) — use them when the cross-reference value is the message, not the destination.
+
+Examples (Korean, all three types, real-feeling labels):
+
+```
+본 보고서는 [2026-W22 백엔드 주간보고](mention://report/137?ws=backend) 의 후속 분석이다.
+검토는 [DX팀](mention://dept/dx) 과 [QA팀](mention://dept/qa) 이 공동 진행했다.
+이번 회차 검증 대상: [HFP-X1](mention://entity/412?axis=model_name), 고객사 [현대모비스](mention://entity/87?axis=customer_name).
+```
+
+Style: reserve mention chips for GENUINE cross-references. Linkifying every team name in a status report (e.g. converting every appearance of "DX팀" into a chip) is an AI tell — same rationale as the `**bold**` warning above. One or two mentions per paragraph at most.
 
 For widgets you don't know how to fill — just omit them. Orchestrator marks `skipped` and the block stays empty.
 
@@ -347,6 +395,8 @@ report-skill report from-prompt "<raw notes here>" -t <template-id> --create
 ```
 
 The skill's own LLM (auto-detected: Anthropic / OpenAI / Ollama / **Claude Code bridge** via env vars) generates each block via a schema-constrained prompt, normalize-and-validates, and POSTs. Omit `--create` for dry-run.
+
+When run through the bridge provider, `from-prompt` will auto-resolve unambiguous references via the same MCP resolver tools (`reports_search` / `workspaces_list` / `entities_list`). Ambiguous references fall back to plain prose — no fake ids. To enable resolution inline, call the resolver tools first and feed the chosen ids into the prompt text using the mention syntax from A3.5.
 
 **Bridge mode** (uses the current Claude Code session as the LLM, no API key needed):
 ```powershell

@@ -92,6 +92,62 @@ class ReportArchiveClient:
         """POST /reports — returns the created Report record."""
         return self.post("/reports", json=payload)
 
+    # ---- mention-resolver wrappers ------------------------------------- #
+    # Thin HTTP wrappers that the MCP `reports_search` / `workspaces_list` /
+    # `entity_types_list` / `entities_list` tools call. The MCP layer does
+    # the filtering / ranking; these just return the raw envelope-unwrapped
+    # rows so a CLI or test can call them too.
+
+    def fetch_linkable_reports(self) -> list[dict]:
+        """GET /reports/linkable — returns the full system-wide pool of
+        reports the current user can link to (no server-side filtering).
+        Used as the search base for mention://report/<id> resolution."""
+        body = self.get("/reports/linkable")
+        if isinstance(body, dict) and "items" in body:
+            return list(body.get("items") or [])
+        return list(body or []) if isinstance(body, list) else []
+
+    def fetch_workspaces(self) -> list[dict]:
+        """GET /workspaces — returns the org/personal/virtual workspace
+        catalog. Source of mention://dept/<slug> candidates after filtering
+        by kind=='org'."""
+        body = self.get("/workspaces")
+        if isinstance(body, dict) and "items" in body:
+            return list(body.get("items") or [])
+        return list(body or []) if isinstance(body, list) else []
+
+    def fetch_entity_types(self) -> list[dict]:
+        """GET /entity-types — returns the entity-axis catalog
+        (model_name, customer_name, …). Cheap and stable; callers should
+        cache the result per-process."""
+        body = self.get("/entity-types")
+        if isinstance(body, dict) and "items" in body:
+            return list(body.get("items") or [])
+        return list(body or []) if isinstance(body, list) else []
+
+    def fetch_entities(self, *, type_id: Optional[int] = None,
+                       q: Optional[str] = None,
+                       include_deprecated: bool = False,
+                       limit: int = 50) -> list[dict]:
+        """GET /entities — search entities by axis (`type_id`) + free text.
+
+        Hard-caps `limit` at 200 (backend max is 500 but 200 keeps LLM
+        context manageable). Pass `type_id` from a prior
+        `fetch_entity_types()` call.
+        """
+        params: dict[str, Any] = {
+            "include_deprecated": str(bool(include_deprecated)).lower(),
+            "limit": max(1, min(int(limit), 200)),
+        }
+        if type_id is not None:
+            params["type_id"] = int(type_id)
+        if q:
+            params["q"] = q
+        body = self.get("/entities", params=params)
+        if isinstance(body, dict) and "items" in body:
+            return list(body.get("items") or [])
+        return list(body or []) if isinstance(body, list) else []
+
     def download_file(self, file_id: str) -> tuple[bytes, str, str]:
         """GET /files/{file_id} — returns (bytes, filename, mime_type).
 

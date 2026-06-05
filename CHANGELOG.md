@@ -1,5 +1,105 @@
 ﻿# Changelog
 
+## 0.4.0 — 2026-06-05
+
+LLM-authorable @mentions + four MCP resolver tools. After ReportArchive
+shipped its `<a data-mention-*>` chip system for cross-references between
+reports, departments, and tagged entities (frontend Tiptap `ReportLinkMark`
++ DOMPurify allowlist), the existing report-skill could neither **emit**
+mentions through the rich_text adapter nor **resolve** the ids the LLM
+would need to plug into them. 0.4.0 closes both halves of that gap.
+
+### New: `mention://` markdown-link syntax in rich_text
+
+The rich_text adapter recognizes a synthetic URL scheme on markdown
+links and emits the exact `<a data-mention-*>` shape `ReportLinkMark`
+expects. Three forms — pick by reference type:
+
+  - `[label](mention://report/<int_id>?ws=<workspace_slug>)`
+  - `[label](mention://dept/<workspace_slug>)`  (slug IS the id; no `?ws=`)
+  - `[label](mention://entity/<int_id>?axis=<entity_type_slug>)`
+
+The label is the visible chip text; the URL never reaches the DOM —
+DOMPurify strips `href`, and navigation runs through the frontend's
+delegated SPA click handler keyed off the `data-mention-*` attrs.
+Mentions can nest inside emphasis (`**[X](mention://report/42?ws=dx)**`)
+and `_md_inline_to_html`'s decoder was rewritten to a single recursive
+pass so the nested case actually resolves (the prior recursion ran in a
+fresh placeholders scope and leaked sentinel literals into the HTML).
+Invalid ids (anything outside `^[A-Za-z0-9_-]+$`) silently degrade to
+plain escaped markdown so the operator sees the mistake instead of a
+broken anchor.
+
+### New MCP tools (4)
+
+  - **`reports_search`** — wraps `GET /api/reports/linkable`; ranks by
+    title-exact > title-substring > owner/mount > recency. Filters:
+    `q` / `workspace_slug` / `owner_name` / `mount_slug` / `date_from`
+    / `date_to` / `limit` (≤50).
+  - **`workspaces_list`** — wraps `GET /api/workspaces`; filters by
+    `kind` (default `org` — personal leaks user names, virtual owns no
+    data) + optional `q` substring on `name+slug`.
+  - **`entity_types_list`** — wraps `GET /api/entity-types`; per-process
+    cache so chained entity lookups hit the network once.
+  - **`entities_list`** — wraps `GET /api/entities?type_id&q&include_deprecated&limit`;
+    accepts either `axis` (resolved to `type_id` via cached
+    `entity_types_list`) or `type_id` directly; type_id wins. Hard-caps
+    `limit` at 200.
+
+All four tools also expose CLI subcommands under `report-skill tools`:
+`tools reports-search` / `tools workspaces-list` / `tools entity-types-list`
+/ `tools entities-list`.
+
+### Prompt builder teaches the LLM the syntax
+
+`prompt.py` gains a `_WIDGET_INPUT_HINTS` dict keyed by widget_type;
+`_render_block_spec` appends the matching hint after the JSON-schema
+section in every prompt that touches rich_text (covers
+`build_single_block_prompt`, `build_batch_prompt`, `build_page_prompt`,
+and `build_block_revise_prompt`). The hint explicitly lists the three
+forms, requires resolver-tool ids ("NEVER invent ids"), and warns
+against linkifying every team name (AI tell). `build_block_revise_prompt`
+also gains an explicit rule: "Preserve every existing mention link
+verbatim unless the user's instruction explicitly asks to change,
+remove, or re-target that mention."
+
+### SKILL.md additions
+
+  - New top-of-file style note: "Cross-references use mention chips,
+    not bare titles or raw URLs."
+  - `Per-widget input guidance` rich_text row updated to advertise
+    mention support.
+  - New **A3.5 Mentions in rich_text** subsection with the three
+    forms, the resolver chain (CLI + MCP), the rules, and Korean
+    examples for all three types.
+  - Flow B1 note: mentions preserved verbatim during revise unless
+    the instruction explicitly targets them.
+  - Flow D note: from-prompt auto-resolves via the MCP tools when run
+    through bridge.
+
+### Why 0.4.0 (minor) not 0.3.3 (patch)
+
+This release introduces new capability surface — a new vocabulary the
+rich_text adapter now produces but did not before, plus four new
+MCP/CLI tools. Old draft JSON without mentions continues to validate
+and round-trip unchanged. Old draft JSON with the experimental
+`#mention:...` form (which never shipped) was never recognized and is
+not affected. Minor bump per semver: backward-compatible feature
+addition.
+
+### Verified
+
+  - 7/7 adapter sanity cases (single report mention with ws, dept pair,
+    entity with axis, mention nested in bold, invalid-id fallback,
+    mention-only paragraph promoted to html, plain text).
+  - MCP `_DISPATCH` now has 32 tools (28 + 4); CLI `tools` group has
+    four subcommands.
+  - pytest 280/280 stays green.
+  - Frontend DOMPurify allowlist in
+    `<ReportArchive>/frontend/src/modules/templates/widgets/RichText.jsx`
+    permits exactly the attrs the adapter emits — confirmed via Lens 1
+    of the planning workflow.
+
 ## 0.3.2 — 2026-06-04
 
 Cross-instance report portability via a self-contained `bundle.zip`.
