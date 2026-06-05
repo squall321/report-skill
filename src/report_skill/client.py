@@ -240,6 +240,278 @@ class ReportArchiveClient:
             )
         return body if isinstance(body, dict) else {}
 
+    # ---- reports: copy / link / publish / types ------------------------ #
+
+    def copy_report(
+        self,
+        report_id,
+        *,
+        title: str,
+        mode: str = "full",
+        folder_id: Optional[int] = None,
+    ) -> dict:
+        """POST /reports/{report_id}/copy — duplicate a report.
+
+        `mode` is 'content' (blocks only) or 'full' (blocks + settings).
+        The copy lands in the caller's personal workspace.
+        """
+        body: dict[str, Any] = {"title": title, "mode": mode}
+        if folder_id is not None:
+            body["folder_id"] = int(folder_id)
+        return self.post(f"/reports/{report_id}/copy", json=body)
+
+    def add_report_link(
+        self,
+        report_id,
+        *,
+        to_report_id: int,
+        kind: str = "related",
+        label: Optional[str] = None,
+    ) -> dict:
+        """POST /reports/{report_id}/links — create an outgoing link to
+        another report. `kind` defaults to 'related'; `label` becomes the
+        link note (server cap 200 chars).
+        """
+        body: dict[str, Any] = {"to_report_id": int(to_report_id), "kind": kind}
+        if label is not None:
+            body["note"] = label
+        return self.post(f"/reports/{report_id}/links", json=body)
+
+    def fetch_report_types(self) -> list[dict]:
+        """GET /report-types — returns the report-type catalog (items[])."""
+        body = self.get("/report-types")
+        if isinstance(body, dict) and "items" in body:
+            return list(body.get("items") or [])
+        return list(body or []) if isinstance(body, list) else []
+
+    def publish_report(self, report_id) -> dict:
+        """POST /reports/{report_id}/publish — flip phase to finalized.
+
+        Owner-only; idempotent. Fans out activity + notifications.
+        """
+        return self.post(f"/reports/{report_id}/publish", json={})
+
+    def unpublish_report(self, report_id) -> dict:
+        """POST /reports/{report_id}/unpublish — flip phase back to drafting.
+
+        Owner-only; no-op if not currently finalized.
+        """
+        return self.post(f"/reports/{report_id}/unpublish", json={})
+
+    # ---- folders / mounts ---------------------------------------------- #
+
+    def list_folders(self, workspace_slug: Optional[str] = None) -> list[dict]:
+        """GET /folders?workspace_slug=... — returns folders for a workspace.
+
+        Omit `workspace_slug` to get the caller's personal folders. Use a
+        `personal-{N}` slug for that user's personal folders (self/sys admin
+        only).
+        """
+        params: dict[str, Any] = {}
+        if workspace_slug is not None:
+            params["workspace_slug"] = workspace_slug
+        body = self.get("/folders", params=params or None)
+        if isinstance(body, dict) and "items" in body:
+            return list(body.get("items") or [])
+        return list(body or []) if isinstance(body, list) else []
+
+    def set_mount_folder(
+        self,
+        report_id,
+        workspace_slug: str,
+        *,
+        folder_id: Optional[int],
+    ) -> dict:
+        """PUT /mounts/{report_id}/{workspace_slug}/folder — move a mount
+        into a folder. Pass `folder_id=None` to clear (uncategorized).
+        """
+        body: dict[str, Any] = {"folder_id": folder_id}
+        return self._request(
+            "PUT", f"/mounts/{report_id}/{workspace_slug}/folder", json=body
+        )
+
+    def set_mount_edit_policy(
+        self,
+        report_id,
+        workspace_slug: str,
+        *,
+        edit_policy: str,
+    ) -> dict:
+        """PUT /mounts/{report_id}/{workspace_slug}/edit-policy — change
+        the per-mount edit policy. Valid values: 'default', 'owner_only',
+        'coauthor'.
+        """
+        body = {"edit_policy": edit_policy}
+        return self._request(
+            "PUT", f"/mounts/{report_id}/{workspace_slug}/edit-policy", json=body
+        )
+
+    # ---- templates ----------------------------------------------------- #
+
+    def set_template_scope(
+        self,
+        template_id,
+        *,
+        owner_workspace_slugs: Optional[list[str]],
+    ) -> dict:
+        """PATCH /templates/{template_id}/scope — change template scope.
+
+        Pass `owner_workspace_slugs=None` (or []) for 전사(global) scope.
+        Manager-only; does not bump template version.
+        """
+        body: dict[str, Any] = {"owner_workspace_slugs": owner_workspace_slugs}
+        return self._request("PATCH", f"/templates/{template_id}/scope", json=body)
+
+    # ---- presets ------------------------------------------------------- #
+
+    def list_presets(self, template_id=None) -> list[dict]:
+        """GET /presets — returns presets visible to the caller's workspace
+        tree. Filter by `template_id` to narrow to a single template.
+        """
+        params: dict[str, Any] = {}
+        if template_id is not None:
+            params["template_id"] = str(template_id)
+        body = self.get("/presets", params=params or None)
+        if isinstance(body, dict) and "items" in body:
+            return list(body.get("items") or [])
+        return list(body or []) if isinstance(body, list) else []
+
+    def create_preset(
+        self,
+        report_id,
+        *,
+        name: str,
+        owner_workspace_slugs: Optional[list[str]] = None,
+    ) -> dict:
+        """POST /presets — capture a report's structure as a reusable preset.
+
+        `owner_workspace_slugs=None`/empty means 전사(global) preset.
+        """
+        body: dict[str, Any] = {
+            "source_report_id": int(report_id),
+            "name": name,
+            "description": "",
+        }
+        if owner_workspace_slugs is not None:
+            body["owner_workspace_slugs"] = list(owner_workspace_slugs)
+        return self.post("/presets", json=body)
+
+    def new_report_from_preset(
+        self,
+        preset_id,
+        *,
+        title: Optional[str] = None,
+        folder_id: Optional[int] = None,
+    ) -> dict:
+        """POST /presets/{preset_id}/new-report — instantiate a new report
+        from a preset. `title` defaults to the preset name server-side.
+        """
+        body: dict[str, Any] = {}
+        if title is not None:
+            body["title"] = title
+        if folder_id is not None:
+            body["folder_id"] = int(folder_id)
+        return self.post(f"/presets/{preset_id}/new-report", json=body)
+
+    def delete_preset(self, preset_id) -> None:
+        """DELETE /presets/{preset_id} — only the preset author (or system
+        admin) may delete.
+        """
+        self._request("DELETE", f"/presets/{preset_id}")
+
+    # ---- composites ---------------------------------------------------- #
+
+    def get_composite(self, composite_id) -> dict:
+        """GET /composites/{composite_id} — returns the full composite
+        report record (summary_widgets, items, perms).
+        """
+        return self.get(f"/composites/{composite_id}")
+
+    def update_composite_summary(
+        self,
+        composite_id,
+        *,
+        summary_widgets: list[dict],
+        expected_revision: Optional[int] = None,
+    ) -> dict:
+        """PATCH /composites/{composite_id} — update only summary_widgets
+        (other fields are left untouched). Pass `expected_revision` for
+        optimistic-concurrency control (409 on mismatch).
+        """
+        body: dict[str, Any] = {"summary_widgets": list(summary_widgets)}
+        if expected_revision is not None:
+            body["expected_revision"] = int(expected_revision)
+        return self._request("PATCH", f"/composites/{composite_id}", json=body)
+
+    def list_submittable_composites(self, report_id) -> list[dict]:
+        """GET /composites/submittable-for/{report_id} — composites the
+        caller could submit this report into (with already_item /
+        already_pending flags).
+        """
+        body = self.get(f"/composites/submittable-for/{report_id}")
+        if isinstance(body, dict) and "items" in body:
+            return list(body.get("items") or [])
+        return list(body or []) if isinstance(body, list) else []
+
+    def list_composite_requests(self, composite_id) -> list[dict]:
+        """GET /composites/{composite_id}/requests — pending requests by
+        default (server-side filter).
+        """
+        body = self.get(f"/composites/{composite_id}/requests")
+        if isinstance(body, dict) and "items" in body:
+            return list(body.get("items") or [])
+        return list(body or []) if isinstance(body, list) else []
+
+    def submit_to_composite(
+        self,
+        composite_id,
+        *,
+        report_id: int,
+        note: Optional[str] = None,
+    ) -> dict:
+        """POST /composites/{composite_id}/requests — request that a
+        report be added to a composite. Server stores empty note when
+        omitted.
+        """
+        body: dict[str, Any] = {"ref_report_id": int(report_id)}
+        if note is not None:
+            body["note"] = note
+        return self.post(f"/composites/{composite_id}/requests", json=body)
+
+    def accept_composite_request(self, composite_id, request_id) -> dict:
+        """POST /composites/{composite_id}/requests/{request_id}/accept —
+        composite owner / sys admin only.
+        """
+        return self.post(
+            f"/composites/{composite_id}/requests/{request_id}/accept", json={}
+        )
+
+    def reject_composite_request(
+        self,
+        composite_id,
+        request_id,
+        *,
+        reason: Optional[str] = None,
+    ) -> dict:
+        """POST /composites/{composite_id}/requests/{request_id}/reject —
+        composite owner / sys admin only. `reason` is accepted for
+        forward-compat but currently ignored server-side.
+        """
+        body: dict[str, Any] = {}
+        if reason is not None:
+            body["reason"] = reason
+        return self.post(
+            f"/composites/{composite_id}/requests/{request_id}/reject", json=body
+        )
+
+    def withdraw_composite_request(self, composite_id, request_id) -> dict:
+        """POST /composites/{composite_id}/requests/{request_id}/withdraw —
+        requester self / composite owner / sys admin only.
+        """
+        return self.post(
+            f"/composites/{composite_id}/requests/{request_id}/withdraw", json={}
+        )
+
     # ---- low-level wrappers -------------------------------------------- #
 
     def get(self, path: str, *, params: Optional[dict] = None) -> Any:

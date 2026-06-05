@@ -1,5 +1,203 @@
 ﻿# Changelog
 
+## 0.5.0 — 2026-06-05
+
+Closes the writer-side asymmetry left open by 0.4.0 and lifts the skill
+up to feature-parity with the ReportArchive backend as of commit e99e7f8.
+Six backend modules grew new surface between v0.4.0 ship and now —
+report-level related-info, page-level rendering controls, table/image
+notes + sizing, report copy/links/publish, presets, and composites — and
+the skill could resolve mention ids for them (0.4.0) but could not
+actually write or call them. 0.5.0 adds the writer half: 21 new MCP
+tools, 13 new report-level field slots on create + update + bundle
+round-trip, three adapter passthroughs, and matching CLI surface.
+
+### New — Report-level related-info (closes v0.4.0 writer asymmetry)
+
+  - `ReportCreate` / `ReportUpdate` payloads gain `collab_workspace_slugs`
+    (list[str]), `entity_ids` (list[int]), and `report_type_id` (int).
+    Same empty-list-clears-all semantics on update for the two list
+    fields; `report_type_id` is plain Optional[int] with null=clear.
+  - `report_builder.build_create_payload` and `build_create_payload_multi`
+    accept the three fields as keyword-only kwargs; `report_ops.update_blocks`
+    accepts the same three for PATCH.
+  - `bundle.ready_for_recreate` round-trips `collab_workspace_slugs`
+    verbatim and projects the fetched `ReportRead.entities` list (objects
+    with `id`) down to a flat `entity_ids` list on the way out, so a
+    dump→import cycle preserves entity tags.
+
+### New — Page-level rendering controls
+
+10 new Optional kwargs on `build_create_payload` /
+`build_create_payload_multi` / `update_blocks`, all stored at the report
+top level (not per-page):
+
+  - `page_width_px` (320..3000), `page_gap_px` (0..200)
+  - `page_blend_blocks` (bool), `page_slide_guide` (bool)
+  - `page_slide_ratio` (`16:9` | `4:3` | `16:10` | `custom`)
+  - `page_slide_ratio_custom_w`, `page_slide_ratio_custom_h` (1..10000)
+  - `page_rich_text_prefix_d0` / `_d1` / `_d2` (each max 8 chars)
+
+`bundle._TOP_KEEP` extended so all ten fields plus `report_type_id`
+round-trip through dump/import.
+
+### New — Adapter passthroughs (closes silent revise round-trip loss)
+
+  - `adapters/table.py` — dict input now passes through `note`,
+    `column_widths` (dict[str,int]), `table_width_px` (int), and `merges`
+    (list of `{r,c,rs,cs}` cell-span objects).
+  - `adapters/comparison.py` — same four fields plus `row_label_width`
+    (int) for the left label column width.
+  - `adapters/image.py` — adds `note` passthrough alongside existing
+    files/caption/aspect_ratio/max_count handling.
+  - All three reuse a shared `_clean_note(s)` helper that strips a
+    leading `※` (with or without trailing space) — the renderer adds the
+    prefix itself — and truncates to 1000 chars.
+  - `prompt._WIDGET_INPUT_HINTS` gains entries for `table`, `image`, and
+    `comparison` so every prompt builder advertises the new fields to
+    the LLM, with the explicit "do not include the leading ※" rule.
+
+### New — Report copy + report links + publish
+
+  - `client.copy_report(report_id, *, title, mode='full', folder_id=None)`
+    → POST `/reports/{id}/copy`. Mode is `content` (blocks only) or
+    `full` (default — content + extras). New report lands in the actor's
+    personal workspace.
+  - `client.add_report_link(report_id, *, to_report_id, kind='related',
+    label=None)` → POST `/reports/{id}/links`. SDK supplies the default
+    kind since the backend has no default.
+  - `client.publish_report(id)` / `client.unpublish_report(id)` — POST
+    `/reports/{id}/publish` and `/unpublish`. Owner-only on the server;
+    publish fires the `phase_to_finalized` activity + fans notifications
+    out to every mounted-board member. Distinct from `report mount`
+    (post-to-board); see SKILL.md Flow G alias note.
+  - CLI: `report copy ID --title TXT [--mode content|full] [--folder-id INT]`,
+    `report publish ID`, `report unpublish ID`.
+  - MCP: `report_copy`, `report_add_link`, `report_publish`,
+    `report_unpublish`.
+  - Author-lock surfacing: `ReportRead.author_lock_enabled` /
+    `author_lock_reason` / `author_lock_set_at` are projected through
+    `fetch_report`; a new `AuthorLocked` exception is raised when a 403
+    response carries the literal Korean string `작성자가 수정 잠금
+    상태입니다`. MCP `call_tool` returns `{"error":"author_locked",...}`
+    instead of a generic ApiError.
+
+### New — Presets module
+
+Mirrors `/api/presets` (commit 6c77eba):
+
+  - `client.list_presets(template_id=None)` → GET `/presets`.
+  - `client.create_preset(report_id, *, name, owner_workspace_slugs=None)`
+    → POST `/presets` (description defaults to `''` server-side; SDK
+    maps `report_id` → `source_report_id`).
+  - `client.new_report_from_preset(preset_id, *, title=None, folder_id=None)`
+    → POST `/presets/{id}/new-report`.
+  - `client.delete_preset(preset_id)` → DELETE `/presets/{id}` (returns
+    `None` after discarding the `{deleted:true}` payload).
+  - CLI: `report new-from-preset PRESET_ID [--title TXT] [--folder-id INT]`,
+    `tools presets-list [--template-id INT]`.
+  - MCP: `presets_list`, `preset_create`, `report_new_from_preset`,
+    `preset_delete`.
+
+### New — Composites module
+
+Mirrors `/api/composites` and `/api/composites/{id}/requests` (commit
+e99e7f8 added `summary_widgets`):
+
+  - `client.get_composite(id)` → GET `/composites/{id}`.
+  - `client.update_composite_summary(id, *, summary_widgets,
+    expected_revision=None)` → PATCH `/composites/{id}` with the
+    narrowed body. Same widget grammar as reports.
+  - `client.list_submittable_composites(report_id)` → GET
+    `/composites/submittable-for/{report_id}` (includes
+    `already_item` / `already_pending` flags).
+  - `client.list_composite_requests(composite_id)`,
+    `client.submit_to_composite(composite_id, *, report_id, note=None)`,
+    `client.accept_composite_request(...)`,
+    `client.reject_composite_request(..., *, reason=None)` (backend
+    currently ignores the reason — kwarg kept for forward-compat),
+    `client.withdraw_composite_request(...)`.
+  - CLI: `tools composites-submittable-for --report-id INT`,
+    `tools composites-requests-list --composite-id INT`,
+    `tools composites-submit --composite-id INT --report-id INT [--note TXT]`,
+    `composites accept` / `reject` / `withdraw` (under a new
+    `composites` sub-app).
+  - MCP: `composite_get`, `composite_summary_set`,
+    `composites_submittable_for`, `composites_requests_list`,
+    `composites_submit`, `composites_request_accept`,
+    `composites_request_reject`, `composites_request_withdraw`.
+
+### New — Discovery + admin tools
+
+  - `client.fetch_report_types()` → GET `/report-types` (unwraps
+    `data.items`).
+  - `client.list_folders(workspace_slug)` → GET
+    `/folders?workspace_slug=` (returns items only; the GET may
+    side-effect default folders into existence on first hit).
+  - `client.set_mount_folder(report_id, workspace_slug, *, folder_id)` →
+    PUT `/mounts/{rid}/{slug}/folder`. `folder_id=None` clears.
+  - `client.set_mount_edit_policy(report_id, workspace_slug, *,
+    edit_policy)` → PUT `/mounts/{rid}/{slug}/edit-policy`. Valid
+    policies: `default`, `owner_only`, `coauthor`.
+  - `client.set_template_scope(template_id, *, owner_workspace_slugs)` →
+    PATCH `/templates/{id}/scope`. None/empty = 전사. Metadata-only — no
+    version bump.
+  - CLI: `tools report-types-list`, `tools folders-list --workspace SLUG`,
+    `mounts set-folder` / `mounts set-edit-policy` (new `mounts`
+    sub-app), `templates set-scope TEMPLATE_ID --workspace SLUG ...`.
+  - MCP: `report_types_list`, `folders_list`,
+    `report_mount_set_folder`, `report_mount_set_edit_policy`,
+    `template_set_scope`.
+  - `report_ops` gains `set_mount_folder` / `set_mount_edit_policy`
+    helpers so the CLI/MCP layers share one call surface.
+
+### SKILL.md additions
+
+  - New A2.5 "Tag the report" section covering
+    `collab_workspace_slugs` / `entity_ids` / `report_type_id` with the
+    resolver chains (workspaces_list / entities_list / report_types_list)
+    and write paths (create payload + update_blocks).
+  - Per-widget input guidance rows for table / image / comparison call
+    out the `note` field and the auto-rendered `※` prefix ("do not type
+    it yourself").
+  - Flow B patch shape note: the 10 page_* fields and the three
+    related-info fields are patchable via `report update`.
+  - Flow G alias note: PUBLISH vs MOUNT distinction — mount posts to a
+    board (existing surface), publish flips the report to
+    `phase=finalized` + writes a phase-change activity + fans
+    notifications to every mounted-board member.
+  - New A.0 "Check for presets" precursor flow (`presets_list` →
+    `report_new_from_preset`) for cases where the report being created
+    matches a known preset.
+  - New Flow E "Submit to composite" (`composites_submittable_for` →
+    `composites_submit`).
+  - New "Report copy" mini-flow under Flow A.
+
+### Why 0.5.0 (minor) not 0.4.1 (patch)
+
+The release adds genuinely new capability surface — two whole new
+backend modules (presets, composites) wired in end-to-end, 21 new MCP
+tools, 13 new report-level field slots on create + update + bundle, and
+a new domain exception (`AuthorLocked`). Backward-compatible throughout:
+every new kwarg is Optional with the previous default behavior; existing
+draft JSON without any of the new fields validates and round-trips
+unchanged. Minor bump per semver: feature addition, no breakage.
+
+### Verified
+
+  - 21 new MCP tools land in `_DISPATCH` (32 + 21 = 53 total).
+  - CLI gains two new sub-apps (`mounts`, `composites`) plus 17 new
+    individual commands across `report`, `tools`, `templates`, and the
+    two new sub-apps.
+  - `bundle.ready_for_recreate` projects the 13 new top-level fields +
+    `entities` → `entity_ids` rename — round-trip-safe on a real
+    fetch→ready_for_recreate→create cycle.
+  - Adapter dict-input passthrough preserves `note` / `column_widths` /
+    `table_width_px` / `merges` (+ `row_label_width` on comparison) on
+    table / comparison / image round-trips, and the `※` strip handles
+    both attached (`※주석`) and spaced (`※ 주석`) forms.
+  - pytest 280/280 stays green.
+
 ## 0.4.0 — 2026-06-05
 
 LLM-authorable @mentions + four MCP resolver tools. After ReportArchive

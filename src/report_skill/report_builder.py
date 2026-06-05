@@ -90,8 +90,29 @@ def build_create_payload(
     tags: Optional[list[str]] = None,
     page_name: str = "Main",
     extra_blocks: Optional[list[dict]] = None,
+    # ---- v0.5.0 related-info + page settings (all optional) ----
+    collab_workspace_slugs: Optional[list[str]] = None,
+    entity_ids: Optional[list[int]] = None,
+    report_type_id: Optional[int] = None,
+    page_width_px: Optional[int] = None,
+    page_gap_px: Optional[int] = None,
+    page_blend_blocks: Optional[bool] = None,
+    page_slide_guide: Optional[bool] = None,
+    page_slide_ratio: Optional[str] = None,
+    page_slide_ratio_custom_w: Optional[int] = None,
+    page_slide_ratio_custom_h: Optional[int] = None,
+    page_rich_text_prefix_d0: Optional[str] = None,
+    page_rich_text_prefix_d1: Optional[str] = None,
+    page_rich_text_prefix_d2: Optional[str] = None,
 ) -> dict:
-    """ReportCreate POST body for a single-page report."""
+    """ReportCreate POST body for a single-page report.
+
+    v0.5.0 adds 13 optional top-level fields that pass through to the
+    server-side ReportCreate schema (related-info tagging + page settings).
+    None means leave unset. For `collab_workspace_slugs` and `entity_ids`,
+    an empty list is forwarded verbatim — the backend treats `[]` as
+    explicit-clear.
+    """
     return build_create_payload_multi(
         pages=[{
             "template": template,
@@ -105,6 +126,19 @@ def build_create_payload(
         lifecycle=lifecycle,
         status=status,
         tags=tags,
+        collab_workspace_slugs=collab_workspace_slugs,
+        entity_ids=entity_ids,
+        report_type_id=report_type_id,
+        page_width_px=page_width_px,
+        page_gap_px=page_gap_px,
+        page_blend_blocks=page_blend_blocks,
+        page_slide_guide=page_slide_guide,
+        page_slide_ratio=page_slide_ratio,
+        page_slide_ratio_custom_w=page_slide_ratio_custom_w,
+        page_slide_ratio_custom_h=page_slide_ratio_custom_h,
+        page_rich_text_prefix_d0=page_rich_text_prefix_d0,
+        page_rich_text_prefix_d1=page_rich_text_prefix_d1,
+        page_rich_text_prefix_d2=page_rich_text_prefix_d2,
     )
 
 
@@ -117,12 +151,36 @@ def build_create_payload_multi(
     lifecycle: Optional[str] = None,
     status: Optional[str] = None,   # legacy alias
     tags: Optional[list[str]] = None,
+    # ---- v0.5.0 related-info + page settings (all optional) ----
+    collab_workspace_slugs: Optional[list[str]] = None,
+    entity_ids: Optional[list[int]] = None,
+    report_type_id: Optional[int] = None,
+    page_width_px: Optional[int] = None,
+    page_gap_px: Optional[int] = None,
+    page_blend_blocks: Optional[bool] = None,
+    page_slide_guide: Optional[bool] = None,
+    page_slide_ratio: Optional[str] = None,
+    page_slide_ratio_custom_w: Optional[int] = None,
+    page_slide_ratio_custom_h: Optional[int] = None,
+    page_rich_text_prefix_d0: Optional[str] = None,
+    page_rich_text_prefix_d1: Optional[str] = None,
+    page_rich_text_prefix_d2: Optional[str] = None,
 ) -> dict:
     """ReportCreate POST body for a multi-page report.
 
     `pages` items: { template: <fetched template dict>, content: {block_id: ...},
                      name: str, extra_blocks?: [...] }
     The report's top-level template_id/version mirror pages[0] (backend requires this).
+
+    v0.5.0 adds 13 optional top-level fields:
+      - related-info tagging: `collab_workspace_slugs`, `entity_ids`, `report_type_id`
+      - page settings: `page_width_px`, `page_gap_px`, `page_blend_blocks`,
+        `page_slide_guide`, `page_slide_ratio`,
+        `page_slide_ratio_custom_w`, `page_slide_ratio_custom_h`,
+        `page_rich_text_prefix_d0/d1/d2`
+    None means omit from payload. For `collab_workspace_slugs` and
+    `entity_ids`, an empty list is forwarded verbatim — the backend treats
+    `[]` as explicit-clear.
     """
     if not pages:
         raise ValueError("at least one page required")
@@ -163,4 +221,36 @@ def build_create_payload_multi(
     if lifecycle is not None:
         body["lifecycle"] = lifecycle
     body["report_date"] = report_date or date.today().isoformat()
+
+    # ---- v0.5.0 optional top-level fields ----
+    # Lists with empty-list-clears semantics: include whenever caller passed
+    # any list (including []). None means leave unset.
+    if collab_workspace_slugs is not None:
+        body["collab_workspace_slugs"] = list(collab_workspace_slugs)
+    if entity_ids is not None:
+        body["entity_ids"] = list(entity_ids)
+    # Scalar optionals: include only when not None.
+    if report_type_id is not None:
+        body["report_type_id"] = report_type_id
+    if page_width_px is not None:
+        body["page_width_px"] = page_width_px
+    if page_gap_px is not None:
+        body["page_gap_px"] = page_gap_px
+    if page_blend_blocks is not None:
+        body["page_blend_blocks"] = page_blend_blocks
+    if page_slide_guide is not None:
+        body["page_slide_guide"] = page_slide_guide
+    if page_slide_ratio is not None:
+        body["page_slide_ratio"] = page_slide_ratio
+    if page_slide_ratio_custom_w is not None:
+        body["page_slide_ratio_custom_w"] = page_slide_ratio_custom_w
+    if page_slide_ratio_custom_h is not None:
+        body["page_slide_ratio_custom_h"] = page_slide_ratio_custom_h
+    if page_rich_text_prefix_d0 is not None:
+        body["page_rich_text_prefix_d0"] = page_rich_text_prefix_d0
+    if page_rich_text_prefix_d1 is not None:
+        body["page_rich_text_prefix_d1"] = page_rich_text_prefix_d1
+    if page_rich_text_prefix_d2 is not None:
+        body["page_rich_text_prefix_d2"] = page_rich_text_prefix_d2
+
     return body

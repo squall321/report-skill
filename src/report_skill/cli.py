@@ -43,11 +43,17 @@ bridge_app = typer.Typer(no_args_is_help=True, help="LLM bridge (Claude Code as 
 tools_app = typer.Typer(no_args_is_help=True,
                          help="Mention resolvers (reports / workspaces / entity-types / entities). "
                               "Same surface as the MCP tools — use for one-shot CLI lookups.")
+mounts_app = typer.Typer(no_args_is_help=True,
+                          help="Mount config (folder, edit policy).")
+composites_app = typer.Typer(no_args_is_help=True,
+                              help="Composite report submissions.")
 app.add_typer(catalog_app, name="catalog")
 app.add_typer(report_app, name="report")
 app.add_typer(tier_app, name="tier")
 app.add_typer(bridge_app, name="bridge")
 app.add_typer(tools_app, name="tools")
+app.add_typer(mounts_app, name="mounts")
+app.add_typer(composites_app, name="composites")
 app.add_typer(cli_examples.app, name="examples")
 app.add_typer(cli_llm.app, name="llm")
 app.add_typer(cli_files.app, name="files")
@@ -1731,6 +1737,254 @@ def tier_set(level: str = typer.Argument(..., help="S / M / W")):
         raise typer.Exit(1)
     profile = tier.set_tier(level, source="manual", notes="set via CLI")
     console.print(f"[green]tier set:[/green] {profile.tier}  (persisted)")
+
+
+# --------------------------------------------------------------------------- #
+# v0.5.0 — report copy / publish / unpublish / new-from-preset
+# --------------------------------------------------------------------------- #
+@report_app.command("copy")
+def report_copy(
+    report_id: int = typer.Argument(..., help="source report id to copy"),
+    title: str = typer.Option(..., "--title", help="title for the new copy"),
+    mode: str = typer.Option("full", "--mode", help="content | full"),
+    folder_id: Optional[int] = typer.Option(None, "--folder-id",
+                                            help="personal folder to drop the copy into"),
+):
+    """POST /reports/{id}/copy — duplicate a report into your personal workspace."""
+    if mode not in ("content", "full"):
+        console.print(f"[red]invalid mode '{mode}' (expected: content | full)[/red]")
+        raise typer.Exit(1)
+    with ReportArchiveClient() as client:
+        try:
+            created = client.copy_report(
+                report_id,
+                title=title,
+                mode=mode,
+                folder_id=folder_id,
+            )
+        except ApiError as e:
+            console.print(f"[red]copy failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    rid = created.get("id") if isinstance(created, dict) else None
+    console.print(f"[green]copied[/green]  new report id={rid}  "
+                  f"title={created.get('title')!r}  mode={mode}")
+    console.print(f"  view: http://localhost:3001/reports/{rid}")
+
+
+@report_app.command("publish")
+def report_publish(
+    report_id: int = typer.Argument(..., help="report id to publish (phase → finalized)"),
+):
+    """POST /reports/{id}/publish — mark report as finalized + fan out notifications."""
+    with ReportArchiveClient() as client:
+        try:
+            updated = client.publish_report(report_id)
+        except ApiError as e:
+            console.print(f"[red]publish failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print(f"[green]published[/green]  report id={updated.get('id')}  "
+                  f"phase={updated.get('phase')}")
+
+
+@report_app.command("unpublish")
+def report_unpublish(
+    report_id: int = typer.Argument(..., help="report id to unpublish (phase → drafting)"),
+):
+    """POST /reports/{id}/unpublish — revert finalized report back to drafting."""
+    with ReportArchiveClient() as client:
+        try:
+            updated = client.unpublish_report(report_id)
+        except ApiError as e:
+            console.print(f"[red]unpublish failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print(f"[green]unpublished[/green]  report id={updated.get('id')}  "
+                  f"phase={updated.get('phase')}")
+
+
+@report_app.command("new-from-preset")
+def report_new_from_preset(
+    preset_id: str = typer.Argument(..., help="preset id to instantiate"),
+    title: Optional[str] = typer.Option(None, "--title",
+                                        help="override the new report's title (defaults to preset name)"),
+    folder_id: Optional[int] = typer.Option(None, "--folder-id",
+                                            help="personal folder to drop the new report into"),
+):
+    """POST /presets/{id}/new-report — create a new report from a preset."""
+    with ReportArchiveClient() as client:
+        try:
+            created = client.new_report_from_preset(
+                preset_id,
+                title=title,
+                folder_id=folder_id,
+            )
+        except ApiError as e:
+            console.print(f"[red]new-from-preset failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    rid = created.get("id") if isinstance(created, dict) else None
+    console.print(f"[green]created[/green]  report id={rid}  "
+                  f"workspace={created.get('workspace_slug')}")
+    console.print(f"  view: http://localhost:3001/reports/{rid}")
+
+
+# --------------------------------------------------------------------------- #
+# v0.5.0 — tools sub-app: report-types / folders / presets / composites lookups
+# --------------------------------------------------------------------------- #
+@tools_app.command("report-types-list")
+def tools_report_types_list():
+    """List all report types (id, name, status). GET /report-types."""
+    from report_skill.mcp_server import _do_report_types_list
+    rows = _do_report_types_list({})
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@tools_app.command("folders-list")
+def tools_folders_list(
+    workspace: str = typer.Option(..., "--workspace", help="workspace slug"),
+):
+    """List folders inside the given workspace board. GET /folders?workspace_slug=."""
+    from report_skill.mcp_server import _do_folders_list
+    rows = _do_folders_list({"workspace_slug": workspace})
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@tools_app.command("presets-list")
+def tools_presets_list(
+    template_id: Optional[int] = typer.Option(None, "--template-id",
+                                              help="optional template id filter"),
+):
+    """List presets visible to the actor. GET /presets[?template_id=]."""
+    from report_skill.mcp_server import _do_presets_list
+    rows = _do_presets_list({"template_id": template_id})
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@tools_app.command("composites-submittable-for")
+def tools_composites_submittable_for(
+    report_id: int = typer.Option(..., "--report-id",
+                                  help="report id to find submittable composites for"),
+):
+    """List composites this report can be submitted into. GET /composites/submittable-for/{id}."""
+    from report_skill.mcp_server import _do_composites_submittable_for
+    rows = _do_composites_submittable_for({"report_id": report_id})
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@tools_app.command("composites-requests-list")
+def tools_composites_requests_list(
+    composite_id: int = typer.Option(..., "--composite-id",
+                                     help="composite id whose requests to list"),
+):
+    """List submission requests for a composite. GET /composites/{id}/requests."""
+    from report_skill.mcp_server import _do_composites_requests_list
+    rows = _do_composites_requests_list({"composite_id": composite_id})
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@tools_app.command("composites-submit")
+def tools_composites_submit(
+    composite_id: int = typer.Option(..., "--composite-id"),
+    report_id: int = typer.Option(..., "--report-id"),
+    note: Optional[str] = typer.Option(None, "--note",
+                                       help="optional submission note (max 1000 chars)"),
+):
+    """Submit a report to a composite. POST /composites/{id}/requests."""
+    from report_skill.mcp_server import _do_composites_submit
+    args: dict[str, Any] = {"composite_id": composite_id, "report_id": report_id}
+    if note is not None:
+        args["note"] = note
+    row = _do_composites_submit(args)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+# --------------------------------------------------------------------------- #
+# v0.5.0 — composites sub-app: accept / reject / withdraw
+# --------------------------------------------------------------------------- #
+@composites_app.command("accept")
+def composites_accept(
+    composite_id: int = typer.Option(..., "--composite-id"),
+    request_id: int = typer.Option(..., "--request-id"),
+):
+    """Accept a composite submission request. POST /composites/{id}/requests/{rid}/accept."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.accept_composite_request(composite_id, request_id)
+        except ApiError as e:
+            console.print(f"[red]accept failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@composites_app.command("reject")
+def composites_reject(
+    composite_id: int = typer.Option(..., "--composite-id"),
+    request_id: int = typer.Option(..., "--request-id"),
+    reason: Optional[str] = typer.Option(None, "--reason",
+                                         help="optional reject reason (backend may ignore)"),
+):
+    """Reject a composite submission request. POST /composites/{id}/requests/{rid}/reject."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.reject_composite_request(composite_id, request_id, reason=reason)
+        except ApiError as e:
+            console.print(f"[red]reject failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@composites_app.command("withdraw")
+def composites_withdraw(
+    composite_id: int = typer.Option(..., "--composite-id"),
+    request_id: int = typer.Option(..., "--request-id"),
+):
+    """Withdraw a composite submission request. POST /composites/{id}/requests/{rid}/withdraw."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.withdraw_composite_request(composite_id, request_id)
+        except ApiError as e:
+            console.print(f"[red]withdraw failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+# --------------------------------------------------------------------------- #
+# v0.5.0 — mounts sub-app: set-folder / set-edit-policy
+# --------------------------------------------------------------------------- #
+@mounts_app.command("set-folder")
+def mounts_set_folder(
+    report_id: int = typer.Option(..., "--report-id"),
+    workspace: str = typer.Option(..., "--workspace", help="workspace slug of the mount"),
+    folder_id: Optional[int] = typer.Option(None, "--folder-id",
+                                            help="target folder id; omit to clear the folder"),
+):
+    """PUT /mounts/{rid}/{slug}/folder — move the mount into a folder (or clear it)."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.set_mount_folder(report_id, workspace, folder_id=folder_id)
+        except ApiError as e:
+            console.print(f"[red]set-folder failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@mounts_app.command("set-edit-policy")
+def mounts_set_edit_policy(
+    report_id: int = typer.Option(..., "--report-id"),
+    workspace: str = typer.Option(..., "--workspace", help="workspace slug of the mount"),
+    policy: str = typer.Option(..., "--policy",
+                               help="default | owner_only | coauthor"),
+):
+    """PUT /mounts/{rid}/{slug}/edit-policy — change the mount's edit policy."""
+    if policy not in ("default", "owner_only", "coauthor"):
+        console.print(f"[red]invalid policy '{policy}' "
+                      "(expected: default | owner_only | coauthor)[/red]")
+        raise typer.Exit(1)
+    with ReportArchiveClient() as client:
+        try:
+            row = client.set_mount_edit_policy(report_id, workspace, edit_policy=policy)
+        except ApiError as e:
+            console.print(f"[red]set-edit-policy failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
 
 
 if __name__ == "__main__":

@@ -77,6 +77,26 @@ _WIDGET_INPUT_HINTS: dict[str, str] = {
         "Reserve mention chips for GENUINE cross-references — linkifying every "
         "team or product name is a known AI tell (see SKILL.md style note)."
     ),
+    "table": (
+        "Optional dict-input fields the adapter passes through alongside `rows`:\n"
+        "  - `note`: footnote shown under the table (max 1000 chars). The "
+        "renderer prepends `※` automatically — do NOT include it yourself.\n"
+        "  - `column_widths`: {column_key: px_int} per-column width hints.\n"
+        "  - `table_width_px`: total table width in pixels (int).\n"
+        "  - `merges`: list of `{r, c, rs, cs}` cell-span objects "
+        "(row/col index plus row-span/col-span)."
+    ),
+    "image": (
+        "Optional dict-input field beyond the existing files/caption/aspect_ratio:\n"
+        "  - `note`: caption-line footnote (max 1000 chars). Renderer prepends "
+        "`※` automatically — do NOT include it yourself."
+    ),
+    "comparison": (
+        "Optional dict-input fields the adapter passes through alongside `rows`:\n"
+        "  - `note`: footnote (max 1000 chars, no leading `※` — renderer adds it).\n"
+        "  - `column_widths` / `table_width_px` / `merges`: same shape as table.\n"
+        "  - `row_label_width`: pixel width of the left label column (int)."
+    ),
 }
 
 

@@ -463,6 +463,239 @@ TOOLS: list[Tool] = [
         },
         [],
     ),
+
+    # ---- v0.5.0 — copy / link / report-types ---------------------------- #
+    _tool(
+        "report_copy",
+        "Duplicate an existing report. POST /api/reports/{id}/copy. New copy "
+        "lands in the caller's personal workspace. mode=content keeps just the "
+        "block content; mode=full (default) also copies tags / related-info.",
+        {
+            "report_id": {"type": "integer"},
+            "title": {"type": "string", "description": "title for the new copy"},
+            "mode": {"type": "string", "enum": ["content", "full"], "default": "full"},
+            "folder_id": {"type": "integer", "description": "optional destination folder"},
+        },
+        ["report_id", "title"],
+    ),
+    _tool(
+        "report_add_link",
+        "Attach a related-report link from one report to another. "
+        "POST /api/reports/{id}/links. kind is required by the backend; "
+        "defaults to 'related' at the client layer.",
+        {
+            "report_id": {"type": "integer", "description": "source report id"},
+            "to_report_id": {"type": "integer", "description": "target report id"},
+            "kind": {"type": "string", "default": "related",
+                     "description": "link kind (e.g. 'related', 'follow_up')"},
+            "label": {"type": "string", "description": "optional short note (<=200 chars)"},
+        },
+        ["report_id", "to_report_id"],
+    ),
+    _tool(
+        "report_types_list",
+        "List the report-type catalog. GET /api/report-types. Returns the "
+        "official + unofficial types so callers can map a name to report_type_id.",
+        {},
+        [],
+    ),
+
+    # ---- v0.5.0 — publish / unpublish ----------------------------------- #
+    _tool(
+        "report_publish",
+        "Mark a report finalized — phase=finalized + fan-out notifications to "
+        "every mounted board. POST /api/reports/{id}/publish. Owner-only.",
+        {"report_id": {"type": "integer"}},
+        ["report_id"],
+    ),
+    _tool(
+        "report_unpublish",
+        "Revert a finalized report back to drafting. POST /api/reports/{id}/unpublish. "
+        "Owner-only. Idempotent when already drafting.",
+        {"report_id": {"type": "integer"}},
+        ["report_id"],
+    ),
+
+    # ---- v0.5.0 — folders + mount config -------------------------------- #
+    _tool(
+        "folders_list",
+        "List folders for a workspace board. GET /api/folders?workspace_slug=. "
+        "Pass an org slug for that board's folders, or 'personal-<user_id>' for "
+        "a user's personal folders. Side effect: server may auto-create defaults.",
+        {"workspace_slug": {"type": "string"}},
+        ["workspace_slug"],
+    ),
+    _tool(
+        "report_mount_set_folder",
+        "Move a mounted report into (or out of) a folder on a board. "
+        "PUT /api/mounts/{rid}/{slug}/folder. folder_id null clears the folder.",
+        {
+            "report_id": {"type": "integer"},
+            "workspace_slug": {"type": "string"},
+            "folder_id": {"type": "integer",
+                          "description": "destination folder id; omit or null to clear"},
+        },
+        ["report_id", "workspace_slug"],
+    ),
+    _tool(
+        "report_mount_set_edit_policy",
+        "Set the edit policy for a mount. PUT /api/mounts/{rid}/{slug}/edit-policy. "
+        "Owner-only. Valid policies: default, owner_only, coauthor.",
+        {
+            "report_id": {"type": "integer"},
+            "workspace_slug": {"type": "string"},
+            "edit_policy": {"type": "string",
+                            "enum": ["default", "owner_only", "coauthor"]},
+        },
+        ["report_id", "workspace_slug", "edit_policy"],
+    ),
+
+    # ---- v0.5.0 — template scope ---------------------------------------- #
+    _tool(
+        "template_set_scope",
+        "Set a template's owner workspace scope. PATCH /api/templates/{id}/scope. "
+        "Empty list / omitted = 전사 (global). Manager-only; cannot edit global "
+        "templates here. Metadata-only — no version bump.",
+        {
+            "template_id": {"type": "integer"},
+            "owner_workspace_slugs": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "workspace slugs that own the template; empty/omitted = global",
+            },
+        },
+        ["template_id"],
+    ),
+
+    # ---- v0.5.0 — presets ----------------------------------------------- #
+    _tool(
+        "presets_list",
+        "List presets visible to the caller's workspace tree. GET /api/presets. "
+        "Optionally narrow by template_id.",
+        {"template_id": {"type": "string",
+                         "description": "optional — only presets for this template"}},
+        [],
+    ),
+    _tool(
+        "preset_create",
+        "Snapshot a report as a reusable preset. POST /api/presets. "
+        "owner_workspace_slugs null/empty = 전사 (global preset).",
+        {
+            "report_id": {"type": "integer", "description": "source report id"},
+            "name": {"type": "string"},
+            "owner_workspace_slugs": {
+                "type": "array", "items": {"type": "string"},
+                "description": "workspace slugs that may use the preset; omit for global",
+            },
+        },
+        ["report_id", "name"],
+    ),
+    _tool(
+        "report_new_from_preset",
+        "Instantiate a new report from a preset. POST /api/presets/{id}/new-report. "
+        "Lands in the caller's personal workspace. title defaults to preset name.",
+        {
+            "preset_id": {"type": "integer"},
+            "title": {"type": "string", "description": "optional override; default = preset name"},
+            "folder_id": {"type": "integer", "description": "optional destination folder"},
+        },
+        ["preset_id"],
+    ),
+    _tool(
+        "preset_delete",
+        "Delete a preset. DELETE /api/presets/{id}. Creator-only (or system admin).",
+        {"preset_id": {"type": "integer"}},
+        ["preset_id"],
+    ),
+
+    # ---- v0.5.0 — composites -------------------------------------------- #
+    _tool(
+        "composite_get",
+        "Fetch a composite report. GET /api/composites/{id}. Returns metadata, "
+        "summary_widgets, and the items list.",
+        {"composite_id": {"type": "integer"}},
+        ["composite_id"],
+    ),
+    _tool(
+        "composite_summary_set",
+        "Replace a composite's summary_widgets. PATCH /api/composites/{id}. "
+        "Pass expected_revision for optimistic concurrency. Body sends only "
+        "summary_widgets (+ expected_revision when given) to keep the PATCH narrow.",
+        {
+            "composite_id": {"type": "integer"},
+            "summary_widgets": {
+                "type": "array", "items": {"type": "object"},
+                "description": "list of widget dicts (same grammar as report extras)",
+            },
+            "expected_revision": {"type": "integer", "minimum": 1,
+                                  "description": "optimistic-concurrency guard"},
+        },
+        ["composite_id", "summary_widgets"],
+    ),
+    _tool(
+        "composites_submittable_for",
+        "List composites the given report can be submitted to. "
+        "GET /api/composites/submittable-for/{report_id}. Each row includes "
+        "already_item / already_pending flags so callers can hide dupes.",
+        {"report_id": {"type": "integer"}},
+        ["report_id"],
+    ),
+    _tool(
+        "composites_requests_list",
+        "List submission requests on a composite. "
+        "GET /api/composites/{id}/requests. status_filter defaults to 'pending' "
+        "when omitted.",
+        {
+            "composite_id": {"type": "integer"},
+            "status_filter": {"type": "string",
+                              "description": "e.g. pending|accepted|rejected|withdrawn"},
+        },
+        ["composite_id"],
+    ),
+    _tool(
+        "composites_submit",
+        "Submit a report to a composite for inclusion. "
+        "POST /api/composites/{id}/requests. Requires can_read on the report.",
+        {
+            "composite_id": {"type": "integer"},
+            "report_id": {"type": "integer"},
+            "note": {"type": "string", "description": "optional note (<=1000 chars)"},
+        },
+        ["composite_id", "report_id"],
+    ),
+    _tool(
+        "composites_request_accept",
+        "Accept a pending composite submission. "
+        "POST /api/composites/{id}/requests/{request_id}/accept. Composite owner only.",
+        {
+            "composite_id": {"type": "integer"},
+            "request_id": {"type": "integer"},
+        },
+        ["composite_id", "request_id"],
+    ),
+    _tool(
+        "composites_request_reject",
+        "Reject a pending composite submission. "
+        "POST /api/composites/{id}/requests/{request_id}/reject. Composite owner only. "
+        "Backend currently ignores reason — kept for forward-compat.",
+        {
+            "composite_id": {"type": "integer"},
+            "request_id": {"type": "integer"},
+            "reason": {"type": "string", "description": "optional rejection note"},
+        },
+        ["composite_id", "request_id"],
+    ),
+    _tool(
+        "composites_request_withdraw",
+        "Withdraw a pending composite submission. "
+        "POST /api/composites/{id}/requests/{request_id}/withdraw. Requester self / "
+        "composite owner / system admin.",
+        {
+            "composite_id": {"type": "integer"},
+            "request_id": {"type": "integer"},
+        },
+        ["composite_id", "request_id"],
+    ),
 ]
 
 
@@ -1315,6 +1548,227 @@ def _do_entities_list(args: dict) -> Any:
     return out
 
 
+# ---- v0.5.0 dispatchers ---------------------------------------------- #
+def _do_report_copy(args: dict) -> Any:
+    rid = int(args["report_id"])
+    title = str(args["title"])
+    mode = args.get("mode") or "full"
+    folder_id = args.get("folder_id")
+    with ReportArchiveClient() as c:
+        created = c.copy_report(
+            rid, title=title, mode=mode,
+            folder_id=int(folder_id) if folder_id is not None else None,
+        )
+    return {
+        "id": created.get("id"),
+        "title": created.get("title"),
+        "workspace_slug": created.get("workspace_slug"),
+        "revision": created.get("revision"),
+        "view_url": f"http://localhost:3001/reports/{created.get('id')}",
+    }
+
+
+def _do_report_add_link(args: dict) -> Any:
+    rid = int(args["report_id"])
+    to_rid = int(args["to_report_id"])
+    kind = args.get("kind") or "related"
+    label = args.get("label")
+    with ReportArchiveClient() as c:
+        link = c.add_report_link(rid, to_report_id=to_rid, kind=kind, label=label)
+    return link
+
+
+def _do_report_types_list(_args: dict) -> Any:
+    with ReportArchiveClient() as c:
+        rows = c.fetch_report_types()
+    return [{
+        "id": t.get("id"),
+        "name": t.get("name"),
+        "description": t.get("description"),
+        "status": t.get("status"),
+    } for t in (rows or []) if isinstance(t, dict)]
+
+
+def _do_report_publish(args: dict) -> Any:
+    rid = int(args["report_id"])
+    with ReportArchiveClient() as c:
+        report = c.publish_report(rid)
+    return {
+        "id": report.get("id"),
+        "title": report.get("title"),
+        "phase": report.get("phase"),
+        "revision": report.get("revision"),
+        "view_url": f"http://localhost:3001/reports/{report.get('id')}",
+    }
+
+
+def _do_report_unpublish(args: dict) -> Any:
+    rid = int(args["report_id"])
+    with ReportArchiveClient() as c:
+        report = c.unpublish_report(rid)
+    return {
+        "id": report.get("id"),
+        "title": report.get("title"),
+        "phase": report.get("phase"),
+        "revision": report.get("revision"),
+        "view_url": f"http://localhost:3001/reports/{report.get('id')}",
+    }
+
+
+def _do_folders_list(args: dict) -> Any:
+    slug = str(args["workspace_slug"])
+    with ReportArchiveClient() as c:
+        rows = c.list_folders(slug)
+    return [{
+        "id": f.get("id"),
+        "name": f.get("name"),
+        "kind": f.get("kind"),
+        "parent_id": f.get("parent_id"),
+        "workspace_slug": f.get("workspace_slug"),
+        "sort_order": f.get("sort_order"),
+        "report_count": f.get("report_count"),
+    } for f in (rows or []) if isinstance(f, dict)]
+
+
+def _do_report_mount_set_folder(args: dict) -> Any:
+    rid = int(args["report_id"])
+    slug = str(args["workspace_slug"])
+    folder_id_raw = args.get("folder_id")
+    folder_id = int(folder_id_raw) if folder_id_raw is not None else None
+    with ReportArchiveClient() as c:
+        result = c.set_mount_folder(rid, slug, folder_id=folder_id)
+    return result
+
+
+def _do_report_mount_set_edit_policy(args: dict) -> Any:
+    rid = int(args["report_id"])
+    slug = str(args["workspace_slug"])
+    policy = str(args["edit_policy"])
+    with ReportArchiveClient() as c:
+        result = c.set_mount_edit_policy(rid, slug, edit_policy=policy)
+    return result
+
+
+def _do_template_set_scope(args: dict) -> Any:
+    tid = int(args["template_id"])
+    slugs = args.get("owner_workspace_slugs")
+    if slugs is not None:
+        slugs = [str(s) for s in slugs]
+    with ReportArchiveClient() as c:
+        result = c.set_template_scope(tid, owner_workspace_slugs=slugs)
+    return result
+
+
+def _do_presets_list(args: dict) -> Any:
+    template_id = args.get("template_id")
+    with ReportArchiveClient() as c:
+        rows = c.list_presets(template_id=template_id)
+    return rows
+
+
+def _do_preset_create(args: dict) -> Any:
+    rid = int(args["report_id"])
+    name = str(args["name"])
+    slugs = args.get("owner_workspace_slugs")
+    if slugs is not None:
+        slugs = [str(s) for s in slugs]
+    with ReportArchiveClient() as c:
+        preset = c.create_preset(rid, name=name, owner_workspace_slugs=slugs)
+    return preset
+
+
+def _do_report_new_from_preset(args: dict) -> Any:
+    pid = int(args["preset_id"])
+    title = args.get("title")
+    folder_id_raw = args.get("folder_id")
+    folder_id = int(folder_id_raw) if folder_id_raw is not None else None
+    with ReportArchiveClient() as c:
+        result = c.new_report_from_preset(pid, title=title, folder_id=folder_id)
+    new_id = result.get("id")
+    return {
+        "id": new_id,
+        "workspace_slug": result.get("workspace_slug"),
+        "view_url": f"http://localhost:3001/reports/{new_id}" if new_id is not None else None,
+    }
+
+
+def _do_preset_delete(args: dict) -> Any:
+    pid = int(args["preset_id"])
+    with ReportArchiveClient() as c:
+        c.delete_preset(pid)
+    return {"deleted": True, "id": pid}
+
+
+def _do_composite_get(args: dict) -> Any:
+    cid = int(args["composite_id"])
+    with ReportArchiveClient() as c:
+        return c.get_composite(cid)
+
+
+def _do_composite_summary_set(args: dict) -> Any:
+    cid = int(args["composite_id"])
+    widgets = args["summary_widgets"]
+    if not isinstance(widgets, list):
+        raise ValueError("summary_widgets must be a list")
+    expected_revision = args.get("expected_revision")
+    if expected_revision is not None:
+        expected_revision = int(expected_revision)
+    with ReportArchiveClient() as c:
+        updated = c.update_composite_summary(
+            cid, summary_widgets=widgets, expected_revision=expected_revision,
+        )
+    return {
+        "id": updated.get("id"),
+        "title": updated.get("title"),
+        "revision": updated.get("revision"),
+        "summary_widget_count": len(updated.get("summary_widgets") or []),
+    }
+
+
+def _do_composites_submittable_for(args: dict) -> Any:
+    rid = int(args["report_id"])
+    with ReportArchiveClient() as c:
+        return c.list_submittable_composites(rid)
+
+
+def _do_composites_requests_list(args: dict) -> Any:
+    cid = int(args["composite_id"])
+    status_filter = args.get("status_filter")
+    with ReportArchiveClient() as c:
+        return c.list_composite_requests(cid, status_filter=status_filter) \
+            if status_filter is not None else c.list_composite_requests(cid)
+
+
+def _do_composites_submit(args: dict) -> Any:
+    cid = int(args["composite_id"])
+    rid = int(args["report_id"])
+    note = args.get("note")
+    with ReportArchiveClient() as c:
+        return c.submit_to_composite(cid, report_id=rid, note=note)
+
+
+def _do_composites_request_accept(args: dict) -> Any:
+    cid = int(args["composite_id"])
+    req_id = int(args["request_id"])
+    with ReportArchiveClient() as c:
+        return c.accept_composite_request(cid, req_id)
+
+
+def _do_composites_request_reject(args: dict) -> Any:
+    cid = int(args["composite_id"])
+    req_id = int(args["request_id"])
+    reason = args.get("reason")
+    with ReportArchiveClient() as c:
+        return c.reject_composite_request(cid, req_id, reason=reason)
+
+
+def _do_composites_request_withdraw(args: dict) -> Any:
+    cid = int(args["composite_id"])
+    req_id = int(args["request_id"])
+    with ReportArchiveClient() as c:
+        return c.withdraw_composite_request(cid, req_id)
+
+
 _DISPATCH = {
     "ping": _do_ping,
     "templates_list": _do_templates_list,
@@ -1348,6 +1802,28 @@ _DISPATCH = {
     "report_export": _do_report_export,
     "report_import": _do_report_import,
     "report_dump": _do_report_dump,
+    # ---- v0.5.0 -------------------------------------------------------- #
+    "report_copy": _do_report_copy,
+    "report_add_link": _do_report_add_link,
+    "report_types_list": _do_report_types_list,
+    "report_publish": _do_report_publish,
+    "report_unpublish": _do_report_unpublish,
+    "folders_list": _do_folders_list,
+    "report_mount_set_folder": _do_report_mount_set_folder,
+    "report_mount_set_edit_policy": _do_report_mount_set_edit_policy,
+    "template_set_scope": _do_template_set_scope,
+    "presets_list": _do_presets_list,
+    "preset_create": _do_preset_create,
+    "report_new_from_preset": _do_report_new_from_preset,
+    "preset_delete": _do_preset_delete,
+    "composite_get": _do_composite_get,
+    "composite_summary_set": _do_composite_summary_set,
+    "composites_submittable_for": _do_composites_submittable_for,
+    "composites_requests_list": _do_composites_requests_list,
+    "composites_submit": _do_composites_submit,
+    "composites_request_accept": _do_composites_request_accept,
+    "composites_request_reject": _do_composites_request_reject,
+    "composites_request_withdraw": _do_composites_request_withdraw,
 }
 
 

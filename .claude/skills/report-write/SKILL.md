@@ -91,6 +91,51 @@ Use `report adhoc` when the user just wants the report to exist and trusts the s
 
 ## Flow A — CREATE
 
+### A.0 Check for presets first (skip A1–A3 when one fits)
+
+Presets are saved snapshots of an existing report's tags, related-info, page settings, and block structure. If a matching preset exists, instantiating it is much cheaper than rebuilding the draft from a template — the new report inherits every field the preset captured.
+
+```powershell
+# list presets visible to the actor (전사 + own workspace tree)
+report-skill tools presets-list
+
+# optionally narrow to one template
+report-skill tools presets-list --template-id <template-id>
+
+# instantiate — title and folder_id are optional
+report-skill report new-from-preset <preset-id> --title "5월 4주차 백엔드 주간보고" --folder-id 12
+```
+
+`new-from-preset` returns `{id, workspace_slug}` for the freshly created report (lands in the actor's personal workspace). Use this when:
+
+- The user said "use the same setup as last week / 지난주랑 똑같이"
+- A preset's name clearly matches the requested report (e.g. preset "백엔드 주간보고 — 표준 구성")
+- The conversation already produced a similar report and the author asked to save it as a preset for next time (`preset_create` MCP tool — owner-only)
+
+If no preset fits, fall through to A1.
+
+### A.0b Copy an existing report (clone instead of recreate)
+
+When the user says "report X 복사해서 새로 만들어줘" / "같은 구조로 새 보고서" and a specific source report is named, prefer `report copy` over re-running the draft pipeline:
+
+```powershell
+# full clone — tags, related-info, lifecycle, links, page settings all preserved
+report-skill report copy <source-report-id> --title "5월 4주차 백엔드 주간보고"
+
+# content-only clone — drops tags, report_type_id, entity_ids, lifecycle, links
+report-skill report copy <source-report-id> --title "..." --mode content
+
+# optionally land it in a specific personal folder
+report-skill report copy <source-report-id> --title "..." --folder-id 7
+```
+
+Modes:
+
+- `full` (default) — exact clone of every field the writer can set, including `collab_workspace_slugs`, `entity_ids`, `report_type_id`, lifecycle, and report-to-report links. Best when the user wants a sibling of the source.
+- `content` — copies title/pages/blocks only; drops related-info, lifecycle, and links. Best when the user wants a clean starting point with the same body structure but different metadata.
+
+The new report always lands in the author's personal workspace. Mount it (Flow G) to publish to a team board.
+
 ### A1. Pick a template
 
 ```powershell
@@ -106,6 +151,54 @@ report-skill templates show <template-id>
 ```
 
 You'll see each block's id + widget type + key props. The id is the key for the draft; the type tells you what shape the input should take.
+
+### A2.5 Tag the report — related-info metadata (top-level fields)
+
+ReportArchive stores three top-level "related info" fields on every report. These are distinct from `tags` (free-form strings shown on cards) and from body @mention chips (intra-paragraph cross-references). They drive search facets, filtering on team boards, and the "related reports" sidebar.
+
+| field                     | type          | meaning                                                                                          |
+|---------------------------|---------------|--------------------------------------------------------------------------------------------------|
+| `collab_workspace_slugs`  | `list[str]`   | departments / workspaces named as collaborators on this report (chip row in header)              |
+| `entity_ids`              | `list[int]`   | tagged entity values (model name, customer, project, etc.) — same axis grammar as `mention://entity` |
+| `report_type_id`          | `int`         | one canonical report-type taxonomy id (e.g. "weekly", "incident postmortem", "RFC")              |
+
+Rule: NEVER invent ids. Always resolve via the catalog tools before writing the draft. If a resolver returns zero matches, drop the field rather than guess.
+
+Resolver chain — call BEFORE building the draft:
+
+```powershell
+# collab_workspace_slugs — list visible org/team workspaces
+report-skill tools workspaces-list --q "dx" --kind org
+
+# entity_ids — discover axes first (cached), then resolve values
+report-skill tools entity-types-list
+report-skill tools entities-list --axis model_name --q "HFP-X1"
+
+# report_type_id — list the canonical taxonomy
+report-skill tools report-types-list
+```
+
+Add the resolved values into the draft as top-level keys (NOT inside `blocks` and NOT inside `pages`):
+
+```json
+{
+  "title": "5월 4주차 백엔드 주간보고",
+  "report_date": "2026-05-26",
+  "tags": ["weekly", "backend"],
+  "collab_workspace_slugs": ["dx", "qa"],
+  "entity_ids": [412, 87],
+  "report_type_id": 3,
+  "blocks": { ... }
+}
+```
+
+Korean usage examples (one per field):
+
+- `collab_workspace_slugs: ["dx", "qa"]` — "DX팀, QA팀과 공동 작성한 보고"
+- `entity_ids: [412]` — "HFP-X1 모델 관련 회귀 테스트 결과"
+- `report_type_id: 3` — "이번 건은 incident postmortem 으로 분류"
+
+Empty-list semantics on UPDATE (Flow B): sending `"collab_workspace_slugs": []` or `"entity_ids": []` CLEARS all collaborators/entities. Omitting the key leaves them unchanged. `report_type_id: null` clears the type; omission leaves it.
 
 ### A3. Build the draft JSON
 
@@ -150,8 +243,8 @@ Per-widget input guidance — adapters are tolerant:
 | rich_text       | markdown string; supports @-mentions (see A3.5 below)              |
 | bulleted_list   | `["항목1", "항목2"]` or multi-line string with `-`/`*` bullets    |
 | key_value       | flat dict `{"team": "백엔드", "lead": "..."}`                      |
-| table           | list of dicts keyed by column.key, or markdown table string        |
-| comparison      | dict-of-dicts `{"비용": {"as_is": "...", "to_be": "..."}}`         |
+| table           | list of dicts keyed by column.key, or markdown table string; dict form also accepts `note` (※-prefix auto), `column_widths`, `table_width_px`, `merges` |
+| comparison      | dict-of-dicts `{"비용": {"as_is": "...", "to_be": "..."}}`; dict form also accepts `note` (※-prefix auto), `column_widths`, `row_label_width`, `table_width_px`, `merges` |
 | chart/scatter   | `[{x: "Jan", revenue: 100}, ...]`                                  |
 | pie/waffle      | dict label→value `{"북미": 40, "EMEA": 30}`                        |
 | milestone       | dict date→label or list of `{date, label, status?}`                |
@@ -161,7 +254,9 @@ Per-widget input guidance — adapters are tolerant:
 | tree/treemap    | nested dict `{"Tech": {"Eng": {...}}}`                             |
 | sankey          | list of `{source, target, value}`                                  |
 | equation        | `"E = mc^2"` (LaTeX, no $$ wrappers needed)                        |
-| image/video/etc | requires `{file_id}` — adapter rejects raw paths/URLs              |
+| image/video/etc | requires `{file_id}`; image dict form also accepts `note` (※-prefix auto) |
+
+Notes on `note` fields (table / comparison / image): the renderer automatically prepends a Korean `※` glyph to the rendered footnote. Do NOT include a leading `※` or `※ ` in the input — the adapter strips it. Max 1000 characters; longer text is truncated.
 
 ### A3.5 Mentions in rich_text
 
@@ -300,6 +395,31 @@ Phase enum: `drafting` (default — 작성 중) / `reviewing` (리뷰 중) / `fi
 
 Other blocks are preserved. Edit lock is auto-acquired+released. Update REPLACES the block's content. For "add one more entry to an existing block", use Flow F below instead.
 
+#### B2.1 Patchable top-level fields (related-info + page settings)
+
+The PATCH payload also accepts these top-level keys. All are optional — omit a key to leave its current value untouched.
+
+Related-info (see A2.5 for resolver chain):
+
+- `report_type_id` (`int | null`) — canonical type taxonomy. `null` clears.
+- `entity_ids` (`list[int]`) — replacement set of tagged entities. `[]` clears all.
+- `collab_workspace_slugs` (`list[str]`) — replacement set of collaborator departments. `[]` clears all.
+
+Page-level rendering controls (apply to the report as a whole — top-level, not per-page):
+
+- `page_width_px` (`int`, 320..3000) — canvas width in pixels
+- `page_gap_px` (`int`, 0..200) — vertical gap between blocks
+- `page_blend_blocks` (`bool`) — hide widget chrome / borders
+- `page_slide_guide` (`bool`) — overlay slide-aspect guide
+- `page_slide_ratio` (`"16:9" | "4:3" | "16:10" | "custom"`) — slide aspect enum
+- `page_slide_ratio_custom_w` (`int`, 1..10000) — custom slide width (only used with `"custom"`)
+- `page_slide_ratio_custom_h` (`int`, 1..10000) — custom slide height (only used with `"custom"`)
+- `page_rich_text_prefix_d0` (`str`, max 8 chars) — depth-0 bullet glyph (default `■`)
+- `page_rich_text_prefix_d1` (`str`, max 8 chars) — depth-1 bullet glyph (default `–`)
+- `page_rich_text_prefix_d2` (`str`, max 8 chars) — depth-2+ bullet glyph (default `·`)
+
+Rule — preserve existing related-info: when you author a PATCH from natural-language instructions (Flow B1 or B2), NEVER include `collab_workspace_slugs`, `entity_ids`, or `report_type_id` unless the user's instruction explicitly targets that field. Including them with stale values silently overwrites the report's tagging. The same caution applies to the `page_*` fields — only patch the ones the user asked to change.
+
 ## Flow G — MOUNT / UNMOUNT (publish to team boards)
 
 ```powershell
@@ -320,6 +440,70 @@ report-skill report unmount <report-id> -w dx
 ```
 
 Mount is idempotent — re-mounting to a board that already has it is a no-op (reports "no new mounts created"). Unmount removes the visibility on that board but does NOT delete the report — the personal copy stays intact.
+
+### G.1 PUBLISH vs MOUNT (do not conflate)
+
+These are two distinct operations:
+
+- **MOUNT / UNMOUNT** (this flow above) — posts the report onto a specific team board so that board's members can see it in their list. Pure visibility; phase stays whatever it was.
+- **PUBLISH** (`report_publish` MCP tool / `report publish <id>` CLI) — finalizes the report. Transitions `phase` to `finalized` and fans out `report_phase_to_finalized` notifications to every member of every board the report is currently mounted on. Author-only operation.
+
+Pick based on the user's intent:
+
+- "공유해줘 / 게시해줘 / send to the team" → MOUNT to the relevant board(s)
+- "보고서 확정 / 발행 / 완료 처리 / 마감" → PUBLISH
+- "발행 취소 / 다시 작성중으로" → `report_unpublish` (sets `phase` back to `drafting`, records a `phase_to_drafting` activity)
+
+PUBLISH is idempotent — calling it on an already-finalized report is a no-op that just returns current state. Likewise UNPUBLISH on a drafting report.
+
+```powershell
+# finalize the report and notify all mounted boards
+report-skill report publish <report-id>
+
+# revert to drafting
+report-skill report unpublish <report-id>
+```
+
+## Flow H — Submit to composite (agenda)
+
+Composite reports (종합보고) bundle multiple individual reports as agenda items for review meetings, monthly all-hands, etc. The author of an individual report can ASK a composite owner to include their report. Note: this section adds the **submit / withdraw** flow (which the report author uses). Accept / reject is composite-owner-only — separate ops not covered here.
+
+When the user says "이 보고서 월간 종합에 올려줘 / agenda에 넣어줘 / submit to the all-hands":
+
+### H1. Discover which composites accept this report
+
+```powershell
+report-skill tools composites-submittable-for --report-id <report-id>
+```
+
+Returns each visible composite with `already_item` (already accepted into the composite) and `already_pending` (a request is already open). Skip those — submitting again raises 409.
+
+### H2. Submit the request
+
+```powershell
+report-skill tools composites-submit \
+  --composite-id <composite-id> \
+  --report-id <report-id> \
+  --note "5월 백엔드 주간 — 결제 API 안정화 분"
+```
+
+The note is optional, max 1000 chars, and is shown to the composite owner when they review the queue. Returns the created request id and `status: "pending"`.
+
+### H3. Withdraw a pending request (submitter-only)
+
+If the author changes their mind before the owner decides:
+
+```powershell
+report-skill composites withdraw --composite-id <composite-id> --request-id <request-id>
+```
+
+`accept` / `reject` (composite owner-only) and `withdraw` (submitter, composite owner, or system admin) all use the `composites` sub-app — see Tools section below for the full list. To inspect existing requests:
+
+```powershell
+report-skill tools composites-requests-list --composite-id <composite-id>
+```
+
+Default filter is `pending` — pass `--status accepted` / `rejected` / `withdrawn` if needed (server-side filter).
 
 ## Flow F — APPEND (incremental updates to existing blocks)
 
@@ -435,3 +619,43 @@ Then reference the `file_id` in the draft's media block.
   }
 }
 ```
+
+## v0.5.0 — new MCP tools
+
+The following 21 MCP tools were added in 0.5.0. From any MCP client (Claude Desktop / Continue / Cursor) call them by name.
+
+Report-level:
+
+- `report_copy` — POST `/reports/{id}/copy`; full or content-only clone (`mode=full|content`, default `full`).
+- `report_add_link` — POST `/reports/{id}/links`; register a report-to-report link (`kind` default `"related"`).
+- `report_types_list` — GET `/report-types`; resolver for `report_type_id`.
+- `report_publish` — POST `/reports/{id}/publish`; finalize phase + fan-out notifications. Author-only.
+- `report_unpublish` — POST `/reports/{id}/unpublish`; revert phase to drafting. Author-only.
+
+Folders + mounts:
+
+- `folders_list` — GET `/folders?workspace_slug=...`; folders inside a workspace board.
+- `report_mount_set_folder` — PUT `/mounts/{rid}/{slug}/folder`; move a mount into a folder. `folder_id=null` clears.
+- `report_mount_set_edit_policy` — PUT `/mounts/{rid}/{slug}/edit-policy`; one of `default | owner_only | coauthor`.
+
+Templates:
+
+- `template_set_scope` — PATCH `/templates/{id}/scope`; restrict template ownership to a workspace tree. Empty list = 전사(global).
+
+Presets:
+
+- `presets_list` — GET `/presets`; preset summaries visible to the actor.
+- `preset_create` — POST `/presets`; save the current report as a reusable preset.
+- `report_new_from_preset` — POST `/presets/{id}/new-report`; instantiate a fresh report (lands in personal workspace).
+- `preset_delete` — DELETE `/presets/{id}`; only the creator (or system admin) may delete.
+
+Composites:
+
+- `composite_get` — GET `/composites/{id}`; full composite with items + summary_widgets.
+- `composite_summary_set` — PATCH `/composites/{id}`; replace `summary_widgets` (with optional `expected_revision`).
+- `composites_submittable_for` — GET `/composites/submittable-for/{report_id}`; which composites accept this report.
+- `composites_requests_list` — GET `/composites/{id}/requests`; default filter pending.
+- `composites_submit` — POST `/composites/{id}/requests`; submitter creates a pending request.
+- `composites_request_accept` — POST `/composites/{id}/requests/{req}/accept`; composite owner-only.
+- `composites_request_reject` — POST `/composites/{id}/requests/{req}/reject`; composite owner-only. `reason` accepted for forward-compat but currently ignored server-side.
+- `composites_request_withdraw` — POST `/composites/{id}/requests/{req}/withdraw`; submitter (or composite owner / system admin).

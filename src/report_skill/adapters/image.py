@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from report_skill.adapters.base import NormalizeError, WidgetAdapter
+from report_skill.adapters.table import _clean_note
 from report_skill.repair import truncate
 
 _FILE_KEYS = ("files", "file_ids")
@@ -63,6 +64,10 @@ class ImageAdapter(WidgetAdapter):
                 out["aspect_ratio"] = raw["aspect_ratio"]
             if isinstance(raw.get("max_count"), int):
                 out["max_count"] = raw["max_count"]
+            if isinstance(raw.get("note"), str):
+                note = _clean_note(raw["note"])
+                if note:
+                    out["note"] = note
             return out
         raise NormalizeError(f"image: unsupported input type {type(raw).__name__}")
 

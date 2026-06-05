@@ -29,21 +29,26 @@ class TableAdapter(WidgetAdapter):
                                          for c in columns}
 
         rows: list[dict]
+        extras: dict = {}
         if isinstance(raw, str):
             rows = _parse_markdown_table(raw, columns)
         elif isinstance(raw, list):
             rows = [self._coerce_row(r, columns, col_by_key, col_by_label) for r in raw]
             rows = [r for r in rows if r]
         elif isinstance(raw, dict):
-            if isinstance(raw.get("rows"), list):
-                return self.normalize(raw["rows"], props)
-            raise NormalizeError("table: dict input must contain 'rows' list")
+            if not isinstance(raw.get("rows"), list):
+                raise NormalizeError("table: dict input must contain 'rows' list")
+            inner = self.normalize(raw["rows"], props)
+            rows = inner.get("rows", [])
+            extras = _extract_content_extras(raw)
         else:
             raise NormalizeError(f"table: unsupported input type {type(raw).__name__}")
 
         if not rows:
             raise NormalizeError("table: no rows after normalization")
-        return {"rows": rows}
+        out: dict = {"rows": rows}
+        out.update(extras)
+        return out
 
     def _coerce_row(self, raw: Any, columns: list[dict],
                     by_key: dict[str, dict], by_label: dict[str, dict]) -> dict:
@@ -108,6 +113,59 @@ def _coerce_value(value: Any, col: dict) -> Any:
         m = coerce(value, options)
         return m if m is not None else str(value)
     return str(value)
+
+
+def _clean_note(s: str) -> str:
+    """Strip a leading ※ (with optional following whitespace) and truncate to
+    1000 chars. The renderer auto-prefixes ※ so callers must not include it."""
+    text = s.lstrip()
+    if text.startswith("※"):
+        text = text[1:].lstrip()
+    return truncate(text, 1000)
+
+
+def _extract_content_extras(raw: dict) -> dict:
+    """Passthrough optional v0.5.0 content fields from a dict input.
+
+    Keys handled: note, column_widths, table_width_px, merges. Empty/invalid
+    values are dropped silently."""
+    out: dict = {}
+    note = raw.get("note")
+    if isinstance(note, str):
+        cleaned = _clean_note(note)
+        if cleaned:
+            out["note"] = cleaned
+    cw = raw.get("column_widths")
+    if isinstance(cw, dict):
+        widths: dict[str, int] = {}
+        for k, v in cw.items():
+            if isinstance(v, bool):
+                continue
+            if isinstance(v, (int, float)):
+                widths[str(k)] = int(v)
+        if widths:
+            out["column_widths"] = widths
+    tw = raw.get("table_width_px")
+    if isinstance(tw, int) and not isinstance(tw, bool):
+        out["table_width_px"] = tw
+    merges = raw.get("merges")
+    if isinstance(merges, list):
+        cleaned_merges: list[dict] = []
+        for m in merges:
+            if not isinstance(m, dict):
+                continue
+            entry: dict = {}
+            for k in ("r", "c", "rs", "cs"):
+                v = m.get(k)
+                if isinstance(v, bool):
+                    continue
+                if isinstance(v, (int, float)):
+                    entry[k] = int(v)
+            if entry:
+                cleaned_merges.append(entry)
+        if cleaned_merges:
+            out["merges"] = cleaned_merges
+    return out
 
 
 _TABLE_ROW = re.compile(r"^\s*\|(.+)\|\s*$")

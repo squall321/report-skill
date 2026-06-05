@@ -90,6 +90,21 @@ def update_blocks(
     lifecycle: Optional[str] = None,
     status: Optional[str] = None,   # legacy alias, mapped to phase
     tags: Optional[list[str]] = None,
+    # v0.5.0 — related-info fields (empty list clears all)
+    collab_workspace_slugs: Optional[list[str]] = None,
+    entity_ids: Optional[list[int]] = None,
+    report_type_id: Optional[int] = None,
+    # v0.5.0 — page-level layout / slide / rich-text-prefix settings
+    page_width_px: Optional[int] = None,
+    page_gap_px: Optional[int] = None,
+    page_blend_blocks: Optional[bool] = None,
+    page_slide_guide: Optional[bool] = None,
+    page_slide_ratio: Optional[str] = None,
+    page_slide_ratio_custom_w: Optional[int] = None,
+    page_slide_ratio_custom_h: Optional[int] = None,
+    page_rich_text_prefix_d0: Optional[str] = None,
+    page_rich_text_prefix_d1: Optional[str] = None,
+    page_rich_text_prefix_d2: Optional[str] = None,
 ) -> dict:
     """Patch specific blocks of an existing report.
 
@@ -103,6 +118,12 @@ def update_blocks(
       order. When None, new extras (from add_extra_blocks) are merged into
       the existing blocks_order at the end so they actually render.
     - `title`/`status`/`tags`: optional top-level field updates.
+    - `collab_workspace_slugs` / `entity_ids` / `report_type_id`: related-
+      info tagging. For the two list fields, passing `[]` clears all
+      existing values; passing `None` (default) leaves them untouched.
+    - `page_*` (10 fields): page-level layout, slide-guide, slide-ratio and
+      rich-text-prefix glyphs. Each is omitted from the PATCH body when
+      None so the server keeps the current value.
 
     Returns the updated Report record.
     """
@@ -161,6 +182,37 @@ def update_blocks(
         body["lifecycle"] = lifecycle
     if tags is not None:
         body["tags"] = tags
+    # v0.5.0 — related-info: lists use empty-list-clears-all semantics, so
+    # include the key whenever the caller passed any list (even []). None
+    # means "leave unset" so the key is omitted entirely.
+    if collab_workspace_slugs is not None:
+        body["collab_workspace_slugs"] = list(collab_workspace_slugs)
+    if entity_ids is not None:
+        body["entity_ids"] = list(entity_ids)
+    if report_type_id is not None:
+        body["report_type_id"] = report_type_id
+    # v0.5.0 — page-level settings. Each one is an Optional scalar: include
+    # only when explicitly set so the PATCH stays narrow.
+    if page_width_px is not None:
+        body["page_width_px"] = page_width_px
+    if page_gap_px is not None:
+        body["page_gap_px"] = page_gap_px
+    if page_blend_blocks is not None:
+        body["page_blend_blocks"] = page_blend_blocks
+    if page_slide_guide is not None:
+        body["page_slide_guide"] = page_slide_guide
+    if page_slide_ratio is not None:
+        body["page_slide_ratio"] = page_slide_ratio
+    if page_slide_ratio_custom_w is not None:
+        body["page_slide_ratio_custom_w"] = page_slide_ratio_custom_w
+    if page_slide_ratio_custom_h is not None:
+        body["page_slide_ratio_custom_h"] = page_slide_ratio_custom_h
+    if page_rich_text_prefix_d0 is not None:
+        body["page_rich_text_prefix_d0"] = page_rich_text_prefix_d0
+    if page_rich_text_prefix_d1 is not None:
+        body["page_rich_text_prefix_d1"] = page_rich_text_prefix_d1
+    if page_rich_text_prefix_d2 is not None:
+        body["page_rich_text_prefix_d2"] = page_rich_text_prefix_d2
     with edit_lock(client, report_id):
         return client._request("PATCH", f"/reports/{report_id}", json=body)
 
@@ -307,6 +359,39 @@ def unmount_report(
 ) -> dict:
     """DELETE /mounts/{report_id}/{workspace_slug} — remove one mount."""
     return client._request("DELETE", f"/mounts/{report_id}/{workspace_slug}")
+
+
+def set_mount_folder(
+    client: ReportArchiveClient,
+    report_id: int,
+    workspace_slug: str,
+    *,
+    folder_id: Optional[int],
+) -> dict:
+    """PUT /mounts/{report_id}/{workspace_slug}/folder — move the mount.
+
+    `folder_id=None` clears the folder (mount moves to the workspace root).
+    Permission: report owner OR mount creator OR workspace admin/manager.
+    Returns {report_id, workspace_slug, folder_id}.
+    """
+    return client.set_mount_folder(report_id, workspace_slug, folder_id=folder_id)
+
+
+def set_mount_edit_policy(
+    client: ReportArchiveClient,
+    report_id: int,
+    workspace_slug: str,
+    *,
+    edit_policy: str,
+) -> dict:
+    """PUT /mounts/{report_id}/{workspace_slug}/edit-policy — update policy.
+
+    `edit_policy` must be one of `default` / `owner_only` / `coauthor`.
+    Owner-only (Phase 3). Returns {report_id, workspace_slug, edit_policy}.
+    """
+    return client.set_mount_edit_policy(
+        report_id, workspace_slug, edit_policy=edit_policy
+    )
 
 
 def remove_items(

@@ -70,7 +70,15 @@ def swap_file_ids(obj: Any, mapping: dict[str, str]) -> None:
 # Strip server-managed fields so a fetched report can be POSTed elsewhere
 # --------------------------------------------------------------------------- #
 _TOP_KEEP = {"title", "report_date", "tags", "phase", "lifecycle",
-             "template_id", "template_version"}
+             "template_id", "template_version",
+             # v0.5.0 — report-level related info
+             "collab_workspace_slugs", "report_type_id",
+             # v0.5.0 — page-layout settings (top-level on ReportRead)
+             "page_width_px", "page_gap_px", "page_blend_blocks",
+             "page_slide_guide", "page_slide_ratio",
+             "page_slide_ratio_custom_w", "page_slide_ratio_custom_h",
+             "page_rich_text_prefix_d0", "page_rich_text_prefix_d1",
+             "page_rich_text_prefix_d2"}
 _PAGE_KEEP = {"template_id", "template_version", "name", "content",
               "extra_blocks", "blocks_order"}
 
@@ -79,6 +87,15 @@ def ready_for_recreate(report: dict) -> dict:
     """Strip server-managed fields (id, owner_id, created_at, revision, ...)
     from a fetched report so it matches the ReportCreate POST shape."""
     out: dict = {k: report[k] for k in _TOP_KEEP if k in report}
+    # ReportRead exposes related entities as `entities` (list of
+    # EntityRefMini objects with an `id` field). The write contract uses a
+    # flat `entity_ids` list — project the source field across the rename
+    # so round-tripping preserves the tags.
+    if "entities" in report:
+        out["entity_ids"] = [
+            e["id"] for e in (report.get("entities") or [])
+            if isinstance(e, dict) and isinstance(e.get("id"), int)
+        ]
     pages_out: list[dict] = []
     for p in report.get("pages") or []:
         page_out = {k: p[k] for k in _PAGE_KEEP if k in p}
