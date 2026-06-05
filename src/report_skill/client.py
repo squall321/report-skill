@@ -20,6 +20,23 @@ class ApiError(RuntimeError):
         self.payload = payload
 
 
+class AuthorLockedError(ApiError):
+    """Raised when the report owner has enabled author-edit-lock (403).
+
+    Subclasses ApiError so existing `except ApiError` paths keep working.
+    The MCP layer maps this to {"error":"author_locked","reason":...,"report_id":...}.
+    """
+
+    def __init__(self, reason: str = "", report_id: Optional[int] = None,
+                 status_code: int = 403):
+        super().__init__(
+            f"author_locked: {reason}" if reason else "author_locked",
+            status_code=status_code,
+        )
+        self.reason = reason
+        self.report_id = report_id
+
+
 class ReportArchiveClient:
     """Synchronous httpx-based client. One instance per process is fine."""
 
@@ -267,12 +284,23 @@ class ReportArchiveClient:
         to_report_id: int,
         kind: str = "related",
         label: Optional[str] = None,
+        direction: str = "outgoing",
     ) -> dict:
-        """POST /reports/{report_id}/links — create an outgoing link to
-        another report. `kind` defaults to 'related'; `label` becomes the
-        link note (server cap 200 chars).
+        """POST /reports/{report_id}/links — create a link to another report.
+
+        `kind` defaults to 'related'; `label` becomes the link note (server
+        cap 200 chars). `direction` is 'outgoing' (default — report_id → to_report_id)
+        or 'incoming' (server swaps from/to so the link points the other way).
         """
-        body: dict[str, Any] = {"to_report_id": int(to_report_id), "kind": kind}
+        if direction not in ("outgoing", "incoming"):
+            raise ValueError(
+                f"direction must be 'outgoing' or 'incoming', got {direction!r}"
+            )
+        body: dict[str, Any] = {
+            "to_report_id": int(to_report_id),
+            "kind": kind,
+            "direction": direction,
+        }
         if label is not None:
             body["note"] = label
         return self.post(f"/reports/{report_id}/links", json=body)
@@ -297,6 +325,22 @@ class ReportArchiveClient:
         Owner-only; no-op if not currently finalized.
         """
         return self.post(f"/reports/{report_id}/unpublish", json={})
+
+    def fetch_report_lock_status(self, report_id) -> dict:
+        """GET /reports/{report_id} projected to the 3 author-lock fields.
+
+        Returns {author_lock_enabled, author_lock_reason, author_lock_set_at}.
+        The service account is not the owner so we cannot toggle the lock;
+        this is read-only for diagnostics.
+        """
+        body = self.get(f"/reports/{report_id}")
+        if not isinstance(body, dict):
+            body = {}
+        return {
+            "author_lock_enabled": bool(body.get("author_lock_enabled", False)),
+            "author_lock_reason": body.get("author_lock_reason"),
+            "author_lock_set_at": body.get("author_lock_set_at"),
+        }
 
     # ---- folders / mounts ---------------------------------------------- #
 
@@ -453,11 +497,23 @@ class ReportArchiveClient:
             return list(body.get("items") or [])
         return list(body or []) if isinstance(body, list) else []
 
-    def list_composite_requests(self, composite_id) -> list[dict]:
+    def list_composite_requests(
+        self,
+        composite_id,
+        *,
+        status_filter: Optional[str] = None,
+    ) -> list[dict]:
         """GET /composites/{composite_id}/requests — pending requests by
-        default (server-side filter).
+        default (server-side filter). Pass `status_filter` (e.g. 'pending',
+        'accepted', 'rejected', 'withdrawn', 'all') to override.
         """
-        body = self.get(f"/composites/{composite_id}/requests")
+        params: dict[str, Any] = {}
+        if status_filter is not None:
+            params["status_filter"] = status_filter
+        body = self.get(
+            f"/composites/{composite_id}/requests",
+            params=params or None,
+        )
         if isinstance(body, dict) and "items" in body:
             return list(body.get("items") or [])
         return list(body or []) if isinstance(body, list) else []
@@ -551,20 +607,54 @@ class ReportArchiveClient:
         if isinstance(body, dict) and "success" in body:
             if body.get("success"):
                 return body.get("data")
+            message = body.get("message") or f"{method} {path} failed"
+            if resp.status_code == 403 and "작성자가 수정 잠금" in str(message):
+                raise self._build_author_locked_error(message, path)
             raise ApiError(
-                body.get("message") or f"{method} {path} failed",
+                message,
                 status_code=resp.status_code,
                 payload=body,
             )
 
         # Non-envelope endpoints (eg. health) — just return body
         if resp.is_error:
+            text_body = ""
+            if isinstance(body, dict):
+                text_body = str(body.get("message") or body.get("detail") or "")
+            elif isinstance(body, str):
+                text_body = body
+            if resp.status_code == 403 and "작성자가 수정 잠금" in text_body:
+                raise self._build_author_locked_error(text_body, path)
             raise ApiError(
                 f"{method} {path} returned {resp.status_code}",
                 status_code=resp.status_code,
                 payload=body,
             )
         return body
+
+    @staticmethod
+    def _build_author_locked_error(message: str, path: str) -> "AuthorLockedError":
+        """Parse the Korean lock message and extract reason + report_id from the URL.
+
+        Server format: "작성자가 수정 잠금 상태입니다 (사유: <reason>)".
+        """
+        reason = ""
+        marker = "사유: "
+        idx = message.find(marker)
+        if idx != -1:
+            tail = message[idx + len(marker):]
+            close = tail.rfind(")")
+            reason = (tail[:close] if close != -1 else tail).strip()
+        report_id: Optional[int] = None
+        # /reports/<id>/... or /reports/<id>
+        try:
+            import re as _re
+            m = _re.search(r"/reports/(\d+)", path)
+            if m:
+                report_id = int(m.group(1))
+        except Exception:
+            report_id = None
+        return AuthorLockedError(reason=reason, report_id=report_id, status_code=403)
 
     def close(self) -> None:
         self._http.close()

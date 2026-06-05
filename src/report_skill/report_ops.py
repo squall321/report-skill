@@ -18,6 +18,7 @@ and retries up to `max_retries` times before giving up with a clear error.
 """
 from __future__ import annotations
 
+import logging
 import time
 from contextlib import contextmanager
 from typing import Any, Iterator, Optional
@@ -178,6 +179,11 @@ def update_blocks(
     resolved_phase = normalize_phase(phase) or normalize_phase(status)
     if resolved_phase is not None:
         body["phase"] = resolved_phase
+        if resolved_phase == "finalized":
+            logging.warning(
+                "update_blocks: phase=finalized patch bypasses publish notifications "
+                "— consider using report_publish for finalize+notify behavior."
+            )
     if lifecycle is not None:
         body["lifecycle"] = lifecycle
     if tags is not None:

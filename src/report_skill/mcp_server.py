@@ -59,9 +59,61 @@ from report_skill import (
     widget_suggest,
 )
 from report_skill.adapters import ADAPTERS
-from report_skill.client import ApiError, ReportArchiveClient
+from report_skill.client import ApiError, AuthorLockedError, ReportArchiveClient
 
 SERVER_NAME = "report-skill"
+
+# v0.5.1 — 13 optional fields shared by report_create / report_update.
+# Three related-info + ten page-level. Pass-through to builder / report_ops
+# without any per-field plumbing — keeps schema, dispatcher and downstream
+# signatures synchronized (one source of truth).
+_REPORT_PASS_THROUGH = (
+    "collab_workspace_slugs",
+    "entity_ids",
+    "report_type_id",
+    "page_width_px",
+    "page_gap_px",
+    "page_blend_blocks",
+    "page_slide_guide",
+    "page_slide_ratio",
+    "page_slide_ratio_custom_w",
+    "page_slide_ratio_custom_h",
+    "page_rich_text_prefix_d0",
+    "page_rich_text_prefix_d1",
+    "page_rich_text_prefix_d2",
+)
+
+# Shared JSON-schema fragment for the 13 fields (RA-exact constraints —
+# ranges from backend ReportCreate/ReportUpdate, slide_ratio enum verbatim).
+_REPORT_EXTRA_PROPS: dict = {
+    "collab_workspace_slugs": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "협업 부서 워크스페이스 슬러그 목록 (빈 배열 = 전체 해제)",
+    },
+    "entity_ids": {
+        "type": "array",
+        "items": {"type": "integer"},
+        "description": "엔티티 태그 id 목록 (빈 배열 = 전체 해제)",
+    },
+    "report_type_id": {
+        "type": "integer",
+        "description": "report_types FK; null/omit = no tag",
+    },
+    "page_width_px": {"type": "integer", "minimum": 320, "maximum": 3000},
+    "page_gap_px": {"type": "integer", "minimum": 0, "maximum": 200},
+    "page_blend_blocks": {"type": "boolean"},
+    "page_slide_guide": {"type": "boolean"},
+    "page_slide_ratio": {
+        "type": "string",
+        "enum": ["16:9", "4:3", "16:10", "custom"],
+    },
+    "page_slide_ratio_custom_w": {"type": "integer", "minimum": 1, "maximum": 10000},
+    "page_slide_ratio_custom_h": {"type": "integer", "minimum": 1, "maximum": 10000},
+    "page_rich_text_prefix_d0": {"type": "string", "maxLength": 8},
+    "page_rich_text_prefix_d1": {"type": "string", "maxLength": 8},
+    "page_rich_text_prefix_d2": {"type": "string", "maxLength": 8},
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -133,6 +185,15 @@ TOOLS: list[Tool] = [
         ["report_id"],
     ),
     _tool(
+        "report_lock_status",
+        "Check the author-lock state of a report. Returns "
+        "author_lock_enabled / author_lock_reason / author_lock_set_at "
+        "from the Report record. Read-only — does NOT toggle the lock "
+        "(service accounts are not owners, so they cannot SET the lock).",
+        {"report_id": {"type": "integer"}},
+        ["report_id"],
+    ),
+    _tool(
         "examples_status",
         "Counts of widget examples that are ok / stale / missing / orphan vs the cached catalog.",
         {},
@@ -163,6 +224,7 @@ TOOLS: list[Tool] = [
             "allow_failures": {"type": "boolean", "default": False},
             "mount_to": {"type": "array", "items": {"type": "string"},
                          "description": "after create, auto-mount onto these board workspace(s)"},
+            **_REPORT_EXTRA_PROPS,
         },
         ["template_id", "blocks", "title"],
     ),
@@ -184,6 +246,7 @@ TOOLS: list[Tool] = [
             "status": {"type": "string", "description": "LEGACY alias for phase"},
             "tags": {"type": "array", "items": {"type": "string"}},
             "page_index": {"type": "integer", "default": 0},
+            **_REPORT_EXTRA_PROPS,
         },
         ["report_id"],
     ),
@@ -489,6 +552,13 @@ TOOLS: list[Tool] = [
             "kind": {"type": "string", "default": "related",
                      "description": "link kind (e.g. 'related', 'follow_up')"},
             "label": {"type": "string", "description": "optional short note (<=200 chars)"},
+            "direction": {
+                "type": "string",
+                "enum": ["outgoing", "incoming"],
+                "default": "outgoing",
+                "description": "'outgoing' (default — report_id → to_report_id) or "
+                               "'incoming' (server swaps from/to so the link points the other way)",
+            },
         },
         ["report_id", "to_report_id"],
     ),
@@ -521,9 +591,10 @@ TOOLS: list[Tool] = [
         "folders_list",
         "List folders for a workspace board. GET /api/folders?workspace_slug=. "
         "Pass an org slug for that board's folders, or 'personal-<user_id>' for "
-        "a user's personal folders. Side effect: server may auto-create defaults.",
+        "a user's personal folders. Omit workspace_slug to get the caller's own "
+        "personal folders. Side effect: server may auto-create defaults.",
         {"workspace_slug": {"type": "string"}},
-        ["workspace_slug"],
+        [],
     ),
     _tool(
         "report_mount_set_folder",
@@ -557,7 +628,10 @@ TOOLS: list[Tool] = [
         "Empty list / omitted = 전사 (global). Manager-only; cannot edit global "
         "templates here. Metadata-only — no version bump.",
         {
-            "template_id": {"type": "integer"},
+            "template_id": {
+                "type": "string",
+                "description": "template slug (e.g. 'engineering-rca')",
+            },
             "owner_workspace_slugs": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -799,6 +873,9 @@ def _do_report_show(args: dict) -> Any:
         "report_date": report.get("report_date"),
         "tags": report.get("tags"),
         "page_count": len(report.get("pages") or []),
+        # v0.5.1 — surface author-lock so callers can decide whether a
+        # write call would be rejected before issuing it.
+        "author_lock_enabled": bool(report.get("author_lock_enabled")),
     }
     pages = []
     page_iter = (report.get("pages") or [])
@@ -816,6 +893,23 @@ def _do_report_show(args: dict) -> Any:
             })
     summary["pages"] = pages
     return summary
+
+
+def _do_report_lock_status(args: dict) -> Any:
+    """Return the author-lock projection of a report.
+
+    Read-only diagnostic. Service accounts cannot set the lock (owner-only
+    on the RA side), so there is no companion `report_lock_set` tool.
+    """
+    rid = int(args["report_id"])
+    with ReportArchiveClient() as c:
+        info = c.fetch_report_lock_status(rid)
+    return {
+        "report_id": rid,
+        "author_lock_enabled": bool(info.get("author_lock_enabled")),
+        "author_lock_reason": info.get("author_lock_reason"),
+        "author_lock_set_at": info.get("author_lock_set_at"),
+    }
 
 
 def _do_examples_status(_args: dict) -> Any:
@@ -937,6 +1031,8 @@ def _do_report_create(args: dict) -> Any:
         derived_tags = args.get("tags") or tags_mod.infer_tags(
             title=args["title"], body_text="", max_tags=5,
         )
+        # v0.5.1 — forward the 13 optional related-info + page-level fields.
+        extra_kwargs = {k: args[k] for k in _REPORT_PASS_THROUGH if k in args}
         payload = report_builder.build_create_payload(
             tpl, result.content,
             title=args["title"],
@@ -946,6 +1042,7 @@ def _do_report_create(args: dict) -> Any:
             status=args.get("status"),  # legacy → mapped to phase by builder
             tags=derived_tags,
             extra_blocks=result.extra_blocks,
+            **extra_kwargs,
         )
         created = c.create_report(payload)
         # Optional auto-mount to org boards
@@ -996,6 +1093,8 @@ def _do_report_update(args: dict) -> Any:
         result = _normalize_and_upload(c, tpl, draft_blocks, synth_extras, snap)
         existing_extra_ids = {b.get("id") for b in existing_extras if isinstance(b, dict)}
         new_extras = [e for e in result.extra_blocks if e.get("id") not in existing_extra_ids]
+        # v0.5.1 — forward the 13 optional related-info + page-level fields.
+        extra_kwargs = {k: args[k] for k in _REPORT_PASS_THROUGH if k in args}
         updated = report_ops.update_blocks(
             c, rid,
             page_index=page_index,
@@ -1009,6 +1108,7 @@ def _do_report_update(args: dict) -> Any:
             lifecycle=args.get("lifecycle"),
             status=args.get("status"),
             tags=args.get("tags"),
+            **extra_kwargs,
         )
     return {"id": updated.get("id"), "revision": updated.get("revision"),
             "view_url": f"http://localhost:3001/reports/{updated.get('id')}",
@@ -1573,8 +1673,13 @@ def _do_report_add_link(args: dict) -> Any:
     to_rid = int(args["to_report_id"])
     kind = args.get("kind") or "related"
     label = args.get("label")
+    # v0.5.1 — 'outgoing' (default) or 'incoming'; server swaps from/to
+    # when 'incoming' so the link points the other way.
+    direction = args.get("direction") or "outgoing"
     with ReportArchiveClient() as c:
-        link = c.add_report_link(rid, to_report_id=to_rid, kind=kind, label=label)
+        link = c.add_report_link(
+            rid, to_report_id=to_rid, kind=kind, label=label, direction=direction,
+        )
     return link
 
 
@@ -1616,9 +1721,12 @@ def _do_report_unpublish(args: dict) -> Any:
 
 
 def _do_folders_list(args: dict) -> Any:
-    slug = str(args["workspace_slug"])
+    # v0.5.1 — workspace_slug is optional. Omit to fetch the caller's own
+    # personal folders (matches RA routes.py:104-106).
+    slug_raw = args.get("workspace_slug")
+    slug = str(slug_raw) if slug_raw is not None else None
     with ReportArchiveClient() as c:
-        rows = c.list_folders(slug)
+        rows = c.list_folders(slug) if slug is not None else c.list_folders()
     return [{
         "id": f.get("id"),
         "name": f.get("name"),
@@ -1650,7 +1758,9 @@ def _do_report_mount_set_edit_policy(args: dict) -> Any:
 
 
 def _do_template_set_scope(args: dict) -> Any:
-    tid = int(args["template_id"])
+    # v0.5.1 — template_id is a SLUG (e.g. 'engineering-rca'), not an int.
+    # RA backend TemplateScopeUpdate uses string pattern ^[a-z0-9][a-z0-9-]*$.
+    tid = str(args["template_id"])
     slugs = args.get("owner_workspace_slugs")
     if slugs is not None:
         slugs = [str(s) for s in slugs]
@@ -1777,6 +1887,7 @@ _DISPATCH = {
     "widgets_catalog": _do_widgets_catalog,
     "widgets_suggest_extras": _do_widgets_suggest_extras,
     "report_show": _do_report_show,
+    "report_lock_status": _do_report_lock_status,
     "examples_status": _do_examples_status,
     "tier_show": _do_tier_show,
     "report_create": _do_report_create,
@@ -1846,6 +1957,16 @@ async def call_tool(name: str, arguments: dict | None) -> list[TextContent]:
         return _text({"error": f"unknown tool '{name}'", "available": sorted(_DISPATCH)})
     try:
         result = await asyncio.to_thread(fn, args)
+    except AuthorLockedError as e:
+        # v0.5.1 — surface RA's author-lock 403 as a structured error so
+        # callers (LLMs) can react without having to parse Korean text.
+        # Must come BEFORE the generic ApiError handler since
+        # AuthorLockedError is an ApiError subclass.
+        return _text({
+            "error": "author_locked",
+            "reason": e.reason,
+            "report_id": e.report_id,
+        })
     except ApiError as e:
         return _text({"error": "API error", "status_code": e.status_code,
                       "message": str(e), "payload": e.payload})

@@ -1553,6 +1553,20 @@ def _summarize_block_content(v: Any) -> tuple[str, str]:
     return (f"{len(v)} keys", str(list(v.keys()))[:60])
 
 
+@report_app.command("lock-status")
+def report_lock_status(
+    report_id: int = typer.Argument(..., help="report id to inspect"),
+):
+    """Show author-lock state (author_lock_enabled / reason / set_at)."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.fetch_report_lock_status(report_id)
+        except ApiError as e:
+            console.print(f"[red]lock-status failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
 @report_app.command("mount")
 def report_mount(
     report_id: int = typer.Argument(...),
@@ -1873,10 +1887,17 @@ def tools_composites_submittable_for(
 def tools_composites_requests_list(
     composite_id: int = typer.Option(..., "--composite-id",
                                      help="composite id whose requests to list"),
+    status: Optional[str] = typer.Option(
+        None, "--status",
+        help="status_filter (e.g. pending/accepted/rejected/withdrawn)",
+    ),
 ):
     """List submission requests for a composite. GET /composites/{id}/requests."""
     from report_skill.mcp_server import _do_composites_requests_list
-    rows = _do_composites_requests_list({"composite_id": composite_id})
+    args: dict[str, Any] = {"composite_id": composite_id}
+    if status is not None:
+        args["status_filter"] = status
+    rows = _do_composites_requests_list(args)
     console.print_json(json.dumps(rows, ensure_ascii=False))
 
 

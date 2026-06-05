@@ -242,5 +242,42 @@ def cmd_suggest(
     console.print(tbl)
 
 
+# --------------------------------------------------------------------------- #
+# set-scope — manager governance
+# --------------------------------------------------------------------------- #
+@app.command("set-scope")
+def cmd_set_scope(
+    template_id: str = typer.Argument(..., help="template slug, e.g. engineering-rca"),
+    workspaces: list[str] = typer.Option(
+        [], "--workspace", "-w",
+        help="workspace slug; repeat for multiple (e.g. -w eng -w qa).",
+    ),
+    global_: bool = typer.Option(
+        False, "--global",
+        help="clear scope — template becomes global (전사).",
+    ),
+):
+    """PATCH /templates/{id}/scope — manager-only governance.
+
+    Pass --global to clear all workspace scopes (전사 visible), or pass one or
+    more --workspace flags to restrict visibility. The two are mutually
+    exclusive in practice: --global wins if both are provided.
+    """
+    scope: list[str] = [] if global_ else list(workspaces)
+    try:
+        with ReportArchiveClient() as client:
+            result = client.set_template_scope(
+                template_id, owner_workspace_slugs=scope,
+            )
+    except ApiError as e:
+        console.print(f"[red]set-scope failed ({e.status_code}):[/red] {e}")
+        raise typer.Exit(2)
+    except Exception as e:
+        console.print(f"[red]set-scope failed:[/red] {e}")
+        raise typer.Exit(1)
+
+    console.print_json(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 if __name__ == "__main__":
     app()

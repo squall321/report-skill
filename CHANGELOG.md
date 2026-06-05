@@ -1,5 +1,41 @@
 ﻿# Changelog
 
+## 0.5.1 — 2026-06-06
+
+Patch — closes 5 critical + 3 minor gaps left by v0.5.0 (the prior verify phase missed MCP-layer
+regressions because pytest did not exercise the MCP dispatch path).
+
+Fixed (critical):
+- report_create / report_update MCP tools now expose 13 fields (3 related-info + 10 page-level)
+  that v0.5.0 added to builder/ops but forgot at the MCP surface. additionalProperties:False
+  had blocked any workaround.
+- AuthorLockedError exception + report_lock_status MCP tool. client._request detects RA
+  403 "작성자가 수정 잠금" Korean prefix and raises AuthorLockedError(reason=...).
+  call_tool surfaces {"error":"author_locked", ...} instead of opaque 403.
+- template_set_scope type fix — schema and dispatcher now accept template slug (string),
+  not integer id. cli_templates set-scope subcommand added.
+- list_composite_requests accepts status_filter kwarg (was MCP-only, client TypeError).
+  cli composites-requests-list --status option added.
+- add_report_link / report_add_link accept direction enum ("outgoing"|"incoming", default outgoing).
+
+Fixed (minor):
+- folders_list MCP no longer requires workspace_slug (RA allows omitted = personal folders).
+- report_ops.update_blocks now warns when phase="finalized" is patched without using report_publish.
+- CHANGELOG 0.5.0 typo: "Flow E" → "Flow H" (actual SKILL.md header).
+
+Added (1 new MCP tool):
+- report_lock_status — wraps GET /api/reports/{id} projection for author_lock_enabled,
+  author_lock_reason, author_lock_set_at.
+
+Tests:
+- NEW tests/test_mcp_roundtrip.py — dispatches report_create/report_update via _DISPATCH
+  and asserts all 13 new fields propagate to the builder; asserts template_set_scope accepts
+  string slug; asserts list_composite_requests accepts status_filter without TypeError.
+
+Verified:
+- MCP _DISPATCH count 53 → 54.
+- pytest stays green including new roundtrip tests.
+
 ## 0.5.0 — 2026-06-05
 
 Closes the writer-side asymmetry left open by 0.4.0 and lifts the skill
@@ -169,7 +205,7 @@ e99e7f8 added `summary_widgets`):
   - New A.0 "Check for presets" precursor flow (`presets_list` →
     `report_new_from_preset`) for cases where the report being created
     matches a known preset.
-  - New Flow E "Submit to composite" (`composites_submittable_for` →
+  - New Flow H "Submit to composite" (`composites_submittable_for` →
     `composites_submit`).
   - New "Report copy" mini-flow under Flow A.
 
