@@ -643,7 +643,7 @@ def report_export(
 def tools_reports_search(
     q: Optional[str] = typer.Option(None, "--q", "-q",
                                      help="search keyword (title/owner/mount, NFKC + case-insensitive)"),
-    workspace_slug: Optional[str] = typer.Option(None, "--workspace-slug",
+    workspace_slug: Optional[str] = typer.Option(None, "--workspace-slug", "--workspace",
                                                   help="restrict to reports whose home workspace exactly matches"),
     owner_name: Optional[str] = typer.Option(None, "--owner",
                                               help="restrict to owner_name substring"),
@@ -1694,7 +1694,7 @@ def report_activities(
 @report_app.command("mount")
 def report_mount(
     report_id: int = typer.Argument(...),
-    workspace: list[str] = typer.Option(..., "--workspace", "-w",
+    workspace: list[str] = typer.Option(..., "--workspace", "--workspace-slug", "-w",
                                        help="workspace slug(s) to mount onto (repeat for multiple)"),
     edit_policy: str = typer.Option(
         "default", "--edit-policy",
@@ -1741,7 +1741,7 @@ def report_mount(
 @report_app.command("unmount")
 def report_unmount(
     report_id: int = typer.Argument(...),
-    workspace: str = typer.Option(..., "--workspace", "-w",
+    workspace: str = typer.Option(..., "--workspace", "--workspace-slug", "-w",
                                   help="workspace slug to remove the mount from"),
 ):
     """Remove a report's mount from one workspace board."""
@@ -2074,7 +2074,7 @@ def tools_report_types_list():
 
 @tools_app.command("folders-list")
 def tools_folders_list(
-    workspace: str = typer.Option(..., "--workspace", help="workspace slug"),
+    workspace: str = typer.Option(..., "--workspace", "--workspace-slug", help="workspace slug"),
 ):
     """List folders inside the given workspace board. GET /folders?workspace_slug=."""
     from report_skill.mcp_server import _do_folders_list
@@ -2163,7 +2163,7 @@ def tools_preset_create(
         help="optional human-readable description (max 1000 chars)",
     ),
     workspace: Optional[list[str]] = typer.Option(
-        None, "--workspace",
+        None, "--workspace", "--workspace-slug",
         help="workspace slug(s) that own the preset (repeat for multiple); "
              "omit to use the report's home workspace",
     ),
@@ -2262,6 +2262,13 @@ def tools_widgets_catalog(
     console.print_json(json.dumps(row, ensure_ascii=False))
 
 
+@tools_app.command("widget-relations-list")
+def tools_widget_relations_list():
+    """List widget-relation slugs (rich_text mention chip targets). GET /api/widget-relations."""
+    with ReportArchiveClient() as c:
+        console.print_json(json.dumps(c.list_widget_relations(), ensure_ascii=False))
+
+
 # --------------------------------------------------------------------------- #
 # v0.5.0 — composites sub-app: accept / reject / withdraw
 # v0.5.2 — composites get
@@ -2295,14 +2302,23 @@ def composites_create(
         help="ISO YYYY-MM-DD (recurring composites)",
     ),
     workspace: Optional[str] = typer.Option(
-        None, "--workspace",
+        None, "--workspace", "--workspace-slug",
         help="owner workspace slug; defaults to active workspace",
     ),
     description: str = typer.Option("", "--description",
                                      help="initial description"),
+    two_col_view: bool = typer.Option(
+        False, "--two-col-view",
+        help="enable two-column view layout (composites_create body flag)",
+    ),
     items_file: Optional[Path] = typer.Option(
         None, "--items-file", "-i",
         help="optional JSON file with items[] array to seed at creation time",
+    ),
+    summary_widgets_file: Optional[Path] = typer.Option(
+        None, "--summary-widgets-file",
+        help="optional JSON file with a summary_widgets[] list to seed at "
+             "creation time",
     ),
 ):
     """POST /composites — create a new composite report.
@@ -2323,12 +2339,27 @@ def composites_create(
                           "{items: [...]} object[/red]")
             raise typer.Exit(1)
 
+    summary_widgets: Optional[list[dict]] = None
+    if summary_widgets_file is not None:
+        text = summary_widgets_file.read_text(encoding="utf-8")
+        sw_payload = json.loads(text)
+        if isinstance(sw_payload, list):
+            summary_widgets = list(sw_payload)
+        elif isinstance(sw_payload, dict) and "summary_widgets" in sw_payload:
+            summary_widgets = list(sw_payload.get("summary_widgets") or [])
+        else:
+            console.print("[red]--summary-widgets-file must contain a JSON "
+                          "list or {summary_widgets: [...]} object[/red]")
+            raise typer.Exit(1)
+
     with ReportArchiveClient() as client:
         try:
             row = client.create_composite(
                 title=title, kind=kind, view_mode=view_mode,
                 period_date=period_date, workspace_slug=workspace,
                 description=description, items=items,
+                two_col_view=two_col_view,
+                summary_widgets=summary_widgets,
             )
         except AuthorLockedError as e:
             console.print(f"[red][author_locked][/red] reason: {e.reason}  "
@@ -2355,6 +2386,11 @@ def composites_update(
         None, "--period-date",
         help="ISO YYYY-MM-DD; pass an empty string to clear",
     ),
+    summary_widgets_file: Optional[Path] = typer.Option(
+        None, "--summary-widgets-file",
+        help="optional JSON file with a summary_widgets[] list; replaces the "
+             "composite's summary widget panel",
+    ),
     expected_revision: Optional[int] = typer.Option(
         None, "--expected-revision",
         help="optimistic concurrency guard (409 on mismatch)",
@@ -2377,6 +2413,19 @@ def composites_update(
     if period_date is not None:
         # Empty string is the CLI signal for "clear" (None reaches the body).
         kwargs["period_date"] = period_date if period_date else None
+    if summary_widgets_file is not None:
+        text = summary_widgets_file.read_text(encoding="utf-8")
+        sw_payload = json.loads(text)
+        if isinstance(sw_payload, list):
+            kwargs["summary_widgets"] = list(sw_payload)
+        elif isinstance(sw_payload, dict) and "summary_widgets" in sw_payload:
+            kwargs["summary_widgets"] = list(
+                sw_payload.get("summary_widgets") or []
+            )
+        else:
+            console.print("[red]--summary-widgets-file must contain a JSON "
+                          "list or {summary_widgets: [...]} object[/red]")
+            raise typer.Exit(1)
     if expected_revision is not None:
         kwargs["expected_revision"] = expected_revision
 
@@ -2592,7 +2641,7 @@ def composites_withdraw(
 @mounts_app.command("set-folder")
 def mounts_set_folder(
     report_id: int = typer.Option(..., "--report-id"),
-    workspace: str = typer.Option(..., "--workspace", help="workspace slug of the mount"),
+    workspace: str = typer.Option(..., "--workspace", "--workspace-slug", help="workspace slug of the mount"),
     folder_id: Optional[int] = typer.Option(None, "--folder-id",
                                             help="target folder id; omit to clear the folder"),
 ):
@@ -2616,7 +2665,7 @@ def mounts_set_folder(
 @mounts_app.command("set-edit-policy")
 def mounts_set_edit_policy(
     report_id: int = typer.Option(..., "--report-id"),
-    workspace: str = typer.Option(..., "--workspace", help="workspace slug of the mount"),
+    workspace: str = typer.Option(..., "--workspace", "--workspace-slug", help="workspace slug of the mount"),
     policy: str = typer.Option(..., "--policy",
                                help="default | owner_only | coauthor"),
 ):

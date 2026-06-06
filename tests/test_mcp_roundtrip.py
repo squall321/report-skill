@@ -246,10 +246,11 @@ def test_add_report_link_accepts_direction(monkeypatch):
 # --------------------------------------------------------------------------- #
 # 6. _DISPATCH size — locks the surface so an accidental rename / drop fails
 # --------------------------------------------------------------------------- #
-def test_dispatch_count_is_65():
+def test_dispatch_count_is_66():
     # v0.5.0 shipped 53 tools; v0.5.1 adds `report_lock_status` → 54;
-    # v0.6.0 adds 6 composites body editing + 1 activities + 4 notifications → 65.
-    assert len(_DISPATCH) == 65, sorted(_DISPATCH)
+    # v0.6.0 adds 6 composites body editing + 1 activities + 4 notifications → 65;
+    # v0.7.0 adds `widget_relations_list` → 66.
+    assert len(_DISPATCH) == 66, sorted(_DISPATCH)
 
 
 # --------------------------------------------------------------------------- #

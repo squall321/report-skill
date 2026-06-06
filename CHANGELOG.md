@@ -1,5 +1,69 @@
 ﻿# Changelog
 
+## 0.7.0 — 2026-06-07
+
+Minor — closes the Med + Low audit gaps from the v0.6.0 recheck. CLI parity,
+SKILL.md inventory, new `widget_relations_list` resolver tool, MCP error semantics
+correction, extended typed-exception + negative-path test coverage.
+
+Added — 1 new MCP tool + matching CLI command (MCP `_DISPATCH` 65 → 66):
+
+- `widget_relations_list` — `GET /widget-relations`. Returns the catalog of relation
+  slugs that `rich_text` mention chips can target. Closes the LLM "must guess relation
+  slug" gap that prior versions left as a future bucket item.
+
+Added — CLI parity with v0.6.0 MCP surface:
+
+- `composites create` gains `--two-col-view` flag and `--summary-widgets-file PATH`
+  (reads JSON file, forwards as `summary_widgets`).
+- `composites update` gains `--summary-widgets-file PATH`.
+
+Added — workspace flag alias unification (8 call sites):
+
+- `reports-search`, `report mount`, `report unmount`, `tools folders-list`,
+  `tools preset-create`, `composites create`, `mounts set-folder`,
+  `mounts set-edit-policy` — all accept both `--workspace` and `--workspace-slug`
+  (the previously canonical `--workspace-slug` site at line 646 now also accepts
+  `--workspace`).
+
+Changed — MCP `call_tool` error semantics:
+
+- All 6 error paths in `call_tool` (unknown-tool, typed-subclass dispatch, generic
+  `ApiError` envelope, `ValueError`/`KeyError`/`IndexError`/`FileNotFoundError`,
+  classified `RuntimeError`, final safety net) now `raise` with the JSON envelope
+  as the exception message, so the MCP framework yields
+  `CallToolResult.isError=True`. Success path unchanged.
+- Breaking only for clients that parsed error JSON from the success-shaped text
+  content; non-breaking for clients that respect MCP error semantics.
+- The error JSON shape (`{error, status_code, …}`) is preserved verbatim — only
+  the delivery channel changed.
+
+Fixed:
+
+- `CompositeRevisionConflict` docstring rewritten to accurately describe the RA
+  global error envelope (`backend/app/shared/errors.py:49-54`) and the
+  `code == "composite_revision_mismatch"` shape, instead of the prior inaccurate
+  "FastAPI default detail" wording.
+
+Tests — pytest 431 → 446 (+15 new):
+
+- `tests/test_authorlocked_mapping.py` — 7 sibling tests covering each typed
+  exception subclass (LockHeldByOther, LockNotHeld, RevisionMismatch,
+  CompositeRevisionConflict, FinalizedReadOnly, NoEditPermission, OutOfWorkspaceScope).
+  `_invoke_call_tool` helper updated to catch the new raised-error path.
+- `tests/test_dispatch_parametrized.py` — 5 negative-path cases (missing required,
+  invalid enum, type coercion failure) across representative tools.
+- `tests/test_widget_relations.py` (NEW) — `widget_relations_list` dispatch test +
+  `_DISPATCH` count pin at 66.
+
+Verified:
+
+- pytest 446 passed, 5 skipped.
+- `_DISPATCH` count = 66 (65 + `widget_relations_list`).
+- `report-skill tools widget-relations-list --help` displays.
+- `report-skill composites create --help` shows new flags; both `--workspace` and
+  `--workspace-slug` accepted everywhere.
+
 ## 0.6.1 — 2026-06-06
 
 Patch — silent no-op fix.

@@ -86,8 +86,9 @@ class RevisionMismatchError(ApiError):
 class CompositeRevisionConflict(ApiError):
     """Raised on PATCH /composites/{id} when items[] expected_revision mismatches.
 
-    Backend returns FastAPI default {detail:str} (NOT error_response envelope).
-    Detected by status==409 AND path startswith /composites/.
+    Wrapped by the RA global error envelope (backend/app/shared/errors.py:49-54)
+    into {"detail": "...", "code": "...", "errors": [...]} where
+    `code == "composite_revision_mismatch"`. Caller should reload + retry.
     """
 
     def __init__(self, message: str = "", *, payload: Any = None,
@@ -458,6 +459,15 @@ class ReportArchiveClient:
             "author_lock_reason": body.get("author_lock_reason"),
             "author_lock_set_at": body.get("author_lock_set_at"),
         }
+
+    # ---- widget relations --------------------------------------------- #
+
+    def list_widget_relations(self) -> list[dict]:
+        """GET /widget-relations — list relation slugs for rich_text mention chips."""
+        body = self.get("/widget-relations")
+        if isinstance(body, dict) and "items" in body:
+            return list(body.get("items") or [])
+        return list(body or []) if isinstance(body, list) else []
 
     # ---- folders / mounts ---------------------------------------------- #
 

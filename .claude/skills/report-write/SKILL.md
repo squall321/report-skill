@@ -896,3 +896,33 @@ For all other ApiErrors the legacy `{error: "API error", status_code, message, p
 - **phase=finalized self-lock** — direct body PATCH (`report_update`, `report_add_page`, `report_revise`, `report_append`) on a `phase=finalized` report is rejected with `finalized_readonly`. The skill surfaces this in the response `warnings` list when applicable; for any intentional edit, call `report_unpublish` first to drop the report back to `drafting`, then patch, then `report_publish` again. Composite **summary widgets** and mount/folder operations are not blocked by finalize.
 - **mount auto-transitions `drafting` → `reviewing`** — calling `report_mount` on a `drafting` report automatically advances `phase` to `reviewing` (one-way). Subsequent unmounts do not revert. If the user later wants the report back at `drafting`, call `report_unpublish` (no-op on non-finalized) or manually set `phase` via `report_update`.
 - **`report_publish` is idempotent** — calling on an already-finalized report is a no-op that returns current state. Notification fan-out (`report.phase_to_finalized`) only fires on the actual transition, not on idempotent re-calls. Same for `report_unpublish` on an already-drafting report.
+
+## v0.6.0 — new MCP tools
+
+The following 11 MCP tools were added in 0.6.0. From any MCP client (Claude Desktop / Continue / Cursor) call them by name.
+
+Composites (top-level lifecycle):
+
+- `composite_create` — POST `/api/composites`. Create a recurring or theme composite, optionally seeded with `items[]`.
+- `composite_update` — PATCH `/api/composites/{id}`. Top-level field editing (`period_date` tri-state nullable, `expected_revision` concurrency).
+- `composite_items_set` — PATCH `/api/composites/{id}` with `items[]`. Full agenda list replacement.
+- `composite_delete` — DELETE `/api/composites/{id}`. Owner or sys-admin only.
+- `composite_publish` — POST `/api/composites/{id}/publish`. Recurring composites freeze per-item snapshots. Idempotent.
+- `composite_unpublish` — POST `/api/composites/{id}/unpublish`. Clears snapshots. Idempotent.
+
+Activity feed:
+
+- `report_activities` — GET `/api/reports/{id}/activities`. Newest-first lifecycle/lock/edit/mount events; `before_id` cursor pagination.
+
+Notifications:
+
+- `notifications_list` — GET `/api/notifications`. Returns `{items, unread_count}`. Supports `--unread` + `--kind` filters.
+- `notifications_unread_count` — GET `/api/notifications/unread-count`. Single integer probe for polling loops.
+- `notification_mark_read` — PATCH `/api/notifications/{id}/read`. Idempotent.
+- `notifications_mark_all_read` — POST `/api/notifications/mark-all-read`. Returns rows-flipped count.
+
+## v0.7.0 — new MCP tools
+
+Widget relations:
+
+- `widget_relations_list` — GET `/api/widget-relations`. List relation slugs that `rich_text` mention chips can target.

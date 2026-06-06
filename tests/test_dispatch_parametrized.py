@@ -219,6 +219,7 @@ def _build_fake_client() -> MagicMock:
     m.fetch_workspaces.return_value = []
     m.fetch_entity_types.return_value = []
     m.fetch_entities.return_value = []
+    m.list_widget_relations.return_value = []
     m.upload_file.return_value = {"file_id": "f_abc", "filename": "x.png",
                                    "mime_type": "image/png", "size": 1}
     # `c.get(...)` is called by a few dispatchers (examples_mine_from_report,
@@ -313,6 +314,7 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "workspaces_list": {},
     "entity_types_list": {},
     "entities_list": {"q": "HFP"},
+    "widget_relations_list": {},
 
     # ---- v0.5.0 ----
     "report_copy": {"report_id": 1, "title": "copy"},
@@ -405,3 +407,87 @@ def test_args_by_tool_covers_every_dispatch_key() -> None:
         "every _DISPATCH key needs an entry in _ARGS_BY_TOOL "
         f"(missing: {missing})"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Negative-path coverage (v0.7.0).
+#
+# The happy-path smoke loop above proves "no stale kwargs / dead methods".
+# These negative tests prove the inverse: when the dispatcher is fed
+# obviously-malformed args, it raises a *useful* exception (KeyError /
+# ValueError / TypeError) instead of silently returning, partially
+# committing, or crashing with an AttributeError downstream.
+#
+# We pick a few representative dispatchers rather than hammering all 66 —
+# the failure modes here are about argument-handling style (required
+# lookups via args["k"], int() coercion, isinstance() guards), not the
+# per-tool business logic.
+# --------------------------------------------------------------------------- #
+def test_report_create_missing_required_template_id_raises_keyerror(monkeypatch) -> None:
+    """report_create looks up `args["template_id"]` unconditionally —
+    omitting it must surface as KeyError so call_tool can wrap into a
+    structured envelope (call_tool maps KeyError → {error:'KeyError'})."""
+    _install_stubs(monkeypatch)
+    _install_fake_client(monkeypatch, _build_fake_client())
+    fn = _DISPATCH["report_create"]
+    # `template_id` omitted on purpose. The dispatcher must raise — NOT
+    # silently default to '' or None which would create an empty report.
+    with pytest.raises(KeyError):
+        fn({"title": "t", "blocks": {}})
+
+
+def test_composite_create_missing_kind_raises_keyerror(monkeypatch) -> None:
+    """composite_create reads `args["kind"]` unconditionally; missing it
+    must KeyError. (Schema-level required-validation lives at the MCP
+    layer; this is the dispatcher's own contract.)"""
+    _install_stubs(monkeypatch)
+    _install_fake_client(monkeypatch, _build_fake_client())
+    fn = _DISPATCH["composite_create"]
+    with pytest.raises(KeyError):
+        fn({"title": "May agenda"})  # missing 'kind'
+
+
+def test_composite_summary_set_non_list_widgets_raises_valueerror(monkeypatch) -> None:
+    """composite_summary_set has an explicit isinstance(widgets, list)
+    guard — feeding a dict / string must raise ValueError with a clear
+    message so the LLM doesn't try to recover by retrying the same shape."""
+    _install_stubs(monkeypatch)
+    _install_fake_client(monkeypatch, _build_fake_client())
+    fn = _DISPATCH["composite_summary_set"]
+    with pytest.raises(ValueError, match="summary_widgets must be a list"):
+        fn({"composite_id": 10, "summary_widgets": {"not": "a list"}})
+
+
+def test_report_show_non_numeric_report_id_raises(monkeypatch) -> None:
+    """report_show coerces via int(args["report_id"]) — a non-numeric
+    string must raise ValueError (the call_tool error wrapper turns this
+    into a structured envelope). This catches accidents like an LLM
+    passing the mention literal "report:42" through.
+
+    int(...) on garbage raises ValueError; on None raises TypeError. We
+    accept either since both indicate a malformed argument."""
+    _install_stubs(monkeypatch)
+    _install_fake_client(monkeypatch, _build_fake_client())
+    fn = _DISPATCH["report_show"]
+    with pytest.raises((ValueError, TypeError)):
+        fn({"report_id": "not-a-number"})
+
+
+def test_report_mount_non_iterable_workspace_slugs_raises(monkeypatch) -> None:
+    """report_mount forwards `workspace_slugs` straight to
+    report_ops.mount_report which calls list(...) on it; passing an
+    int triggers TypeError ("'int' object is not iterable")."""
+    _install_stubs(monkeypatch)
+    # Override the mount_report stub with one that mirrors the real
+    # iteration contract (list(workspace_slugs)). The default stub in
+    # _install_stubs swallows kwargs and returns [], which would mask
+    # the type error we're trying to catch.
+    def _strict_mount(_c, _rid, *, workspace_slugs):
+        return list(workspace_slugs)  # raises TypeError on int
+
+    monkeypatch.setattr(mcp_server.report_ops, "mount_report", _strict_mount)
+    _install_fake_client(monkeypatch, _build_fake_client())
+    fn = _DISPATCH["report_mount"]
+    with pytest.raises(TypeError):
+        # int where iterable[str] expected
+        fn({"report_id": 1, "workspace_slugs": 42})

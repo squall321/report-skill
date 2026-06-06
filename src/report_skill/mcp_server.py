@@ -564,6 +564,11 @@ TOOLS: list[Tool] = [
         },
         [],
     ),
+    _tool(
+        "widget_relations_list",
+        "List widget-relation slugs the rich_text mention chips can target. GET /api/widget-relations.",
+        {},
+    ),
 
     # ---- v0.5.0 — copy / link / report-types ---------------------------- #
     _tool(
@@ -1846,6 +1851,11 @@ def _do_entities_list(args: dict) -> Any:
     return out
 
 
+def _do_widget_relations_list(_args: dict) -> Any:
+    with ReportArchiveClient() as c:
+        return c.list_widget_relations()
+
+
 # ---- v0.5.0 dispatchers ---------------------------------------------- #
 def _do_report_copy(args: dict) -> Any:
     rid = int(args["report_id"])
@@ -2297,6 +2307,7 @@ _DISPATCH = {
     "workspaces_list": _do_workspaces_list,
     "entity_types_list": _do_entity_types_list,
     "entities_list": _do_entities_list,
+    "widget_relations_list": _do_widget_relations_list,
     "report_milestone_add": _do_report_milestone_add,
     "report_milestone_remove": _do_report_milestone_remove,
     "file_upload": _do_file_upload,
@@ -2420,12 +2431,26 @@ def _api_error_payload(exc: ApiError) -> dict:
     return out
 
 
+def _err_json(payload: dict) -> str:
+    """Serialize an error payload as JSON for use as an exception message.
+
+    The MCP server framework catches any Exception raised from the call_tool
+    handler and surfaces `str(exc)` as the CallToolResult content with
+    isError=True. Encoding the structured payload here preserves the same
+    JSON envelope callers used to parse out of the success-shaped text.
+    """
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
 @server.call_tool()
 async def call_tool(name: str, arguments: dict | None) -> list[TextContent]:
     args = arguments or {}
     fn = _DISPATCH.get(name)
     if fn is None:
-        return _text({"error": f"unknown tool '{name}'", "available": sorted(_DISPATCH)})
+        # Unknown tool — raise so MCP surfaces CallToolResult.isError=True.
+        raise Exception(_err_json(
+            {"error": f"unknown tool '{name}'", "available": sorted(_DISPATCH)}
+        ))
     try:
         result = await asyncio.to_thread(fn, args)
     except ApiError as e:
@@ -2434,19 +2459,21 @@ async def call_tool(name: str, arguments: dict | None) -> list[TextContent]:
         # structured {error: <code>, reason, code, report_id} payload.
         for cls, code, include_rid in _TYPED_ERROR_MAP:
             if isinstance(e, cls):
-                return _text(_format_typed_error(e, code, include_rid))
+                raise Exception(_err_json(_format_typed_error(e, code, include_rid))) from e
         # A8 — generic ApiError, promote errors[0].code to top-level.
-        return _text(_api_error_payload(e))
+        raise Exception(_err_json(_api_error_payload(e))) from e
     except (ValueError, KeyError, IndexError, FileNotFoundError) as e:
-        return _text({"error": type(e).__name__, "message": str(e)})
+        raise Exception(_err_json({"error": type(e).__name__, "message": str(e)})) from e
     except RuntimeError as e:
         # v0.5.2 — A5: classify the three RuntimeError flavours the inner
         # dispatchers raise (SnapshotMissing, LLMError, no-LLM-provider) so
         # the LLM sees `snapshot_missing` / `llm_error` / `no_llm_provider`
         # instead of a useless "internal" label.
-        return _text(_classify_runtime_error(e))
+        raise Exception(_err_json(_classify_runtime_error(e))) from e
     except Exception as e:  # final safety net — surface the type for diagnosis
-        return _text({"error": "internal", "type": type(e).__name__, "message": str(e)})
+        raise Exception(_err_json(
+            {"error": "internal", "type": type(e).__name__, "message": str(e)}
+        )) from e
     return _text(result)
 
 

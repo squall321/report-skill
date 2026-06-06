@@ -25,7 +25,14 @@ from report_skill import mcp_server
 from report_skill.client import (
     ApiError,
     AuthorLockedError,
+    CompositeRevisionConflict,
+    FinalizedReadOnlyError,
+    LockHeldByOtherError,
+    LockNotHeldError,
+    NoEditPermissionError,
+    OutOfWorkspaceScopeError,
     ReportArchiveClient,
+    RevisionMismatchError,
 )
 
 
@@ -91,9 +98,16 @@ def _install_fake_client_that_raises(monkeypatch, exc: BaseException) -> None:
 
 
 def _invoke_call_tool(name: str, args: dict) -> dict:
-    """Run the MCP `call_tool` async coroutine and return the parsed JSON."""
-    content = asyncio.run(mcp_server.call_tool(name, args))
-    # `call_tool` returns list[TextContent]. Parse the single text element.
+    """Run the MCP `call_tool` async coroutine and return the parsed JSON envelope.
+
+    v0.7.0 — error paths now raise Exception(json_envelope) so the MCP
+    framework yields CallToolResult.isError=True. Success path still returns
+    list[TextContent]. Both forms are unwrapped here for test convenience.
+    """
+    try:
+        content = asyncio.run(mcp_server.call_tool(name, args))
+    except Exception as exc:
+        return json.loads(str(exc))
     assert isinstance(content, list) and content, (
         f"call_tool returned unexpected shape: {content!r}"
     )
@@ -183,3 +197,164 @@ def test_call_tool_report_publish_maps_authorlocked(monkeypatch) -> None:
     assert out.get("error") == "author_locked", out
     assert out.get("reason") == "review", out
     assert out.get("report_id") == 7, out
+
+
+# --------------------------------------------------------------------------- #
+# 5) v0.7.0 — sibling tests for the other typed exceptions.
+#
+# Each test feeds the body/status pair through `_build_typed_error` (the
+# single source of truth used by `_request`) and asserts the right subclass
+# is built. We don't need to spin up an httpx MockTransport — `_build_typed_error`
+# is a pure classifier over (status_code, message, path, body). Going
+# through the classifier exercises the exact code path `_request` would
+# hit for a real 409/403 from the backend, without any network plumbing.
+#
+# Pattern matches the existing AuthorLockedError test
+# (`test_build_typed_error_classifies_korean_author_lock`).
+# --------------------------------------------------------------------------- #
+def test_build_typed_error_classifies_lock_held_by_other() -> None:
+    """409 + payload.errors[0].code == 'lock_held_by_other' → LockHeldByOtherError.
+    Holder dict on the error envelope is surfaced for diagnostics."""
+    holder = {"user_id": 42, "user_name": "Alice"}
+    body = {
+        "success": False,
+        "message": "다른 사용자가 잠금을 보유 중입니다.",
+        "errors": [{"code": "lock_held_by_other",
+                    "message": "lock held",
+                    "holder": holder}],
+    }
+    err = ReportArchiveClient._build_typed_error(
+        status_code=409,
+        message="다른 사용자가 잠금을 보유 중입니다.",
+        path="/reports/42/lock",
+        body=body,
+    )
+    assert isinstance(err, LockHeldByOtherError), (
+        f"409 lock_held_by_other must map to LockHeldByOtherError; "
+        f"got {type(err).__name__ if err else 'None'}"
+    )
+    assert err.code == "lock_held_by_other"
+    assert err.holder == holder, f"holder not surfaced: {err.holder!r}"
+
+
+def test_build_typed_error_classifies_lock_not_held() -> None:
+    """409 + payload.errors[0].code == 'lock_not_held' → LockNotHeldError."""
+    body = {
+        "success": False,
+        "message": "현재 편집 잠금을 보유하고 있지 않습니다.",
+        "errors": [{"code": "lock_not_held", "message": "no lock"}],
+    }
+    err = ReportArchiveClient._build_typed_error(
+        status_code=409,
+        message="현재 편집 잠금을 보유하고 있지 않습니다.",
+        path="/reports/42/lock",
+        body=body,
+    )
+    assert isinstance(err, LockNotHeldError), (
+        f"409 lock_not_held must map to LockNotHeldError; "
+        f"got {type(err).__name__ if err else 'None'}"
+    )
+    assert err.code == "lock_not_held"
+
+
+def test_build_typed_error_classifies_revision_mismatch() -> None:
+    """409 + payload.errors[0].code == 'revision_mismatch' → RevisionMismatchError.
+    Callers (append_to_blocks retry loop) match on this subclass to know
+    they should reload + rebase."""
+    body = {
+        "success": False,
+        "message": "expected_revision does not match current revision",
+        "errors": [{"code": "revision_mismatch",
+                    "message": "stale revision"}],
+    }
+    err = ReportArchiveClient._build_typed_error(
+        status_code=409,
+        message="expected_revision does not match current revision",
+        path="/reports/42",
+        body=body,
+    )
+    assert isinstance(err, RevisionMismatchError), (
+        f"409 revision_mismatch must map to RevisionMismatchError; "
+        f"got {type(err).__name__ if err else 'None'}"
+    )
+    assert err.code == "revision_mismatch"
+
+
+def test_build_typed_error_classifies_composite_revision_mismatch() -> None:
+    """409 + payload.errors[0].code == 'composite_revision_mismatch'
+    → CompositeRevisionConflict (with composite_id parsed from URL)."""
+    body = {
+        "success": False,
+        "message": "composite revision mismatch",
+        "errors": [{"code": "composite_revision_mismatch",
+                    "message": "stale composite revision"}],
+    }
+    err = ReportArchiveClient._build_typed_error(
+        status_code=409,
+        message="composite revision mismatch",
+        path="/composites/77",
+        body=body,
+    )
+    assert isinstance(err, CompositeRevisionConflict), (
+        f"409 composite_revision_mismatch must map to CompositeRevisionConflict; "
+        f"got {type(err).__name__ if err else 'None'}"
+    )
+    assert err.code == "composite_revision_mismatch"
+    assert err.composite_id == 77, (
+        f"composite_id parse failed: {err.composite_id!r}"
+    )
+
+
+def test_build_typed_error_classifies_finalized_read_only() -> None:
+    """403 + Korean prefix '발행된 보고서' → FinalizedReadOnlyError
+    (with report_id parsed from URL). Caller signal: unpublish first."""
+    msg = "발행된 보고서는 편집할 수 없습니다."
+    body = {"success": False, "message": msg, "errors": None}
+    err = ReportArchiveClient._build_typed_error(
+        status_code=403,
+        message=msg,
+        path="/reports/42",
+        body=body,
+    )
+    assert isinstance(err, FinalizedReadOnlyError), (
+        f"403 finalized prefix must map to FinalizedReadOnlyError; "
+        f"got {type(err).__name__ if err else 'None'}"
+    )
+    assert err.code == "finalized_read_only"
+    assert err.report_id == 42, f"report_id parse failed: {err.report_id!r}"
+
+
+def test_build_typed_error_classifies_no_edit_permission() -> None:
+    """403 + '편집할 권한이 없' substring → NoEditPermissionError
+    (covers the three backend variants — base, link-add, link-remove)."""
+    msg = "이 보고서를 편집할 권한이 없습니다."
+    body = {"success": False, "message": msg, "errors": None}
+    err = ReportArchiveClient._build_typed_error(
+        status_code=403,
+        message=msg,
+        path="/reports/99",
+        body=body,
+    )
+    assert isinstance(err, NoEditPermissionError), (
+        f"403 no-edit-permission must map to NoEditPermissionError; "
+        f"got {type(err).__name__ if err else 'None'}"
+    )
+    assert err.code == "no_edit_permission"
+    assert err.report_id == 99, f"report_id parse failed: {err.report_id!r}"
+
+
+def test_build_typed_error_classifies_out_of_workspace_scope() -> None:
+    """403 + ASCII exact 'Out of workspace scope' → OutOfWorkspaceScopeError."""
+    msg = "Out of workspace scope"
+    body = {"success": False, "message": msg, "errors": None}
+    err = ReportArchiveClient._build_typed_error(
+        status_code=403,
+        message=msg,
+        path="/reports/1",
+        body=body,
+    )
+    assert isinstance(err, OutOfWorkspaceScopeError), (
+        f"403 'Out of workspace scope' must map to OutOfWorkspaceScopeError; "
+        f"got {type(err).__name__ if err else 'None'}"
+    )
+    assert err.code == "out_of_workspace_scope"
