@@ -194,6 +194,27 @@ def _build_fake_client() -> MagicMock:
     m.accept_composite_request.return_value = {"ok": True}
     m.reject_composite_request.return_value = {"ok": True}
     m.withdraw_composite_request.return_value = {"ok": True}
+    # ---- v0.6.0 composites body editing ----
+    m.create_composite.return_value = {"id": 11, "title": "May agenda",
+                                        "kind": "recurring",
+                                        "workspace_slug": "personal-1",
+                                        "view_mode": "single",
+                                        "revision": 1, "items": []}
+    m.update_composite.return_value = {"id": 10, "title": "renamed",
+                                        "revision": 3, "view_mode": "single",
+                                        "items": []}
+    m.delete_composite.return_value = None
+    m.publish_composite.return_value = {"id": 10, "title": "c",
+                                         "published_at": "2026-06-06T00:00:00Z",
+                                         "revision": 4}
+    m.unpublish_composite.return_value = {"id": 10, "title": "c",
+                                           "published_at": None, "revision": 5}
+    # ---- v0.6.0 activities + notifications ----
+    m.fetch_report_activities.return_value = {"items": []}
+    m.list_notifications.return_value = {"items": [], "unread_count": 0}
+    m.unread_notification_count.return_value = 0
+    m.mark_notification_read.return_value = {"id": 5}
+    m.mark_all_notifications_read.return_value = 0
     m.fetch_linkable_reports.return_value = []
     m.fetch_workspaces.return_value = []
     m.fetch_entity_types.return_value = []
@@ -320,6 +341,21 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "composites_request_accept": {"composite_id": 10, "request_id": 1},
     "composites_request_reject": {"composite_id": 10, "request_id": 1},
     "composites_request_withdraw": {"composite_id": 10, "request_id": 1},
+
+    # ---- v0.6.0 composites body editing ----
+    "composite_create": {"title": "May agenda", "kind": "recurring"},
+    "composite_update": {"composite_id": 10, "title": "renamed"},
+    "composite_items_set": {"composite_id": 10, "items": []},
+    "composite_delete": {"composite_id": 10},
+    "composite_publish": {"composite_id": 10},
+    "composite_unpublish": {"composite_id": 10},
+
+    # ---- v0.6.0 activities + notifications ----
+    "report_activities": {"report_id": 1},
+    "notifications_list": {},
+    "notifications_unread_count": {},
+    "notification_mark_read": {"notification_id": 5},
+    "notifications_mark_all_read": {},
 }
 
 

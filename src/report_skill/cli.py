@@ -70,7 +70,9 @@ tools_app = typer.Typer(no_args_is_help=True,
 mounts_app = typer.Typer(no_args_is_help=True,
                           help="Mount config (folder, edit policy).")
 composites_app = typer.Typer(no_args_is_help=True,
-                              help="Composite report submissions.")
+                              help="Composite report body editing + submissions.")
+notifications_app = typer.Typer(no_args_is_help=True,
+                                 help="Notification inbox — react to events.")
 app.add_typer(catalog_app, name="catalog")
 app.add_typer(report_app, name="report")
 app.add_typer(tier_app, name="tier")
@@ -78,6 +80,7 @@ app.add_typer(bridge_app, name="bridge")
 app.add_typer(tools_app, name="tools")
 app.add_typer(mounts_app, name="mounts")
 app.add_typer(composites_app, name="composites")
+app.add_typer(notifications_app, name="notifications")
 app.add_typer(cli_examples.app, name="examples")
 app.add_typer(cli_llm.app, name="llm")
 app.add_typer(cli_files.app, name="files")
@@ -1661,6 +1664,33 @@ def report_lock_status(
     console.print_json(json.dumps(row, ensure_ascii=False))
 
 
+@report_app.command("activities")
+def report_activities(
+    report_id: int = typer.Argument(..., help="report id whose timeline to show"),
+    limit: int = typer.Option(20, "--limit", min=1, max=200,
+                              help="page size (max 200)"),
+    before_id: Optional[int] = typer.Option(
+        None, "--before-id",
+        help="cursor — pass the smallest id from the previous page",
+    ),
+):
+    """GET /reports/{id}/activities — newest-first activity timeline.
+
+    Use to verify side-effects after a write: did the publish notify the
+    mounted-board members? Did the author-lock toggle fire? Public-only
+    viewers get an empty list per backend policy.
+    """
+    with ReportArchiveClient() as client:
+        try:
+            body = client.fetch_report_activities(
+                report_id, limit=limit, before_id=before_id,
+            )
+        except ApiError as e:
+            console.print(f"[red]activities failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(body, ensure_ascii=False))
+
+
 @report_app.command("mount")
 def report_mount(
     report_id: int = typer.Argument(...),
@@ -2250,6 +2280,244 @@ def composites_get(
     console.print_json(json.dumps(row, ensure_ascii=False))
 
 
+# --------------------------------------------------------------------------- #
+# v0.6.0 — composites body editing
+# --------------------------------------------------------------------------- #
+@composites_app.command("create")
+def composites_create(
+    title: str = typer.Option(..., "--title", help="composite title"),
+    kind: str = typer.Option(..., "--kind",
+                              help="CompositeKind enum value (recurring | theme | ...)"),
+    view_mode: str = typer.Option("single", "--view-mode",
+                                   help="single | two_col | list"),
+    period_date: Optional[str] = typer.Option(
+        None, "--period-date",
+        help="ISO YYYY-MM-DD (recurring composites)",
+    ),
+    workspace: Optional[str] = typer.Option(
+        None, "--workspace",
+        help="owner workspace slug; defaults to active workspace",
+    ),
+    description: str = typer.Option("", "--description",
+                                     help="initial description"),
+    items_file: Optional[Path] = typer.Option(
+        None, "--items-file", "-i",
+        help="optional JSON file with items[] array to seed at creation time",
+    ),
+):
+    """POST /composites — create a new composite report.
+
+    Pass `--items-file` to seed agenda items at creation; otherwise the
+    composite starts empty and you edit items via `composites items-set`.
+    """
+    items: Optional[list[dict]] = None
+    if items_file is not None:
+        text = items_file.read_text(encoding="utf-8")
+        payload = json.loads(text)
+        if isinstance(payload, dict) and "items" in payload:
+            items = list(payload.get("items") or [])
+        elif isinstance(payload, list):
+            items = list(payload)
+        else:
+            console.print("[red]--items-file must contain a JSON list or "
+                          "{items: [...]} object[/red]")
+            raise typer.Exit(1)
+
+    with ReportArchiveClient() as client:
+        try:
+            row = client.create_composite(
+                title=title, kind=kind, view_mode=view_mode,
+                period_date=period_date, workspace_slug=workspace,
+                description=description, items=items,
+            )
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
+        except ApiError as e:
+            console.print(f"[red]composite create failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@composites_app.command("update")
+def composites_update(
+    composite_id: int = typer.Argument(..., help="composite id to update"),
+    title: Optional[str] = typer.Option(None, "--title"),
+    view_mode: Optional[str] = typer.Option(None, "--view-mode",
+                                             help="single | two_col | list"),
+    description: Optional[str] = typer.Option(None, "--description"),
+    two_col_view: Optional[bool] = typer.Option(None, "--two-col-view"),
+    period_date: Optional[str] = typer.Option(
+        None, "--period-date",
+        help="ISO YYYY-MM-DD; pass an empty string to clear",
+    ),
+    expected_revision: Optional[int] = typer.Option(
+        None, "--expected-revision",
+        help="optimistic concurrency guard (409 on mismatch)",
+    ),
+):
+    """PATCH /composites/{id} — update top-level fields only.
+
+    Only the fields you pass on the CLI are sent. To replace items, use
+    `composites items-set` instead.
+    """
+    kwargs: dict[str, Any] = {}
+    if title is not None:
+        kwargs["title"] = title
+    if view_mode is not None:
+        kwargs["view_mode"] = view_mode
+    if description is not None:
+        kwargs["description"] = description
+    if two_col_view is not None:
+        kwargs["two_col_view"] = two_col_view
+    if period_date is not None:
+        # Empty string is the CLI signal for "clear" (None reaches the body).
+        kwargs["period_date"] = period_date if period_date else None
+    if expected_revision is not None:
+        kwargs["expected_revision"] = expected_revision
+
+    with ReportArchiveClient() as client:
+        try:
+            row = client.update_composite(composite_id, **kwargs)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
+        except ApiError as e:
+            console.print(f"[red]composite update failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@composites_app.command("items-set")
+def composites_items_set(
+    composite_id: int = typer.Argument(..., help="composite id"),
+    items_file: Path = typer.Option(
+        ..., "--items-file", "-i",
+        help="JSON file with the replacement items[] array (or "
+             "{items: [...]} object)",
+    ),
+    expected_revision: Optional[int] = typer.Option(
+        None, "--expected-revision",
+        help="optimistic concurrency guard (409 on mismatch)",
+    ),
+):
+    """PATCH /composites/{id} with full items[] replacement.
+
+    Each item supplies exactly one of `ref_report_id` / `ref_composite_id`,
+    plus optional `note` / `display_column` / `group_name`. Order matters
+    (position is taken from list index).
+    """
+    text = items_file.read_text(encoding="utf-8")
+    payload = json.loads(text)
+    if isinstance(payload, dict) and "items" in payload:
+        items = list(payload.get("items") or [])
+    elif isinstance(payload, list):
+        items = list(payload)
+    else:
+        console.print("[red]--items-file must be a JSON list or {items: [...]}"
+                      "[/red]")
+        raise typer.Exit(1)
+    with ReportArchiveClient() as client:
+        try:
+            row = client.update_composite(
+                composite_id, items=items, expected_revision=expected_revision,
+            )
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
+        except ApiError as e:
+            console.print(f"[red]composite items-set failed ({e.status_code}):"
+                          f"[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@composites_app.command("delete")
+def composites_delete(
+    composite_id: int = typer.Argument(..., help="composite id to delete"),
+    confirm: bool = typer.Option(False, "--yes", "-y",
+                                  help="confirm destructive operation"),
+):
+    """DELETE /composites/{id} — owner / sys admin only."""
+    if not confirm:
+        console.print("[red]Pass --yes to confirm deletion[/red]")
+        raise typer.Exit(1)
+    with ReportArchiveClient() as client:
+        try:
+            client.delete_composite(composite_id)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
+        except ApiError as e:
+            console.print(f"[red]composite delete failed ({e.status_code}):"
+                          f"[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps({"deleted": True, "id": composite_id},
+                                  ensure_ascii=False))
+
+
+@composites_app.command("publish")
+def composites_publish(
+    composite_id: int = typer.Argument(..., help="composite id to publish"),
+):
+    """POST /composites/{id}/publish — owner only. Freezes recurring
+    composite items into snapshots. Idempotent."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.publish_composite(composite_id)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
+        except ApiError as e:
+            console.print(f"[red]composite publish failed ({e.status_code}):"
+                          f"[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@composites_app.command("unpublish")
+def composites_unpublish(
+    composite_id: int = typer.Argument(..., help="composite id to unpublish"),
+):
+    """POST /composites/{id}/unpublish — owner only. Clears snapshots,
+    returns composite to live + editable mode. Idempotent."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.unpublish_composite(composite_id)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
+        except ApiError as e:
+            console.print(f"[red]composite unpublish failed ({e.status_code}):"
+                          f"[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
 @composites_app.command("accept")
 def composites_accept(
     composite_id: int = typer.Option(..., "--composite-id"),
@@ -2371,6 +2639,78 @@ def mounts_set_edit_policy(
             console.print(f"[red]set-edit-policy failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
     console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+# --------------------------------------------------------------------------- #
+# v0.6.0 — notifications sub-app: list / unread-count / mark-read / mark-all-read
+# --------------------------------------------------------------------------- #
+@notifications_app.command("list")
+def notifications_list_cmd(
+    unread_only: bool = typer.Option(False, "--unread-only",
+                                      help="filter to unread items only"),
+    limit: int = typer.Option(50, "--limit", min=1, max=200,
+                              help="page size (max 200)"),
+    before_id: Optional[int] = typer.Option(
+        None, "--before-id",
+        help="cursor — pass the smallest id from the previous page",
+    ),
+):
+    """GET /notifications — list the caller's inbox.
+
+    Returns `{items, unread_count}` so reactive agents can render badge +
+    list in one shot.
+    """
+    with ReportArchiveClient() as client:
+        try:
+            body = client.list_notifications(
+                unread_only=unread_only, limit=limit, before_id=before_id,
+            )
+        except ApiError as e:
+            console.print(f"[red]notifications list failed ({e.status_code}):"
+                          f"[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(body, ensure_ascii=False))
+
+
+@notifications_app.command("unread-count")
+def notifications_unread_count_cmd():
+    """GET /notifications/unread-count — single integer badge count."""
+    with ReportArchiveClient() as client:
+        try:
+            n = client.unread_notification_count()
+        except ApiError as e:
+            console.print(f"[red]unread-count failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps({"unread_count": int(n)}, ensure_ascii=False))
+
+
+@notifications_app.command("mark-read")
+def notifications_mark_read_cmd(
+    notification_id: int = typer.Argument(..., help="notification id to mark read"),
+):
+    """PATCH /notifications/{id}/read — mark a single notification read.
+    Idempotent."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.mark_notification_read(notification_id)
+        except ApiError as e:
+            console.print(f"[red]mark-read failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@notifications_app.command("mark-all-read")
+def notifications_mark_all_read_cmd():
+    """POST /notifications/mark-all-read — flip every unread row to read.
+    Returns the count of rows affected."""
+    with ReportArchiveClient() as client:
+        try:
+            n = client.mark_all_notifications_read()
+        except ApiError as e:
+            console.print(f"[red]mark-all-read failed ({e.status_code}):"
+                          f"[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps({"marked_read": int(n)}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

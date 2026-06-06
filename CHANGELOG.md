@@ -1,5 +1,55 @@
 ﻿# Changelog
 
+## 0.6.0 — 2026-06-06
+
+Surface expansion — full composite body editing, report activity timeline, and the
+notification inbox. No breaking changes to existing tools. MCP _DISPATCH grows from
+54 to 65 (11 new tools). Adds a typer CliRunner smoke suite over every new command.
+
+Added — composites body editing (6 new MCP tools, 6 new CLI commands):
+- composite_create (POST /api/composites) — create a recurring or theme composite,
+  optionally seeded with items[] at creation time.
+- composite_update (PATCH /api/composites/{id}) — top-level field editing with
+  tri-state nullable semantics on period_date + group_name (omit = leave alone,
+  null = clear, value = set). Supports expected_revision optimistic-concurrency
+  guard (409 CompositeRevisionConflict on mismatch).
+- composite_items_set (PATCH /api/composites/{id} with items[]) — full agenda
+  list replacement, order = position.
+- composite_delete (DELETE /api/composites/{id}) — owner / sys admin only.
+- composite_publish / composite_unpublish — owner only; recurring composites
+  freeze/clear per-item snapshot_content on publish/unpublish. Idempotent.
+
+Added — report activity timeline (1 new MCP tool, 1 new CLI command):
+- report_activities (GET /api/reports/{id}/activities) — newest-first lifecycle /
+  lock / edit / mount event stream. Cursor pagination via before_id. Public-only
+  viewers receive an empty list per backend policy.
+
+Added — notification inbox (4 new MCP tools, 4 new CLI commands):
+- notifications_list (GET /api/notifications) — returns `{items, unread_count}`.
+- notifications_unread_count (GET /api/notifications/unread-count) — single
+  integer badge probe for polling loops.
+- notification_mark_read (PATCH /api/notifications/{id}/read) — idempotent.
+- notifications_mark_all_read (POST /api/notifications/mark-all-read) — returns
+  rows-flipped count.
+
+SKILL.md:
+- Flow E expanded — full composite body editing workflow (create → seed items →
+  update top-level → replace items → publish / unpublish → delete).
+- Flow J added — "Verify side-effects" — walk report_activities after writes to
+  confirm downstream notifications fired.
+- Flow K added — "Reactive agent" — idiomatic polling loop combining the
+  notifications inbox with the activity timeline for write-side verification.
+
+Tests:
+- Extended tests/test_mcp_roundtrip.py with 13 new test cases covering all 11
+  new tools, plus a tri-state semantic lock for composite_update.period_date.
+- NEW tests/test_cli_smoke.py — typer.testing.CliRunner suite over every new
+  CLI command + help-text rendering smoke for all 11 sub-commands.
+- tests/test_dispatch_parametrized.py extended — minimal-valid args for all 11
+  new tools so the wall-to-wall coverage stays unbroken.
+
+Verified: pytest 431 passed / 5 skipped; MCP _DISPATCH count 54 → 65.
+
 ## 0.5.2 — 2026-06-06
 
 Patch — closes 85 audit gaps from the v0.5.1 deep re-audit. Data-loss prevention + error

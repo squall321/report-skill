@@ -246,9 +246,10 @@ def test_add_report_link_accepts_direction(monkeypatch):
 # --------------------------------------------------------------------------- #
 # 6. _DISPATCH size — locks the surface so an accidental rename / drop fails
 # --------------------------------------------------------------------------- #
-def test_dispatch_count_is_54():
-    # v0.5.0 shipped 53 tools; v0.5.1 adds `report_lock_status`.
-    assert len(_DISPATCH) == 54, sorted(_DISPATCH)
+def test_dispatch_count_is_65():
+    # v0.5.0 shipped 53 tools; v0.5.1 adds `report_lock_status` → 54;
+    # v0.6.0 adds 6 composites body editing + 1 activities + 4 notifications → 65.
+    assert len(_DISPATCH) == 65, sorted(_DISPATCH)
 
 
 # --------------------------------------------------------------------------- #
@@ -268,3 +269,240 @@ def test_report_lock_status_dispatch(monkeypatch):
     client_mock.fetch_report_lock_status.assert_called_once_with(1)
     assert out["author_lock_enabled"] is True
     assert out["author_lock_reason"] == "검토 중"
+
+
+# --------------------------------------------------------------------------- #
+# v0.6.0 — composites body editing dispatchers (6 tools)
+# --------------------------------------------------------------------------- #
+def test_composite_create_dispatch(monkeypatch):
+    client_mock = MagicMock()
+    client_mock.create_composite.return_value = {
+        "id": 99, "title": "May agenda", "kind": "recurring",
+        "workspace_slug": "personal-1", "view_mode": "single",
+        "revision": 1, "items": [],
+    }
+    _install_fake_client(monkeypatch, client_mock)
+
+    out = _DISPATCH["composite_create"]({
+        "title": "May agenda",
+        "kind": "recurring",
+        "view_mode": "single",
+        "period_date": "2026-05-01",
+        "description": "5월 종합",
+        "items": [{"ref_report_id": 1, "note": ""}],
+    })
+
+    client_mock.create_composite.assert_called_once()
+    kwargs = client_mock.create_composite.call_args.kwargs
+    assert kwargs["title"] == "May agenda"
+    assert kwargs["kind"] == "recurring"
+    assert kwargs["view_mode"] == "single"
+    assert kwargs["period_date"] == "2026-05-01"
+    assert kwargs["description"] == "5월 종합"
+    assert kwargs["items"] == [{"ref_report_id": 1, "note": ""}]
+    assert out["id"] == 99
+
+
+def test_composite_update_dispatch(monkeypatch):
+    client_mock = MagicMock()
+    client_mock.update_composite.return_value = {
+        "id": 10, "title": "renamed", "revision": 7,
+        "view_mode": "two_col", "items": [],
+    }
+    _install_fake_client(monkeypatch, client_mock)
+
+    out = _DISPATCH["composite_update"]({
+        "composite_id": 10,
+        "title": "renamed",
+        "view_mode": "two_col",
+        "description": "updated",
+        "expected_revision": 6,
+    })
+
+    client_mock.update_composite.assert_called_once()
+    call = client_mock.update_composite.call_args
+    assert call.args[0] == 10
+    kwargs = call.kwargs
+    assert kwargs["title"] == "renamed"
+    assert kwargs["view_mode"] == "two_col"
+    assert kwargs["description"] == "updated"
+    assert kwargs["expected_revision"] == 6
+    # tri-state — fields not supplied must NOT appear
+    assert "period_date" not in kwargs
+    assert "group_name" not in kwargs
+    assert out["revision"] == 7
+
+
+def test_composite_update_clears_period_date_when_explicit_null(monkeypatch):
+    """Tri-state semantics — `period_date: null` reaches the body (clear)
+    while omitting the key leaves it alone."""
+    client_mock = MagicMock()
+    client_mock.update_composite.return_value = {"id": 10, "revision": 8}
+    _install_fake_client(monkeypatch, client_mock)
+
+    _DISPATCH["composite_update"]({
+        "composite_id": 10,
+        "period_date": None,   # explicit null
+    })
+
+    kwargs = client_mock.update_composite.call_args.kwargs
+    assert "period_date" in kwargs, (
+        "period_date=None must reach the client kwargs so the server clears it"
+    )
+    assert kwargs["period_date"] is None
+
+
+def test_composite_items_set_dispatch(monkeypatch):
+    client_mock = MagicMock()
+    client_mock.update_composite.return_value = {
+        "id": 10, "title": "c", "revision": 9, "items": [{"id": 1}, {"id": 2}],
+    }
+    _install_fake_client(monkeypatch, client_mock)
+
+    items = [
+        {"ref_report_id": 100, "note": "first"},
+        {"ref_composite_id": 50, "note": "nested", "display_column": 2},
+    ]
+    out = _DISPATCH["composite_items_set"]({
+        "composite_id": 10,
+        "items": items,
+        "expected_revision": 8,
+    })
+
+    kwargs = client_mock.update_composite.call_args.kwargs
+    assert kwargs["items"] == items
+    assert kwargs["expected_revision"] == 8
+    assert out["item_count"] == 2
+
+
+def test_composite_delete_dispatch(monkeypatch):
+    client_mock = MagicMock()
+    client_mock.delete_composite.return_value = None
+    _install_fake_client(monkeypatch, client_mock)
+
+    out = _DISPATCH["composite_delete"]({"composite_id": 10})
+
+    client_mock.delete_composite.assert_called_once_with(10)
+    assert out == {"deleted": True, "id": 10}
+
+
+def test_composite_publish_dispatch(monkeypatch):
+    client_mock = MagicMock()
+    client_mock.publish_composite.return_value = {
+        "id": 10, "title": "c", "published_at": "2026-06-06T00:00:00Z",
+        "revision": 11,
+    }
+    _install_fake_client(monkeypatch, client_mock)
+
+    out = _DISPATCH["composite_publish"]({"composite_id": 10})
+
+    client_mock.publish_composite.assert_called_once_with(10)
+    assert out["published_at"] == "2026-06-06T00:00:00Z"
+
+
+def test_composite_unpublish_dispatch(monkeypatch):
+    client_mock = MagicMock()
+    client_mock.unpublish_composite.return_value = {
+        "id": 10, "title": "c", "published_at": None, "revision": 12,
+    }
+    _install_fake_client(monkeypatch, client_mock)
+
+    out = _DISPATCH["composite_unpublish"]({"composite_id": 10})
+
+    client_mock.unpublish_composite.assert_called_once_with(10)
+    assert out["published_at"] is None
+
+
+# --------------------------------------------------------------------------- #
+# v0.6.0 — activities + notifications dispatchers (5 tools)
+# --------------------------------------------------------------------------- #
+def test_report_activities_dispatch(monkeypatch):
+    client_mock = MagicMock()
+    client_mock.fetch_report_activities.return_value = {
+        "items": [
+            {"id": 3, "type": "publish", "created_at": "2026-06-06T01:00:00Z"},
+            {"id": 2, "type": "locked", "created_at": "2026-06-06T00:30:00Z"},
+            {"id": 1, "type": "created", "created_at": "2026-06-06T00:00:00Z"},
+        ],
+    }
+    _install_fake_client(monkeypatch, client_mock)
+
+    out = _DISPATCH["report_activities"]({
+        "report_id": 42, "limit": 20,
+    })
+
+    client_mock.fetch_report_activities.assert_called_once()
+    call = client_mock.fetch_report_activities.call_args
+    assert call.args[0] == 42
+    assert call.kwargs["limit"] == 20
+    assert call.kwargs["before_id"] is None
+    assert out["count"] == 3
+    assert len(out["items"]) == 3
+
+
+def test_report_activities_pagination_cursor(monkeypatch):
+    client_mock = MagicMock()
+    client_mock.fetch_report_activities.return_value = {"items": []}
+    _install_fake_client(monkeypatch, client_mock)
+
+    _DISPATCH["report_activities"]({
+        "report_id": 1, "limit": 50, "before_id": 100,
+    })
+    kwargs = client_mock.fetch_report_activities.call_args.kwargs
+    assert kwargs["before_id"] == 100
+    assert kwargs["limit"] == 50
+
+
+def test_notifications_list_dispatch(monkeypatch):
+    client_mock = MagicMock()
+    client_mock.list_notifications.return_value = {
+        "items": [{"id": 1, "type": "report_published"}],
+        "unread_count": 7,
+    }
+    _install_fake_client(monkeypatch, client_mock)
+
+    out = _DISPATCH["notifications_list"]({
+        "unread_only": True, "limit": 25,
+    })
+
+    client_mock.list_notifications.assert_called_once()
+    kwargs = client_mock.list_notifications.call_args.kwargs
+    assert kwargs["unread_only"] is True
+    assert kwargs["limit"] == 25
+    assert kwargs["before_id"] is None
+    assert out["count"] == 1
+    assert out["unread_count"] == 7
+
+
+def test_notifications_unread_count_dispatch(monkeypatch):
+    client_mock = MagicMock()
+    client_mock.unread_notification_count.return_value = 12
+    _install_fake_client(monkeypatch, client_mock)
+
+    out = _DISPATCH["notifications_unread_count"]({})
+
+    client_mock.unread_notification_count.assert_called_once_with()
+    assert out == {"unread_count": 12}
+
+
+def test_notification_mark_read_dispatch(monkeypatch):
+    client_mock = MagicMock()
+    client_mock.mark_notification_read.return_value = {"id": 99}
+    _install_fake_client(monkeypatch, client_mock)
+
+    out = _DISPATCH["notification_mark_read"]({"notification_id": 99})
+
+    client_mock.mark_notification_read.assert_called_once_with(99)
+    assert out["id"] == 99
+    assert out["marked_read"] is True
+
+
+def test_notifications_mark_all_read_dispatch(monkeypatch):
+    client_mock = MagicMock()
+    client_mock.mark_all_notifications_read.return_value = 42
+    _install_fake_client(monkeypatch, client_mock)
+
+    out = _DISPATCH["notifications_mark_all_read"]({})
+
+    client_mock.mark_all_notifications_read.assert_called_once_with()
+    assert out == {"marked_read": 42}

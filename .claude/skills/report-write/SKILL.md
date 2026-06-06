@@ -547,6 +547,135 @@ report-skill tools composites-requests-list --composite-id <composite-id>
 
 Default filter is `pending` — pass `--status accepted` / `rejected` / `withdrawn` if needed (server-side filter).
 
+## Flow E (expanded) — Build a composite from scratch (v0.6.0)
+
+The v0.5.x surface only let you *submit* a report into someone else's composite and edit `summary_widgets`. v0.6.0 adds full body editing — you own the composite end-to-end. Use this when the user says "make a 5월 종합" / "build a recurring report from these N items":
+
+### E.1 Create the empty composite
+
+```powershell
+report-skill composites create \
+  --title "2026-05 백엔드 종합" \
+  --kind recurring \
+  --view-mode single \
+  --period-date 2026-05-31
+```
+
+`--kind` is the `CompositeKind` enum value (typically `recurring` for periodic all-hands or `theme` for ad-hoc curated bundles). Pass `--workspace <slug>` to put it on a board you co-own; omit it to use the active workspace. Returns the new `id` + `revision: 1`.
+
+You can also seed items at creation time with `--items-file items.json`:
+
+```json
+[
+  {"ref_report_id": 412, "note": "결제 API 안정화"},
+  {"ref_report_id": 415, "note": "인프라 마이그레이션", "display_column": 2}
+]
+```
+
+(`display_column` is 1=left, 2=right — only meaningful when `view_mode=two_col`. `group_name` is an optional per-item grouping label rendered as a header in DOCX export.)
+
+### E.2 Update top-level fields after the fact
+
+```powershell
+report-skill composites update <composite-id> \
+  --title "renamed" \
+  --view-mode two_col \
+  --description "5월 백엔드 종합 — 분기 리뷰용" \
+  --expected-revision 3
+```
+
+Only the flags you pass are sent. `--expected-revision` is optimistic-concurrency — if someone else edited the composite first, the server returns 409 `composite_revision_mismatch` and the CLI exits 4.
+
+To clear `period_date` (not just leave it), pass `--period-date ""` — the empty string is the CLI signal for null.
+
+### E.3 Replace the entire items list
+
+```powershell
+report-skill composites items-set <composite-id> \
+  --items-file items.json \
+  --expected-revision 3
+```
+
+`items.json` is the full replacement list (order = position). This is the canonical "edit the agenda" flow — fetch the composite, rewrite the JSON, push it back.
+
+### E.4 Publish / unpublish
+
+```powershell
+report-skill composites publish <composite-id>
+report-skill composites unpublish <composite-id>
+```
+
+Owner-only. For `kind=recurring`, publish freezes every item's content into `snapshot_content` so the composite renders the as-of-publish state even if source reports drift later. Unpublish clears snapshots + returns the composite to live + editable mode. Both are idempotent.
+
+### E.5 Delete
+
+```powershell
+report-skill composites delete <composite-id> --yes
+```
+
+The `--yes` flag is required (destructive). Owner / sys admin only.
+
+## Flow J — Verify side-effects after a write (v0.6.0)
+
+After any composite publish, report publish, mount toggle, author-lock change, etc., the backend emits a row in `report_activities`. Use this to confirm a write actually fired the downstream notifications:
+
+```powershell
+report-skill report activities <report-id> --limit 20
+```
+
+Returns newest-first. Each row carries `{id, actor, type, payload, created_at}`. Common types you'll see:
+
+- `created` / `phase_to_finalized` / `phase_to_drafting` — lifecycle
+- `locked` / `unlocked` / `lock_force_unset` — author-lock toggle
+- `mount_added` / `mount_removed` — board publish
+- `edit` — block-level update
+
+Pagination is cursor-style: pass `--before-id <smallest-id-from-prev-page>` to walk back through history. The endpoint returns an empty list (not 403) for public-only viewers — that's intentional, so a reactive agent doesn't crash on a non-member call.
+
+## Flow K — Reactive agent loop (v0.6.0)
+
+When the user wants the skill to *react* to events rather than just author reports — "notify me when someone publishes to my board" / "auto-accept agenda requests from team X" / "mark all today's notifications read":
+
+### K.1 Poll the inbox
+
+```powershell
+report-skill notifications list --unread-only --limit 50
+```
+
+Returns `{items, unread_count}`. Each item carries `{id, type, ref_table, ref_id, payload, actor, created_at, read_at}`. Type values include `composite_request_created`, `report_published`, `report_mention`, etc.
+
+### K.2 Get just the badge
+
+```powershell
+report-skill notifications unread-count
+```
+
+Cheap single-integer probe — use this in a polling loop.
+
+### K.3 Mark items read
+
+```powershell
+report-skill notifications mark-read <notification-id>
+report-skill notifications mark-all-read
+```
+
+`mark-read` is idempotent. `mark-all-read` returns the count of rows it flipped — use the number to confirm progress in agent logs.
+
+### K.4 Idiomatic agent shape
+
+```text
+loop forever:
+  n = notifications unread-count
+  if n == 0: sleep + continue
+  items = notifications list --unread-only
+  for item in items:
+    if item.type == "composite_request_created" and policy_allows(item):
+      composites accept --composite-id <id> --request-id <rid>
+    notifications mark-read <item.id>
+```
+
+Combine with Flow J (`report activities`) for write-side verification: after `composites accept`, walk the source report's activity log to confirm the `phase_to_finalized` / `mount_added` event landed.
+
 ## Flow F — APPEND (incremental updates to existing blocks)
 
 When the user wants to ADD an entry without replacing what's already there — e.g. "add a milestone for next week", "log another issue":

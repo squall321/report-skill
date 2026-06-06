@@ -147,6 +147,13 @@ class OutOfWorkspaceScopeError(ApiError):
         self.code = "out_of_workspace_scope"
 
 
+# v0.6.0 — sentinel for update_composite tri-state semantics on nullable
+# scalar fields (group_name, period_date): default = omit key from body
+# (server leaves alone); explicit None = send {"key": null} so server
+# clears; explicit value = send {"key": value}.
+_UNSET_COMP: Any = object()
+
+
 class ReportArchiveClient:
     """Synchronous httpx-based client. One instance per process is fine."""
 
@@ -584,6 +591,113 @@ class ReportArchiveClient:
         """
         return self.get(f"/composites/{composite_id}")
 
+    # ---- v0.6.0 — composites body editing ----------------------------- #
+
+    def create_composite(
+        self,
+        *,
+        title: str,
+        period_date: Optional[str] = None,
+        kind: str,
+        view_mode: str = "single",
+        workspace_slug: Optional[str] = None,
+        description: str = "",
+        two_col_view: Optional[bool] = None,
+        summary_widgets: Optional[list[dict]] = None,
+        items: Optional[list[dict]] = None,
+    ) -> dict:
+        """POST /composites — create a new composite report.
+
+        `kind` is one of the CompositeKind enum values (e.g. 'recurring' /
+        'theme'). `workspace_slug` defaults to the active workspace when
+        omitted (the server takes the value off the X-Workspace-Slug
+        header — we forward it here as a positional override).
+
+        `items` is a list of {note?, ref_report_id?|ref_composite_id?,
+        display_column?, group_name?} dicts — exactly one of the two ref
+        ids per row. Defaults to empty so the caller can do an
+        edit-after-create flow.
+        """
+        body: dict[str, Any] = {
+            "title": title,
+            "kind": kind,
+            "view_mode": view_mode,
+            "description": description,
+            "workspace_slug": workspace_slug or settings.report_api_workspace_slug,
+        }
+        if period_date is not None:
+            body["period_date"] = period_date
+        if two_col_view is not None:
+            body["two_col_view"] = bool(two_col_view)
+        if summary_widgets is not None:
+            body["summary_widgets"] = list(summary_widgets)
+        if items is not None:
+            body["items"] = list(items)
+        return self.post("/composites", json=body)
+
+    def update_composite(
+        self,
+        composite_id,
+        *,
+        items: Optional[list[dict]] = None,
+        group_name: Any = _UNSET_COMP,
+        period_date: Any = _UNSET_COMP,
+        view_mode: Optional[str] = None,
+        description: Optional[str] = None,
+        two_col_view: Optional[bool] = None,
+        title: Optional[str] = None,
+        summary_widgets: Optional[list[dict]] = None,
+        expected_revision: Optional[int] = None,
+    ) -> dict:
+        """PATCH /composites/{id} — full body editing.
+
+        Only sends the fields the caller supplied. `items` replaces the
+        entire items list (matching position order); omit to leave items
+        untouched. `group_name` is forwarded ONLY when explicitly passed —
+        callers can clear it by passing None. Same for `period_date`.
+
+        `expected_revision` enables optimistic concurrency. Backend returns
+        409 (CompositeRevisionConflict) on mismatch.
+
+        Note: `group_name` here is a top-level composite tag (not the
+        per-item group_name inside `items[].group_name`).
+        """
+        body: dict[str, Any] = {}
+        if title is not None:
+            body["title"] = title
+        if items is not None:
+            body["items"] = list(items)
+        if group_name is not _UNSET_COMP:
+            body["group_name"] = group_name
+        if period_date is not _UNSET_COMP:
+            body["period_date"] = period_date
+        if view_mode is not None:
+            body["view_mode"] = view_mode
+        if description is not None:
+            body["description"] = description
+        if two_col_view is not None:
+            body["two_col_view"] = bool(two_col_view)
+        if summary_widgets is not None:
+            body["summary_widgets"] = list(summary_widgets)
+        if expected_revision is not None:
+            body["expected_revision"] = int(expected_revision)
+        return self._request("PATCH", f"/composites/{composite_id}", json=body)
+
+    def delete_composite(self, composite_id) -> None:
+        """DELETE /composites/{id} — owner / sys admin only."""
+        self._request("DELETE", f"/composites/{composite_id}")
+
+    def publish_composite(self, composite_id) -> dict:
+        """POST /composites/{id}/publish — owner-only. Stamps
+        `published_at`; for recurring composites freezes every item's
+        content into `snapshot_content`. Idempotent."""
+        return self.post(f"/composites/{composite_id}/publish", json={})
+
+    def unpublish_composite(self, composite_id) -> dict:
+        """POST /composites/{id}/unpublish — owner-only. Clears
+        `published_at` and per-item snapshots. Idempotent."""
+        return self.post(f"/composites/{composite_id}/unpublish", json={})
+
     def update_composite_summary(
         self,
         composite_id,
@@ -680,6 +794,81 @@ class ReportArchiveClient:
         return self.post(
             f"/composites/{composite_id}/requests/{request_id}/withdraw", json={}
         )
+
+    # ---- v0.6.0 — activities timeline ---------------------------------- #
+
+    def fetch_report_activities(
+        self,
+        report_id,
+        *,
+        limit: int = 20,
+        before_id: Optional[int] = None,
+    ) -> dict:
+        """GET /reports/{id}/activities — newest-first activity timeline.
+
+        Cursor pagination via `before_id` (pass the smallest id of the
+        previous page to get the next page). Public-only viewers receive
+        an empty list per backend policy. Returns the raw envelope
+        `{items: [...]}` so callers can detect end-of-list.
+        """
+        params: dict[str, Any] = {"limit": int(limit)}
+        if before_id is not None:
+            params["before_id"] = int(before_id)
+        body = self.get(f"/reports/{report_id}/activities", params=params)
+        if isinstance(body, dict):
+            return body
+        if isinstance(body, list):
+            return {"items": body}
+        return {"items": []}
+
+    # ---- v0.6.0 — notifications inbox ---------------------------------- #
+
+    def list_notifications(
+        self,
+        *,
+        unread_only: bool = False,
+        limit: int = 50,
+        before_id: Optional[int] = None,
+    ) -> dict:
+        """GET /notifications — caller's inbox, newest-first.
+
+        Returns the raw envelope `{items: [...], unread_count: N}` so
+        callers can render the badge in one shot.
+        """
+        params: dict[str, Any] = {
+            "unread_only": "true" if unread_only else "false",
+            "limit": int(limit),
+        }
+        if before_id is not None:
+            params["before_id"] = int(before_id)
+        body = self.get("/notifications", params=params)
+        if isinstance(body, dict):
+            return body
+        if isinstance(body, list):
+            return {"items": body, "unread_count": 0}
+        return {"items": [], "unread_count": 0}
+
+    def unread_notification_count(self) -> int:
+        """GET /notifications/unread-count — single integer badge count."""
+        body = self.get("/notifications/unread-count")
+        if isinstance(body, dict):
+            return int(body.get("unread_count", 0) or 0)
+        return 0
+
+    def mark_notification_read(self, notification_id) -> dict:
+        """PATCH /notifications/{id}/read — mark a single notification read.
+        Idempotent."""
+        return self._request("PATCH",
+                             f"/notifications/{notification_id}/read",
+                             json={})
+
+    def mark_all_notifications_read(self) -> int:
+        """POST /notifications/mark-all-read — returns the number of rows
+        flipped from unread to read."""
+        body = self.post("/notifications/mark-all-read", json={})
+        if isinstance(body, dict):
+            return int(body.get("count", 0) or 0)
+        return 0
 
     # ---- low-level wrappers -------------------------------------------- #
 

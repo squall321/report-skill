@@ -813,6 +813,142 @@ TOOLS: list[Tool] = [
         },
         ["composite_id", "request_id"],
     ),
+
+    # ---- v0.6.0 — composites body editing ------------------------------ #
+    _tool(
+        "composite_create",
+        "Create a new composite report. POST /api/composites. `kind` is the "
+        "CompositeKind enum value (e.g. 'recurring' | 'theme'). `view_mode` "
+        "defaults to 'single'. Pass `items` (each with exactly one of "
+        "ref_report_id / ref_composite_id) to seed the body at creation "
+        "time, or skip it and use `composite_items_set` later.",
+        {
+            "title": {"type": "string"},
+            "kind": {"type": "string",
+                     "description": "CompositeKind enum value"},
+            "view_mode": {"type": "string", "default": "single",
+                          "description": "single | two_col | list"},
+            "period_date": {"type": "string",
+                            "description": "ISO YYYY-MM-DD"},
+            "workspace_slug": {"type": "string",
+                               "description": "owner workspace; defaults to active"},
+            "description": {"type": "string", "default": ""},
+            "two_col_view": {"type": "boolean",
+                             "description": "legacy alias of view_mode"},
+            "summary_widgets": {"type": "array", "items": {"type": "object"}},
+            "items": {"type": "array", "items": {"type": "object"}},
+        },
+        ["title", "kind"],
+    ),
+    _tool(
+        "composite_update",
+        "Update a composite's top-level fields. PATCH /api/composites/{id}. "
+        "Only the supplied fields are sent. Pass `expected_revision` for "
+        "optimistic concurrency (409 CompositeRevisionConflict on mismatch).",
+        {
+            "composite_id": {"type": "integer"},
+            "title": {"type": "string"},
+            "view_mode": {"type": "string"},
+            "description": {"type": "string"},
+            "two_col_view": {"type": "boolean"},
+            "period_date": {"type": ["string", "null"],
+                            "description": "ISO date or null to clear"},
+            "group_name": {"type": ["string", "null"],
+                           "description": "composite group tag; null to clear"},
+            "summary_widgets": {"type": "array", "items": {"type": "object"}},
+            "expected_revision": {"type": "integer", "minimum": 1},
+        },
+        ["composite_id"],
+    ),
+    _tool(
+        "composite_items_set",
+        "Replace a composite's items list. PATCH /api/composites/{id} with "
+        "`items` set. Each item supplies exactly one of "
+        "ref_report_id / ref_composite_id, optional note + display_column + "
+        "group_name. Pass `expected_revision` for optimistic concurrency.",
+        {
+            "composite_id": {"type": "integer"},
+            "items": {"type": "array", "items": {"type": "object"},
+                      "description": "ordered replacement list"},
+            "expected_revision": {"type": "integer", "minimum": 1},
+        },
+        ["composite_id", "items"],
+    ),
+    _tool(
+        "composite_delete",
+        "Delete a composite. DELETE /api/composites/{id}. Owner / sys admin only.",
+        {"composite_id": {"type": "integer"}},
+        ["composite_id"],
+    ),
+    _tool(
+        "composite_publish",
+        "Publish a composite. POST /api/composites/{id}/publish. Owner only; "
+        "for recurring composites freezes each item's content into snapshot. "
+        "Idempotent.",
+        {"composite_id": {"type": "integer"}},
+        ["composite_id"],
+    ),
+    _tool(
+        "composite_unpublish",
+        "Unpublish a composite. POST /api/composites/{id}/unpublish. Owner "
+        "only; clears published_at + per-item snapshots so the composite "
+        "returns to live-fetch + editable mode. Idempotent.",
+        {"composite_id": {"type": "integer"}},
+        ["composite_id"],
+    ),
+
+    # ---- v0.6.0 — report activities timeline --------------------------- #
+    _tool(
+        "report_activities",
+        "Fetch a report's activity timeline (lifecycle, lock, edit events). "
+        "GET /api/reports/{id}/activities. Cursor pagination via `before_id` "
+        "(pass the smallest id of the previous page). Public-only viewers "
+        "receive an empty list per backend policy.",
+        {
+            "report_id": {"type": "integer"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 200,
+                      "default": 20},
+            "before_id": {"type": "integer", "minimum": 1,
+                          "description": "cursor — pass smallest id from prev page"},
+        },
+        ["report_id"],
+    ),
+
+    # ---- v0.6.0 — notifications inbox ---------------------------------- #
+    _tool(
+        "notifications_list",
+        "List the caller's notification inbox. GET /api/notifications. "
+        "Returns `{items, unread_count}`. Pass `unread_only=true` to filter, "
+        "`before_id` for pagination.",
+        {
+            "unread_only": {"type": "boolean", "default": False},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 200,
+                      "default": 50},
+            "before_id": {"type": "integer", "minimum": 1},
+        },
+        [],
+    ),
+    _tool(
+        "notifications_unread_count",
+        "Return only the unread-notification badge count for the caller. "
+        "GET /api/notifications/unread-count.",
+        {},
+        [],
+    ),
+    _tool(
+        "notification_mark_read",
+        "Mark one notification as read. PATCH /api/notifications/{id}/read. "
+        "Idempotent.",
+        {"notification_id": {"type": "integer"}},
+        ["notification_id"],
+    ),
+    _tool(
+        "notifications_mark_all_read",
+        "Mark every unread notification as read. POST "
+        "/api/notifications/mark-all-read. Returns the number of rows flipped.",
+        {},
+        [],
+    ),
 ]
 
 
@@ -1951,6 +2087,196 @@ def _do_composites_request_withdraw(args: dict) -> Any:
         return c.withdraw_composite_request(cid, req_id)
 
 
+# --------------------------------------------------------------------------- #
+# v0.6.0 — composites body editing dispatchers
+# --------------------------------------------------------------------------- #
+def _do_composite_create(args: dict) -> Any:
+    title = args["title"]
+    kind = args["kind"]
+    kwargs: dict[str, Any] = {
+        "title": title,
+        "kind": kind,
+        "view_mode": args.get("view_mode", "single"),
+    }
+    if "period_date" in args:
+        kwargs["period_date"] = args.get("period_date")
+    if "workspace_slug" in args:
+        kwargs["workspace_slug"] = args.get("workspace_slug")
+    if "description" in args:
+        kwargs["description"] = args.get("description") or ""
+    if "two_col_view" in args:
+        kwargs["two_col_view"] = bool(args.get("two_col_view"))
+    if "summary_widgets" in args:
+        kwargs["summary_widgets"] = list(args.get("summary_widgets") or [])
+    if "items" in args:
+        kwargs["items"] = list(args.get("items") or [])
+    with ReportArchiveClient() as c:
+        created = c.create_composite(**kwargs)
+    if isinstance(created, dict):
+        return {
+            "id": created.get("id"),
+            "title": created.get("title"),
+            "kind": created.get("kind"),
+            "workspace_slug": created.get("workspace_slug"),
+            "view_mode": created.get("view_mode"),
+            "revision": created.get("revision"),
+            "item_count": len(created.get("items") or []),
+        }
+    return created
+
+
+def _do_composite_update(args: dict) -> Any:
+    cid = int(args["composite_id"])
+    kwargs: dict[str, Any] = {}
+    if "title" in args:
+        kwargs["title"] = args.get("title")
+    if "view_mode" in args:
+        kwargs["view_mode"] = args.get("view_mode")
+    if "description" in args:
+        kwargs["description"] = args.get("description")
+    if "two_col_view" in args:
+        kwargs["two_col_view"] = bool(args.get("two_col_view"))
+    if "summary_widgets" in args:
+        kwargs["summary_widgets"] = list(args.get("summary_widgets") or [])
+    if "items" in args:
+        kwargs["items"] = list(args.get("items") or [])
+    # Tri-state: explicit null clears, omission leaves alone.
+    if "period_date" in args:
+        kwargs["period_date"] = args.get("period_date")
+    if "group_name" in args:
+        kwargs["group_name"] = args.get("group_name")
+    if "expected_revision" in args and args.get("expected_revision") is not None:
+        kwargs["expected_revision"] = int(args["expected_revision"])
+    with ReportArchiveClient() as c:
+        updated = c.update_composite(cid, **kwargs)
+    if isinstance(updated, dict):
+        return {
+            "id": updated.get("id"),
+            "title": updated.get("title"),
+            "revision": updated.get("revision"),
+            "view_mode": updated.get("view_mode"),
+            "item_count": len(updated.get("items") or []),
+        }
+    return updated
+
+
+def _do_composite_items_set(args: dict) -> Any:
+    cid = int(args["composite_id"])
+    items = args["items"]
+    if not isinstance(items, list):
+        raise ValueError("items must be a list")
+    expected_revision = args.get("expected_revision")
+    if expected_revision is not None:
+        expected_revision = int(expected_revision)
+    with ReportArchiveClient() as c:
+        updated = c.update_composite(
+            cid,
+            items=items,
+            expected_revision=expected_revision,
+        )
+    if isinstance(updated, dict):
+        return {
+            "id": updated.get("id"),
+            "title": updated.get("title"),
+            "revision": updated.get("revision"),
+            "item_count": len(updated.get("items") or []),
+        }
+    return updated
+
+
+def _do_composite_delete(args: dict) -> Any:
+    cid = int(args["composite_id"])
+    with ReportArchiveClient() as c:
+        c.delete_composite(cid)
+    return {"deleted": True, "id": cid}
+
+
+def _do_composite_publish(args: dict) -> Any:
+    cid = int(args["composite_id"])
+    with ReportArchiveClient() as c:
+        published = c.publish_composite(cid)
+    if isinstance(published, dict):
+        return {
+            "id": published.get("id"),
+            "title": published.get("title"),
+            "published_at": published.get("published_at"),
+            "revision": published.get("revision"),
+        }
+    return published
+
+
+def _do_composite_unpublish(args: dict) -> Any:
+    cid = int(args["composite_id"])
+    with ReportArchiveClient() as c:
+        unpublished = c.unpublish_composite(cid)
+    if isinstance(unpublished, dict):
+        return {
+            "id": unpublished.get("id"),
+            "title": unpublished.get("title"),
+            "published_at": unpublished.get("published_at"),
+            "revision": unpublished.get("revision"),
+        }
+    return unpublished
+
+
+# --------------------------------------------------------------------------- #
+# v0.6.0 — activities + notifications dispatchers
+# --------------------------------------------------------------------------- #
+def _do_report_activities(args: dict) -> Any:
+    rid = int(args["report_id"])
+    limit = int(args.get("limit", 20))
+    before_id = args.get("before_id")
+    if before_id is not None:
+        before_id = int(before_id)
+    with ReportArchiveClient() as c:
+        body = c.fetch_report_activities(rid, limit=limit, before_id=before_id)
+    items = body.get("items") if isinstance(body, dict) else []
+    return {
+        "items": items or [],
+        "count": len(items or []),
+    }
+
+
+def _do_notifications_list(args: dict) -> Any:
+    unread_only = bool(args.get("unread_only", False))
+    limit = int(args.get("limit", 50))
+    before_id = args.get("before_id")
+    if before_id is not None:
+        before_id = int(before_id)
+    with ReportArchiveClient() as c:
+        body = c.list_notifications(
+            unread_only=unread_only, limit=limit, before_id=before_id,
+        )
+    items = body.get("items") if isinstance(body, dict) else []
+    unread_count = body.get("unread_count") if isinstance(body, dict) else 0
+    return {
+        "items": items or [],
+        "count": len(items or []),
+        "unread_count": int(unread_count or 0),
+    }
+
+
+def _do_notifications_unread_count(_args: dict) -> Any:
+    with ReportArchiveClient() as c:
+        n = c.unread_notification_count()
+    return {"unread_count": int(n)}
+
+
+def _do_notification_mark_read(args: dict) -> Any:
+    nid = int(args["notification_id"])
+    with ReportArchiveClient() as c:
+        out = c.mark_notification_read(nid)
+    if isinstance(out, dict):
+        return {"id": out.get("id", nid), "marked_read": True}
+    return {"id": nid, "marked_read": True}
+
+
+def _do_notifications_mark_all_read(_args: dict) -> Any:
+    with ReportArchiveClient() as c:
+        n = c.mark_all_notifications_read()
+    return {"marked_read": int(n)}
+
+
 _DISPATCH = {
     "ping": _do_ping,
     "templates_list": _do_templates_list,
@@ -2007,6 +2333,19 @@ _DISPATCH = {
     "composites_request_accept": _do_composites_request_accept,
     "composites_request_reject": _do_composites_request_reject,
     "composites_request_withdraw": _do_composites_request_withdraw,
+    # ---- v0.6.0 — composites body editing ------------------------------ #
+    "composite_create": _do_composite_create,
+    "composite_update": _do_composite_update,
+    "composite_items_set": _do_composite_items_set,
+    "composite_delete": _do_composite_delete,
+    "composite_publish": _do_composite_publish,
+    "composite_unpublish": _do_composite_unpublish,
+    # ---- v0.6.0 — activities + notifications --------------------------- #
+    "report_activities": _do_report_activities,
+    "notifications_list": _do_notifications_list,
+    "notifications_unread_count": _do_notifications_unread_count,
+    "notification_mark_read": _do_notification_mark_read,
+    "notifications_mark_all_read": _do_notifications_mark_all_read,
 }
 
 
