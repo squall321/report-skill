@@ -148,7 +148,7 @@ class OutOfWorkspaceScopeError(ApiError):
 
 
 # v0.6.0 — sentinel for update_composite tri-state semantics on nullable
-# scalar fields (group_name, period_date): default = omit key from body
+# scalar fields (period_date): default = omit key from body
 # (server leaves alone); explicit None = send {"key": null} so server
 # clears; explicit value = send {"key": value}.
 _UNSET_COMP: Any = object()
@@ -640,7 +640,6 @@ class ReportArchiveClient:
         composite_id,
         *,
         items: Optional[list[dict]] = None,
-        group_name: Any = _UNSET_COMP,
         period_date: Any = _UNSET_COMP,
         view_mode: Optional[str] = None,
         description: Optional[str] = None,
@@ -653,22 +652,17 @@ class ReportArchiveClient:
 
         Only sends the fields the caller supplied. `items` replaces the
         entire items list (matching position order); omit to leave items
-        untouched. `group_name` is forwarded ONLY when explicitly passed —
-        callers can clear it by passing None. Same for `period_date`.
+        untouched. `period_date` is forwarded ONLY when explicitly passed —
+        callers can clear it by passing None.
 
         `expected_revision` enables optimistic concurrency. Backend returns
         409 (CompositeRevisionConflict) on mismatch.
-
-        Note: `group_name` here is a top-level composite tag (not the
-        per-item group_name inside `items[].group_name`).
         """
         body: dict[str, Any] = {}
         if title is not None:
             body["title"] = title
         if items is not None:
             body["items"] = list(items)
-        if group_name is not _UNSET_COMP:
-            body["group_name"] = group_name
         if period_date is not _UNSET_COMP:
             body["period_date"] = period_date
         if view_mode is not None:

@@ -853,8 +853,6 @@ TOOLS: list[Tool] = [
             "two_col_view": {"type": "boolean"},
             "period_date": {"type": ["string", "null"],
                             "description": "ISO date or null to clear"},
-            "group_name": {"type": ["string", "null"],
-                           "description": "composite group tag; null to clear"},
             "summary_widgets": {"type": "array", "items": {"type": "object"}},
             "expected_revision": {"type": "integer", "minimum": 1},
         },
@@ -2143,8 +2141,6 @@ def _do_composite_update(args: dict) -> Any:
     # Tri-state: explicit null clears, omission leaves alone.
     if "period_date" in args:
         kwargs["period_date"] = args.get("period_date")
-    if "group_name" in args:
-        kwargs["group_name"] = args.get("group_name")
     if "expected_revision" in args and args.get("expected_revision") is not None:
         kwargs["expected_revision"] = int(args["expected_revision"])
     with ReportArchiveClient() as c:

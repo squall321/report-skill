@@ -1,5 +1,26 @@
 ﻿# Changelog
 
+## 0.6.1 — 2026-06-06
+
+Patch — silent no-op fix.
+
+`composite_update` no longer advertises a `group_name` parameter at the MCP / client
+/ dispatcher layers. The backend `CompositeReportUpdate` schema
+(`backend/app/modules/composites/schemas.py:336-350`) has no `group_name` field;
+Pydantic v2's default `extra='ignore'` was silently dropping the value while
+returning `200 OK`, so the LLM observed success when nothing changed.
+
+Fixed:
+
+- `mcp_server.py` composite_update tool schema — `group_name` property removed.
+- `mcp_server.py` _do_composite_update dispatcher — `group_name` pass-through removed.
+- `client.py` update_composite signature + body — `group_name` kwarg removed,
+  docstring corrected.
+
+Note: `items[].group_name` (per-item group label used by `composite_items_set`) is
+unaffected — that field exists in the RA `CompositeItemIn` schema and continues to
+work as documented.
+
 ## 0.6.0 — 2026-06-06
 
 Surface expansion — full composite body editing, report activity timeline, and the
