@@ -14,6 +14,13 @@ from report_skill.repair import truncate
 
 _FILE_KEYS = ("files", "file_ids")
 
+_PASSTHROUGH = (
+    "caption_skip_autofill",
+    "aspect_ratio",
+    "max_count",
+    "annotations",
+)
+
 
 def _coerce_files(value: Any) -> list[dict]:
     out: list[dict] = []
@@ -60,14 +67,13 @@ class ImageAdapter(WidgetAdapter):
                 )
             if isinstance(raw.get("caption"), str):
                 out["caption"] = truncate(raw["caption"], 200)
-            if isinstance(raw.get("aspect_ratio"), str):
-                out["aspect_ratio"] = raw["aspect_ratio"]
-            if isinstance(raw.get("max_count"), int):
-                out["max_count"] = raw["max_count"]
             if isinstance(raw.get("note"), str):
                 note = _clean_note(raw["note"])
                 if note:
                     out["note"] = note
+            for k in _PASSTHROUGH:
+                if k in raw:
+                    out[k] = raw[k]
             return out
         raise NormalizeError(f"image: unsupported input type {type(raw).__name__}")
 

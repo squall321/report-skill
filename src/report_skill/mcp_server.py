@@ -61,6 +61,29 @@ from report_skill import (
 from report_skill.adapters import ADAPTERS
 from report_skill.client import ApiError, AuthorLockedError, ReportArchiveClient
 
+# v0.5.2 — typed RA-stable exception subclasses (A2). Imported defensively so
+# the MCP server still loads if client.py is older. Each subclass surfaces a
+# structured `{error: <code>, reason, code, report_id}` payload via call_tool
+# instead of the generic {error: "API error", ...} envelope.
+try:
+    from report_skill.client import (
+        CompositeRevisionConflict,
+        FinalizedReadOnlyError,
+        LockHeldByOtherError,
+        LockNotHeldError,
+        NoEditPermissionError,
+        OutOfWorkspaceScopeError,
+        RevisionMismatchError,
+    )
+except ImportError:  # pragma: no cover — older client.py without typed subclasses
+    CompositeRevisionConflict = None  # type: ignore[assignment,misc]
+    FinalizedReadOnlyError = None  # type: ignore[assignment,misc]
+    LockHeldByOtherError = None  # type: ignore[assignment,misc]
+    LockNotHeldError = None  # type: ignore[assignment,misc]
+    NoEditPermissionError = None  # type: ignore[assignment,misc]
+    OutOfWorkspaceScopeError = None  # type: ignore[assignment,misc]
+    RevisionMismatchError = None  # type: ignore[assignment,misc]
+
 SERVER_NAME = "report-skill"
 
 # v0.5.1 — 13 optional fields shared by report_create / report_update.
@@ -81,6 +104,8 @@ _REPORT_PASS_THROUGH = (
     "page_rich_text_prefix_d0",
     "page_rich_text_prefix_d1",
     "page_rich_text_prefix_d2",
+    # v0.5.2 — C5: lifecycle close date (ReportRead.closed_at, Optional[date]).
+    "closed_at",
 )
 
 # Shared JSON-schema fragment for the 13 fields (RA-exact constraints —
@@ -113,6 +138,13 @@ _REPORT_EXTRA_PROPS: dict = {
     "page_rich_text_prefix_d0": {"type": "string", "maxLength": 8},
     "page_rich_text_prefix_d1": {"type": "string", "maxLength": 8},
     "page_rich_text_prefix_d2": {"type": "string", "maxLength": 8},
+    # v0.5.2 — C5: closed_at is Optional[date] (ISO YYYY-MM-DD) — pass null
+    # to clear the field server-side once the builder/ops _UNSET sentinel
+    # plumbing lands (C7). String "YYYY-MM-DD" or explicit null both accepted.
+    "closed_at": {
+        "type": ["string", "null"],
+        "description": "ISO date (YYYY-MM-DD) to mark the report closed; null clears",
+    },
 }
 
 
@@ -246,6 +278,9 @@ TOOLS: list[Tool] = [
             "status": {"type": "string", "description": "LEGACY alias for phase"},
             "tags": {"type": "array", "items": {"type": "string"}},
             "page_index": {"type": "integer", "default": 0},
+            # v0.5.2 — A6: mirror report_create's failed_count gate so partial
+            # patches don't silently land. Set true to PATCH anyway.
+            "allow_failures": {"type": "boolean", "default": False},
             **_REPORT_EXTRA_PROPS,
         },
         ["report_id"],
@@ -303,6 +338,9 @@ TOOLS: list[Tool] = [
             "blocks_order": {"type": "array", "items": {"type": "string"},
                              "description": "explicit per-page render order; "
                                             "overrides the CR-2/CR-8 auto-compute"},
+            # v0.5.2 — A6: mirror report_create's failed_count gate so a page
+            # with broken blocks isn't appended silently.
+            "allow_failures": {"type": "boolean", "default": False},
         },
         ["report_id", "template_id", "blocks"],
     ),
@@ -661,6 +699,11 @@ TOOLS: list[Tool] = [
                 "type": "array", "items": {"type": "string"},
                 "description": "workspace slugs that may use the preset; omit for global",
             },
+            # v0.5.2 — D1: optional human-readable description (PresetCreate.description).
+            "description": {
+                "type": "string",
+                "description": "optional preset description shown in the preset picker",
+            },
         },
         ["report_id", "name"],
     ),
@@ -868,9 +911,13 @@ def _do_report_show(args: dict) -> Any:
     summary: dict = {
         "id": report.get("id"),
         "title": report.get("title"),
-        "status": report.get("status"),
+        # v0.5.2 — H1: ReportRead exposes `phase` (drafting|reviewing|finalized),
+        # not `status`. The old `report.get("status")` always returned None.
+        "phase": report.get("phase"),
+        "lifecycle": report.get("lifecycle"),
         "revision": report.get("revision"),
         "report_date": report.get("report_date"),
+        "closed_at": report.get("closed_at"),
         "tags": report.get("tags"),
         "page_count": len(report.get("pages") or []),
         # v0.5.1 — surface author-lock so callers can decide whether a
@@ -1091,6 +1138,15 @@ def _do_report_update(args: dict) -> Any:
                                      "props": eb.get("props", {}),
                                      "input": draft_blocks.pop(bid)})
         result = _normalize_and_upload(c, tpl, draft_blocks, synth_extras, snap)
+        # v0.5.2 — A6: mirror _do_report_create's failed_count gate so a
+        # partial patch with failed blocks doesn't ship to the server unless
+        # the caller explicitly opts in via allow_failures=true.
+        if result.failed_count > 0 and not args.get("allow_failures"):
+            return {"error": "block validation failed",
+                    "failed": result.failed_count,
+                    "blocks": [{"id": b.block_id, "type": b.widget_type,
+                                "status": b.status, "detail": b.detail}
+                               for b in result.blocks if b.status == "failed"]}
         existing_extra_ids = {b.get("id") for b in existing_extras if isinstance(b, dict)}
         new_extras = [e for e in result.extra_blocks if e.get("id") not in existing_extra_ids]
         # v0.5.1 — forward the 13 optional related-info + page-level fields.
@@ -1134,6 +1190,14 @@ def _do_report_add_page(args: dict) -> Any:
         tpl = c.fetch_template(args["template_id"])
         result = _normalize_and_upload(c, tpl, args["blocks"],
                                        args.get("extra_blocks") or [], snap)
+        # v0.5.2 — A6: mirror _do_report_create's failed_count gate so the
+        # new page isn't appended with broken blocks unless explicitly allowed.
+        if result.failed_count > 0 and not args.get("allow_failures"):
+            return {"error": "block validation failed",
+                    "failed": result.failed_count,
+                    "blocks": [{"id": b.block_id, "type": b.widget_type,
+                                "status": b.status, "detail": b.detail}
+                               for b in result.blocks if b.status == "failed"]}
         updated = report_ops.add_page(
             c, rid,
             template_id=tpl["template_id"],
@@ -1782,8 +1846,16 @@ def _do_preset_create(args: dict) -> Any:
     slugs = args.get("owner_workspace_slugs")
     if slugs is not None:
         slugs = [str(s) for s in slugs]
+    # v0.5.2 — D1: forward optional description (omit when None so older
+    # client.create_preset signatures without the kwarg don't break).
+    description = args.get("description")
     with ReportArchiveClient() as c:
-        preset = c.create_preset(rid, name=name, owner_workspace_slugs=slugs)
+        if description is not None:
+            preset = c.create_preset(rid, name=name,
+                                     owner_workspace_slugs=slugs,
+                                     description=str(description))
+        else:
+            preset = c.create_preset(rid, name=name, owner_workspace_slugs=slugs)
     return preset
 
 
@@ -1949,6 +2021,70 @@ async def list_tools() -> list[Tool]:
     return TOOLS
 
 
+# v0.5.2 — A4: build the typed-subclass → error-code dispatch table once at
+# import time. Each tuple is (exception class, error code, include report_id?).
+# Order matters: more-specific subclasses come first; the runtime loop walks
+# the table top-down so a subclass match wins over its parent (AuthorLockedError
+# before ApiError, etc.). Entries are skipped when the class is None — that
+# happens only when client.py hasn't been updated to v0.5.2 yet (defensive).
+def _build_typed_error_map() -> list[tuple[type, str, bool]]:
+    raw = [
+        # 403 — author lock (v0.5.1)
+        (AuthorLockedError, "author_locked", True),
+        # 403 — RA-stable Korean/ASCII signatures (A2)
+        (FinalizedReadOnlyError, "finalized_readonly", True),
+        (NoEditPermissionError, "no_edit_permission", True),
+        (OutOfWorkspaceScopeError, "out_of_workspace_scope", True),
+        # 409 — reports lock + revision (errors[0].code)
+        (LockHeldByOtherError, "lock_held_by_other", True),
+        (LockNotHeldError, "lock_not_held", True),
+        (RevisionMismatchError, "revision_mismatch", True),
+        # 409 — composites revision (FastAPI {detail:str})
+        (CompositeRevisionConflict, "composite_revision_mismatch", False),
+    ]
+    return [(cls, code, has_rid) for (cls, code, has_rid) in raw if cls is not None]
+
+
+_TYPED_ERROR_MAP: list[tuple[type, str, bool]] = _build_typed_error_map()
+
+
+def _format_typed_error(exc: ApiError, code: str, include_report_id: bool) -> dict:
+    """A4 — render a typed RA exception as {error, reason, code, status_code, ...}."""
+    out: dict = {"error": code}
+    reason = getattr(exc, "reason", None)
+    if reason:
+        out["reason"] = reason
+    inner_code = getattr(exc, "code", None)
+    if inner_code:
+        out["code"] = inner_code
+    if include_report_id:
+        rid = getattr(exc, "report_id", None)
+        if rid is not None:
+            out["report_id"] = rid
+    out["status_code"] = exc.status_code
+    out["message"] = str(exc)
+    if exc.payload is not None:
+        out["payload"] = exc.payload
+    return out
+
+
+def _api_error_payload(exc: ApiError) -> dict:
+    """A8 — promote payload.errors[0].code to top-level error_code."""
+    out: dict = {
+        "error": "API error",
+        "status_code": exc.status_code,
+        "message": str(exc),
+        "payload": exc.payload,
+    }
+    if isinstance(exc.payload, dict):
+        errs = exc.payload.get("errors")
+        if isinstance(errs, list) and errs and isinstance(errs[0], dict):
+            ec = errs[0].get("code")
+            if ec:
+                out["error_code"] = ec
+    return out
+
+
 @server.call_tool()
 async def call_tool(name: str, arguments: dict | None) -> list[TextContent]:
     args = arguments or {}
@@ -1957,24 +2093,50 @@ async def call_tool(name: str, arguments: dict | None) -> list[TextContent]:
         return _text({"error": f"unknown tool '{name}'", "available": sorted(_DISPATCH)})
     try:
         result = await asyncio.to_thread(fn, args)
-    except AuthorLockedError as e:
-        # v0.5.1 — surface RA's author-lock 403 as a structured error so
-        # callers (LLMs) can react without having to parse Korean text.
-        # Must come BEFORE the generic ApiError handler since
-        # AuthorLockedError is an ApiError subclass.
-        return _text({
-            "error": "author_locked",
-            "reason": e.reason,
-            "report_id": e.report_id,
-        })
     except ApiError as e:
-        return _text({"error": "API error", "status_code": e.status_code,
-                      "message": str(e), "payload": e.payload})
+        # v0.5.2 — A4: typed-subclass dispatch BEFORE the generic ApiError
+        # branch. Walk the (class, code, include_rid) table and emit a
+        # structured {error: <code>, reason, code, report_id} payload.
+        for cls, code, include_rid in _TYPED_ERROR_MAP:
+            if isinstance(e, cls):
+                return _text(_format_typed_error(e, code, include_rid))
+        # A8 — generic ApiError, promote errors[0].code to top-level.
+        return _text(_api_error_payload(e))
     except (ValueError, KeyError, IndexError, FileNotFoundError) as e:
         return _text({"error": type(e).__name__, "message": str(e)})
+    except RuntimeError as e:
+        # v0.5.2 — A5: classify the three RuntimeError flavours the inner
+        # dispatchers raise (SnapshotMissing, LLMError, no-LLM-provider) so
+        # the LLM sees `snapshot_missing` / `llm_error` / `no_llm_provider`
+        # instead of a useless "internal" label.
+        return _text(_classify_runtime_error(e))
     except Exception as e:  # final safety net — surface the type for diagnosis
         return _text({"error": "internal", "type": type(e).__name__, "message": str(e)})
     return _text(result)
+
+
+def _classify_runtime_error(exc: RuntimeError) -> dict:
+    """A5 — map SnapshotMissing / LLMError / no-LLM-provider to stable codes."""
+    # Late imports — avoid pulling llm / schemas at module load (heavy).
+    try:
+        from report_skill.schemas import SnapshotMissing
+    except ImportError:  # pragma: no cover
+        SnapshotMissing = ()  # type: ignore[assignment,misc]
+    try:
+        from report_skill.llm import LLMError
+    except ImportError:  # pragma: no cover
+        LLMError = ()  # type: ignore[assignment,misc]
+
+    if SnapshotMissing and isinstance(exc, SnapshotMissing):
+        return {"error": "snapshot_missing", "detail": str(exc)}
+    if LLMError and isinstance(exc, LLMError):
+        return {"error": "llm_error", "detail": str(exc)}
+    # `_do_report_revise` raises bare RuntimeError("no LLM provider configured ...")
+    # when llm_mod.is_configured() returns False.
+    msg = str(exc)
+    if "no LLM provider" in msg or "no llm provider" in msg.lower():
+        return {"error": "no_llm_provider", "detail": msg}
+    return {"error": "internal", "type": type(exc).__name__, "message": msg}
 
 
 async def _run() -> None:

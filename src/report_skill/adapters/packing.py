@@ -6,6 +6,11 @@ from typing import Any
 from report_skill.adapters.base import NormalizeError, WidgetAdapter
 from report_skill.repair import coerce_number, truncate
 
+_PASSTHROUGH = (
+    "caption", "caption_skip_autofill", "unit",
+    "colorscale", "reverse_scale", "text_info", "padding",
+)
+
 
 class PackingAdapter(WidgetAdapter):
     type = "packing"
@@ -15,22 +20,35 @@ class PackingAdapter(WidgetAdapter):
             rows = _coerce_rows(raw["rows"])
             if not rows:
                 raise NormalizeError("packing: no usable rows")
-            return {"rows": rows}
+            out: dict = {"rows": rows}
+            for k in _PASSTHROUGH:
+                if k in raw:
+                    out[k] = raw[k]
+            return out
 
         entries: list[dict] = []
+        carry: dict = {}
         if isinstance(raw, list):
             for item in raw:
                 if isinstance(item, dict):
                     entries.append(item)
         elif isinstance(raw, dict):
-            entries = _flatten_nested(raw, parent=None)
+            for k in _PASSTHROUGH:
+                if k in raw:
+                    carry[k] = raw[k]
+            entries = _flatten_nested(
+                {k: v for k, v in raw.items() if k not in _PASSTHROUGH},
+                parent=None,
+            )
         else:
             raise NormalizeError(f"packing: unsupported input type {type(raw).__name__}")
 
         rows = _coerce_rows(entries)
         if not rows:
             raise NormalizeError("packing: no usable rows")
-        return {"rows": rows}
+        out = {"rows": rows}
+        out.update(carry)
+        return out
 
     def fallback_to(self) -> str:
         return "table"

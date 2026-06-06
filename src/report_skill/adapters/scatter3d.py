@@ -1,5 +1,9 @@
 """Scatter3d adapter — accepts list-of-dicts (numeric x/y/z) or list of
 [x, y, z] triples, produces scatter3d content with columns + rows + series.
+
+Preserves caller-supplied `series` (including kind=surface and color_key)
+when provided via dict input; only synthesizes a default series when the
+caller did not supply one.
 """
 from __future__ import annotations
 
@@ -8,6 +12,11 @@ from typing import Any
 from report_skill.adapters.base import NormalizeError, WidgetAdapter
 from report_skill.repair import coerce_number, to_slug, truncate
 
+_PASSTHROUGH = (
+    "caption", "caption_skip_autofill", "mode", "colorscale",
+    "x_axis_title", "y_axis_title", "z_axis_title",
+)
+
 
 class Scatter3dAdapter(WidgetAdapter):
     type = "scatter3d"
@@ -15,15 +24,17 @@ class Scatter3dAdapter(WidgetAdapter):
     def normalize(self, raw: Any, props: dict) -> dict:
         caption = props.get("caption") or props.get("label")
         columns_in = props.get("columns") or []
+        user_series: Any = None
 
         passthrough: dict = {}
         if isinstance(raw, dict):
-            for k in ("caption", "x_axis_title", "y_axis_title", "z_axis_title",
-                      "colorscale"):
+            for k in _PASSTHROUGH:
                 if k in raw:
                     passthrough[k] = raw[k]
             if isinstance(raw.get("columns"), list) and not columns_in:
                 columns_in = raw["columns"]
+            if isinstance(raw.get("series"), list):
+                user_series = raw["series"]
             if isinstance(raw.get("rows"), list):
                 rows_raw = raw["rows"]
             else:
@@ -68,13 +79,16 @@ class Scatter3dAdapter(WidgetAdapter):
         if not rows:
             raise NormalizeError("scatter3d: no rows with valid x/y/z values")
 
-        series = [{
-            "label": str(props.get("label") or "series"),
-            "kind": "scatter3d",
-            "x_key": x_key,
-            "y_key": y_key,
-            "z_key": z_key,
-        }]
+        # B11: preserve caller-provided series (incl. kind=surface, color_key)
+        # rather than synthesize. Only synthesize default when user omitted.
+        if user_series:
+            series = [_normalize_user_series_entry(s, x_key, y_key, z_key)
+                      for s in user_series
+                      if isinstance(s, dict)]
+            if not series:
+                series = _default_series(props, x_key, y_key, z_key)
+        else:
+            series = _default_series(props, x_key, y_key, z_key)
 
         out: dict = {
             "mode": "scatter3d",
@@ -89,6 +103,34 @@ class Scatter3dAdapter(WidgetAdapter):
 
     def fallback_to(self) -> str:
         return "table"
+
+
+def _default_series(props: dict, x_key: str, y_key: str, z_key: str) -> list[dict]:
+    return [{
+        "label": str(props.get("label") or "series"),
+        "kind": "scatter3d",
+        "x_key": x_key,
+        "y_key": y_key,
+        "z_key": z_key,
+    }]
+
+
+def _normalize_user_series_entry(s: dict, x_key: str, y_key: str, z_key: str) -> dict:
+    """Preserve a user-supplied series entry; fill missing axis keys with
+    resolved defaults. Pass through kind (scatter3d|surface), color_key, color.
+    """
+    out: dict = {
+        "label": str(s.get("label") or "series"),
+        "kind": str(s.get("kind") or "scatter3d"),
+        "x_key": str(s.get("x_key") or x_key),
+        "y_key": str(s.get("y_key") or y_key),
+        "z_key": str(s.get("z_key") or z_key),
+    }
+    if "color_key" in s and s["color_key"] is not None:
+        out["color_key"] = str(s["color_key"])
+    if "color" in s and s["color"] is not None:
+        out["color"] = str(s["color"])
+    return out
 
 
 def _normalize_number_columns(columns: list[dict]) -> list[dict]:

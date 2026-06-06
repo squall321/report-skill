@@ -75,27 +75,110 @@ _WIDGET_INPUT_HINTS: dict[str, str] = {
         "  리뷰는 [DX팀](mention://dept/dx) 과 진행했다.\n"
         "  검증 대상: [HFP-X1](mention://entity/412?axis=model_name) 모델.\n"
         "Reserve mention chips for GENUINE cross-references — linkifying every "
-        "team or product name is a known AI tell (see SKILL.md style note)."
+        "team or product name is a known AI tell (see SKILL.md style note).\n"
+        "List-shape input: when emitting structured `items: [{depth, text, html, relation}]`, "
+        "the per-item `relation` field is a slug (1-32 chars) that the runtime resolves "
+        "against the active relations resolver (v0.6.0). Omit `relation` unless a slug is "
+        "known — the adapter preserves it verbatim and does NOT auto-derive one from prose."
     ),
     "table": (
         "Optional dict-input fields the adapter passes through alongside `rows`:\n"
         "  - `note`: footnote shown under the table (max 1000 chars). The "
         "renderer prepends `※` automatically — do NOT include it yourself.\n"
-        "  - `column_widths`: {column_key: px_int} per-column width hints.\n"
-        "  - `table_width_px`: total table width in pixels (int).\n"
+        "  - `column_widths`: {column_key: px_int} per-column width hints (40-1200).\n"
+        "  - `table_width_px`: total table width in pixels (int, 120-4000).\n"
         "  - `merges`: list of `{r, c, rs, cs}` cell-span objects "
-        "(row/col index plus row-span/col-span)."
+        "(row/col index plus row-span/col-span).\n"
+        "  - `columns`: list of column descriptors `{key, label, type, meta}` "
+        "for per-report column override (v0.5.2)."
     ),
     "image": (
-        "Optional dict-input field beyond the existing files/caption/aspect_ratio:\n"
+        "Optional dict-input fields beyond the existing files/caption/aspect_ratio/max_count:\n"
         "  - `note`: caption-line footnote (max 1000 chars). Renderer prepends "
-        "`※` automatically — do NOT include it yourself."
+        "`※` automatically — do NOT include it yourself.\n"
+        "  - `annotations`: list of 2-D overlay annotations (point/arrow/box etc) "
+        "per the _ANNOTATIONS_FIELD schema."
     ),
     "comparison": (
         "Optional dict-input fields the adapter passes through alongside `rows`:\n"
         "  - `note`: footnote (max 1000 chars, no leading `※` — renderer adds it).\n"
         "  - `column_widths` / `table_width_px` / `merges`: same shape as table.\n"
-        "  - `row_label_width`: pixel width of the left label column (int)."
+        "  - `row_label_width`: pixel width of the left label column (int, 60-1200).\n"
+        "  - `cases`: list of `{key, label}` defining the comparison columns.\n"
+        "  - `horizontal_scroll`: bool toggling horizontal overflow scroll.\n"
+        "  - `max_cases`: int (2-30) capping how many cases render.\n"
+        "  - `image_max_height_px`: int (80-600) clamp on image-row height."
+    ),
+    "pie": (
+        "Rows are `[{label, value, color}]`. The widget has no `variant`, no "
+        "`group_top_n`, no `value_format` — use `chart_type` (\"pie\"|\"donut\"), "
+        "`hole` (0-0.9, only meaningful for donut), and `text_info` "
+        "(label|label+percent|label+value|label+value+percent|percent|value|none) "
+        "to control what each slice displays. `sort` (bool) toggles descending sort; "
+        "`show_legend` toggles the legend. Optional `unit` (<=32 chars) appears in tooltips."
+    ),
+    "treemap": (
+        "Rows are `[{label, parent, value, color}]` — `parent` is the label of the "
+        "containing rectangle (empty string or omitted for root nodes). "
+        "`branchvalues` is \"remainder\" (children sum to parent's remaining area) or "
+        "\"total\" (parent's value = sum of children). `text_info` enum controls per-cell "
+        "labels (label|label+value|label+value+percent_parent|label+value+percent_root|"
+        "label+percent_root|value|none). No `group_top_n` — pre-aggregate upstream."
+    ),
+    "packing": (
+        "Circle-packing layout. Rows are `[{label, parent, value, color}]` like treemap. "
+        "`padding` is int 0-20 (gap between circles in px). Use `text_info` "
+        "(label|label+value|label+value+percent|value|none) to control cell text; there "
+        "is no separate `show_value` toggle."
+    ),
+    "waffle": (
+        "Rows are `[{label, value, color}]`. Grid sized by `cols` (1-50) x "
+        "`grid_rows` (1-50). `shape` is \"square\"|\"circle\" (this is the visual marker, "
+        "not a variant). `fill_direction` is \"row\"|\"column\". `show_legend` and "
+        "`show_value_per_cell` are independent booleans."
+    ),
+    "heading": (
+        "Simple heading block. Required: `text` (1-200 chars). Optional: "
+        "`level` (1|2|3), `text_style` object (color/weight/etc), "
+        "`margin_bottom_px` (int 0-200). There is NO `tag` field."
+    ),
+    "progress_bar": (
+        "Multi-row progress widget. Top-level: `default_max` (number > 0), "
+        "`unit` (<=8 chars). Each row is an item: "
+        "`items: [{label, value, max?, note?, status?}]` where `status` is one of "
+        "pending|in_progress|done|blocked. Per-item `max` overrides `default_max`. "
+        "Note that `value`/`max`/`label` are per-item — not widget-level."
+    ),
+    "cad_3d": (
+        "3-D CAD viewer. Required: `file_id` (uploaded STEP/glb/etc). Optional: "
+        "`loaded_filename` (<=255), `view_state` `{position[3], target[3], zoom, "
+        "show_grid, show_axes, sidebar_open}`, `hidden_parts: [str]`, "
+        "`wireframe_parts: [str]`, and `annotations` of two kinds:\n"
+        "  - `{id, type: \"distance_3d\", p1: {x,y,z}, p2: {x,y,z}, label, color}`\n"
+        "  - `{id, type: \"point_3d\", p1: {x,y,z}, label, color}`\n"
+        "`color` is a `#rrggbb` hex string. Use `file_id` (not `model`)."
+    ),
+    "scatter3d": (
+        "3-D scatter / surface. `mode` is fixed \"scatter3d\". `series` is a list of "
+        "`{label, kind, x_key, y_key, z_key, color_key, color}` where `kind` is "
+        "\"scatter3d\" or \"surface\" — the adapter PRESERVES caller-provided series "
+        "verbatim (does not synthesize them). `colorscale` enum picks the gradient. "
+        "`columns` + `rows` carry the underlying numeric table. "
+        "Note: scatter3d has NO `annotations` field (2-D pixel overlays are meaningless "
+        "under free rotation)."
+    ),
+    "bulleted_list": (
+        "Simplest list widget. Top-level `items` is an array of plain strings "
+        "(each minLength 1). No markdown bullets in the strings; the renderer adds "
+        "the bullet marker. Optional `caption` / `caption_skip_autofill` only."
+    ),
+    "html_embed": (
+        "Embed an uploaded HTML bundle. Required: `file_id` (entry HTML), "
+        "`bundle_id` (1-32 chars, the assets bundle group). Optional: "
+        "`entry_path` (1-512, relative path of the entry file), `filename`, "
+        "`height_px` (60-4000), `display` (\"card\"|\"inline\"), `title` (<=200), "
+        "`description` (<=1000), `cover_file_id` (poster image shown before load). "
+        "There is no `url` field — uploaded bundles only."
     ),
 }
 

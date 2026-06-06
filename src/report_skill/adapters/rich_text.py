@@ -255,6 +255,13 @@ class RichTextAdapter(WidgetAdapter):
                     }
                     if "html" in entry and isinstance(entry["html"], str):
                         item["html"] = entry["html"][:8000]
+                    # B15: preserve per-item `relation` slug (1-32) so the
+                    # widget's relation chip (resolved against the report's
+                    # related-info entities) survives the adapter round-trip.
+                    if "relation" in entry and isinstance(entry["relation"], str):
+                        rel = entry["relation"].strip()
+                        if rel:
+                            item["relation"] = rel[:32]
                     items.append(item)
             if not items:
                 raise NormalizeError("rich_text: list had no usable items")
@@ -270,6 +277,10 @@ class RichTextAdapter(WidgetAdapter):
                 out["items"] = _string_to_items(raw["markdown"].strip())
             if "caption" in raw and isinstance(raw["caption"], str):
                 out["caption"] = raw["caption"][:200]
+            # B15: surface caption_skip_autofill (bool) so the user-authored
+            # caption isn't silently overwritten by the backend's autofill.
+            if "caption_skip_autofill" in raw:
+                out["caption_skip_autofill"] = bool(raw["caption_skip_autofill"])
             if not out:
                 import json as _json
                 out["markdown"] = _json.dumps(raw, ensure_ascii=False, indent=2)

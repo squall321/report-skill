@@ -2,7 +2,21 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
+
+# Sentinel for "argument not supplied". Used so callers can pass `None`
+# explicitly to mean "clear this field server-side" while a missing arg
+# means "omit the key from the payload entirely".
+#
+# Semantics (applies to report_type_id, closed_at):
+#   value is _UNSET   → omit key from body
+#   value is None     → include key with value None (server clears the field)
+#   anything else     → include key with that value
+#
+# Lists with empty-list-clears semantics (collab_workspace_slugs, entity_ids)
+# keep their existing rule: None=omit, []=include verbatim (server clears).
+_UNSET: Any = object()
+
 
 # Legacy status → new phase. Backend rename:
 #   status enum (draft / in_progress / completed)
@@ -93,7 +107,7 @@ def build_create_payload(
     # ---- v0.5.0 related-info + page settings (all optional) ----
     collab_workspace_slugs: Optional[list[str]] = None,
     entity_ids: Optional[list[int]] = None,
-    report_type_id: Optional[int] = None,
+    report_type_id: Any = _UNSET,
     page_width_px: Optional[int] = None,
     page_gap_px: Optional[int] = None,
     page_blend_blocks: Optional[bool] = None,
@@ -104,6 +118,8 @@ def build_create_payload(
     page_rich_text_prefix_d0: Optional[str] = None,
     page_rich_text_prefix_d1: Optional[str] = None,
     page_rich_text_prefix_d2: Optional[str] = None,
+    # ---- v0.5.2 lifecycle close date (date|str ISO YYYY-MM-DD) ----
+    closed_at: Any = _UNSET,
 ) -> dict:
     """ReportCreate POST body for a single-page report.
 
@@ -112,6 +128,11 @@ def build_create_payload(
     None means leave unset. For `collab_workspace_slugs` and `entity_ids`,
     an empty list is forwarded verbatim — the backend treats `[]` as
     explicit-clear.
+
+    v0.5.2 (C4/C7): `report_type_id` and `closed_at` now use the `_UNSET`
+    sentinel so the caller can pass `None` explicitly to clear the field
+    server-side. Omitting the kwarg (defaults to `_UNSET`) leaves the key
+    out of the payload entirely.
     """
     return build_create_payload_multi(
         pages=[{
@@ -139,6 +160,7 @@ def build_create_payload(
         page_rich_text_prefix_d0=page_rich_text_prefix_d0,
         page_rich_text_prefix_d1=page_rich_text_prefix_d1,
         page_rich_text_prefix_d2=page_rich_text_prefix_d2,
+        closed_at=closed_at,
     )
 
 
@@ -154,7 +176,7 @@ def build_create_payload_multi(
     # ---- v0.5.0 related-info + page settings (all optional) ----
     collab_workspace_slugs: Optional[list[str]] = None,
     entity_ids: Optional[list[int]] = None,
-    report_type_id: Optional[int] = None,
+    report_type_id: Any = _UNSET,
     page_width_px: Optional[int] = None,
     page_gap_px: Optional[int] = None,
     page_blend_blocks: Optional[bool] = None,
@@ -165,6 +187,8 @@ def build_create_payload_multi(
     page_rich_text_prefix_d0: Optional[str] = None,
     page_rich_text_prefix_d1: Optional[str] = None,
     page_rich_text_prefix_d2: Optional[str] = None,
+    # ---- v0.5.2 lifecycle close date (date|str ISO YYYY-MM-DD) ----
+    closed_at: Any = _UNSET,
 ) -> dict:
     """ReportCreate POST body for a multi-page report.
 
@@ -181,6 +205,13 @@ def build_create_payload_multi(
     None means omit from payload. For `collab_workspace_slugs` and
     `entity_ids`, an empty list is forwarded verbatim — the backend treats
     `[]` as explicit-clear.
+
+    v0.5.2 (C4/C7):
+      - `report_type_id` now uses the `_UNSET` sentinel: omitted kwarg →
+        not in body; `None` → body has `report_type_id: None` (server
+        clears); int → body has the value.
+      - `closed_at` is new (Optional[date|str ISO YYYY-MM-DD]) with the
+        same `_UNSET` / None / value semantics.
     """
     if not pages:
         raise ValueError("at least one page required")
@@ -229,9 +260,10 @@ def build_create_payload_multi(
         body["collab_workspace_slugs"] = list(collab_workspace_slugs)
     if entity_ids is not None:
         body["entity_ids"] = list(entity_ids)
-    # Scalar optionals: include only when not None.
-    if report_type_id is not None:
+    # _UNSET-sentinel scalars: None reaches the body so the server clears.
+    if report_type_id is not _UNSET:
         body["report_type_id"] = report_type_id
+    # Scalar optionals: include only when not None.
     if page_width_px is not None:
         body["page_width_px"] = page_width_px
     if page_gap_px is not None:
@@ -252,5 +284,12 @@ def build_create_payload_multi(
         body["page_rich_text_prefix_d1"] = page_rich_text_prefix_d1
     if page_rich_text_prefix_d2 is not None:
         body["page_rich_text_prefix_d2"] = page_rich_text_prefix_d2
+
+    # ---- v0.5.2 closed_at (date|str|None) with _UNSET semantics ----
+    if closed_at is not _UNSET:
+        if isinstance(closed_at, date):
+            body["closed_at"] = closed_at.isoformat()
+        else:
+            body["closed_at"] = closed_at
 
     return body

@@ -78,9 +78,13 @@ _TOP_KEEP = {"title", "report_date", "tags", "phase", "lifecycle",
              "page_slide_guide", "page_slide_ratio",
              "page_slide_ratio_custom_w", "page_slide_ratio_custom_h",
              "page_rich_text_prefix_d0", "page_rich_text_prefix_d1",
-             "page_rich_text_prefix_d2"}
+             "page_rich_text_prefix_d2",
+             # v0.5.2 — ongoing-lifecycle close date (ISO YYYY-MM-DD)
+             "closed_at"}
 _PAGE_KEEP = {"template_id", "template_version", "name", "content",
-              "extra_blocks", "blocks_order"}
+              "extra_blocks", "blocks_order",
+              # v0.5.2 — per-block layout/style/section overrides on ReportPage
+              "layout_overrides", "props_overrides", "block_sections"}
 
 
 def ready_for_recreate(report: dict) -> dict:
@@ -96,6 +100,12 @@ def ready_for_recreate(report: dict) -> dict:
             e["id"] for e in (report.get("entities") or [])
             if isinstance(e, dict) and isinstance(e.get("id"), int)
         ]
+    # v0.5.2 — phase=finalized is server-side read-only. Importing into a
+    # finalized phase would immediately edit-block follow-up patches, so
+    # down-shift to drafting on the way out. Callers who want the imported
+    # report finalized again should call report_publish after import.
+    if out.get("phase") == "finalized":
+        out["phase"] = "drafting"
     pages_out: list[dict] = []
     for p in report.get("pages") or []:
         page_out = {k: p[k] for k in _PAGE_KEEP if k in p}

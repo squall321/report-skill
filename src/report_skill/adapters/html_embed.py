@@ -12,6 +12,11 @@ from typing import Any
 from report_skill.adapters.base import NormalizeError, WidgetAdapter
 from report_skill.repair import truncate
 
+_PASSTHROUGH = (
+    "caption_skip_autofill", "bundle_id", "entry_path", "display",
+    "title", "description", "cover_file_id",
+)
+
 
 class HtmlEmbedAdapter(WidgetAdapter):
     type = "html_embed"
@@ -37,9 +42,15 @@ class HtmlEmbedAdapter(WidgetAdapter):
                         "html_embed cannot fetch URLs/paths; upload the HTML "
                         "via POST /api/files and pass file_id."
                     )
-                # caption-only — schema allows it (file_id not required)
-                if raw.get("caption"):
-                    return {"caption": truncate(str(raw["caption"]), 200)}
+                # caption-only (or bundle metadata only) — schema allows it (file_id not required)
+                if raw.get("caption") or any(k in raw for k in _PASSTHROUGH):
+                    out: dict = {}
+                    if raw.get("caption"):
+                        out["caption"] = truncate(str(raw["caption"]), 200)
+                    for k in _PASSTHROUGH:
+                        if k in raw:
+                            out[k] = raw[k]
+                    return out
                 raise NormalizeError("html_embed: missing file_id (and no caption)")
 
             out: dict = {"file_id": str(file_id)}
@@ -49,6 +60,9 @@ class HtmlEmbedAdapter(WidgetAdapter):
                 out["height_px"] = max(60, min(4000, raw["height_px"]))
             if raw.get("caption"):
                 out["caption"] = truncate(str(raw["caption"]), 200)
+            for k in _PASSTHROUGH:
+                if k in raw:
+                    out[k] = raw[k]
             return out
 
         raise NormalizeError(f"html_embed: unsupported input type {type(raw).__name__}")

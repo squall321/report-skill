@@ -6,17 +6,29 @@ from typing import Any
 from report_skill.adapters.base import NormalizeError, WidgetAdapter
 from report_skill.repair import coerce_number, truncate
 
+_PASSTHROUGH = (
+    "caption", "caption_skip_autofill", "unit",
+    "cols", "grid_rows", "shape", "fill_direction",
+    "show_legend", "show_value_per_cell",
+)
+
 
 class WaffleAdapter(WidgetAdapter):
     type = "waffle"
 
     def normalize(self, raw: Any, props: dict) -> dict:
         if isinstance(raw, dict) and isinstance(raw.get("rows"), list):
-            return {"rows": _coerce_rows(raw["rows"])}
+            out: dict = {"rows": _coerce_rows(raw["rows"])}
+            for k in _PASSTHROUGH:
+                if k in raw:
+                    out[k] = raw[k]
+            return out
 
         entries: list[dict] = []
         if isinstance(raw, dict):
             for lbl, val in raw.items():
+                if lbl in _PASSTHROUGH:
+                    continue
                 entries.append({"label": lbl, "value": val})
         elif isinstance(raw, list):
             for item in raw:
@@ -32,7 +44,12 @@ class WaffleAdapter(WidgetAdapter):
         rows = _coerce_rows(entries)
         if not rows:
             raise NormalizeError("waffle: no usable rows")
-        return {"rows": rows}
+        out = {"rows": rows}
+        if isinstance(raw, dict):
+            for k in _PASSTHROUGH:
+                if k in raw:
+                    out[k] = raw[k]
+        return out
 
     def fallback_to(self) -> str:
         return "table"

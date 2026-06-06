@@ -8,6 +8,10 @@ from report_skill.repair import coerce_number, truncate
 
 _STATUS = {"pending", "in_progress", "done", "blocked"}
 
+_PASSTHROUGH = (
+    "caption", "caption_skip_autofill", "default_max", "unit",
+)
+
 
 class ProgressBarAdapter(WidgetAdapter):
     type = "progress_bar"
@@ -19,11 +23,21 @@ class ProgressBarAdapter(WidgetAdapter):
             items = _coerce_items(raw["items"], default_max)
             if not items:
                 raise NormalizeError("progress_bar: no usable items")
-            return {"items": items}
+            out: dict = {"items": items}
+            for k in _PASSTHROUGH:
+                if k in raw:
+                    out[k] = raw[k]
+            return out
 
         entries: list[dict] = []
+        passthrough_src: dict | None = None
         if isinstance(raw, dict):
+            # Reserve known passthrough keys (widget-level fields) so they don't get
+            # mistaken for per-item shorthand entries like {label: value} pairs.
+            passthrough_src = raw
             for lbl, val in raw.items():
+                if lbl in _PASSTHROUGH:
+                    continue
                 if isinstance(val, dict):
                     entries.append({"label": lbl, **val})
                 else:
@@ -38,7 +52,12 @@ class ProgressBarAdapter(WidgetAdapter):
         items = _coerce_items(entries, default_max)
         if not items:
             raise NormalizeError("progress_bar: no usable items")
-        return {"items": items}
+        out = {"items": items}
+        if passthrough_src is not None:
+            for k in _PASSTHROUGH:
+                if k in passthrough_src:
+                    out[k] = passthrough_src[k]
+        return out
 
     def fallback_to(self) -> str:
         return "table"

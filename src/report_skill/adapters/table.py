@@ -124,12 +124,21 @@ def _clean_note(s: str) -> str:
     return truncate(text, 1000)
 
 
-def _extract_content_extras(raw: dict) -> dict:
-    """Passthrough optional v0.5.0 content fields from a dict input.
+_PASSTHROUGH = (
+    "caption", "caption_skip_autofill", "columns",
+)
 
-    Keys handled: note, column_widths, table_width_px, merges. Empty/invalid
-    values are dropped silently."""
+
+def _extract_content_extras(raw: dict) -> dict:
+    """Passthrough optional v0.5.0+ content fields from a dict input.
+
+    Keys handled: note, column_widths, table_width_px, merges (v0.5.0) +
+    caption, caption_skip_autofill, columns (v0.5.2 — per-report override).
+    Empty/invalid values are dropped silently."""
     out: dict = {}
+    for k in _PASSTHROUGH:
+        if k in raw:
+            out[k] = raw[k]
     note = raw.get("note")
     if isinstance(note, str):
         cleaned = _clean_note(note)

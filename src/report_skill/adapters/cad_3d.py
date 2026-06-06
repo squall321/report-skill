@@ -11,6 +11,11 @@ from typing import Any
 from report_skill.adapters.base import NormalizeError, WidgetAdapter
 from report_skill.repair import truncate
 
+_PASSTHROUGH = (
+    "caption_skip_autofill",
+    "annotations",
+)
+
 
 def _first_file_id(value: Any) -> str | None:
     if isinstance(value, str) and value.strip():
@@ -60,6 +65,9 @@ class Cad3dAdapter(WidgetAdapter):
             if isinstance(raw.get("loaded_filename"), str):
                 out["loaded_filename"] = raw["loaded_filename"][:255]
             for k in ("view_state", "hidden_parts", "wireframe_parts"):
+                if k in raw:
+                    out[k] = raw[k]
+            for k in _PASSTHROUGH:
                 if k in raw:
                     out[k] = raw[k]
             return out

@@ -11,6 +11,13 @@ from report_skill.repair import coerce_number, to_slug, truncate
 _VALID_CHART_TYPES = ("bar", "line")
 _VALID_COL_TYPES = ("text", "number")
 
+_PASSTHROUGH = (
+    "caption", "caption_skip_autofill", "chart_type",
+    "x_axis_title", "y_axis_title",
+    "x_min", "x_max", "y_min", "y_max",
+    "annotations",
+)
+
 
 class ChartAdapter(WidgetAdapter):
     type = "chart"
@@ -22,8 +29,7 @@ class ChartAdapter(WidgetAdapter):
         # Unwrap dict input
         passthrough: dict = {}
         if isinstance(raw, dict):
-            for k in ("caption", "x_axis_title", "y_axis_title",
-                      "x_min", "x_max", "y_min", "y_max", "chart_type"):
+            for k in _PASSTHROUGH:
                 if k in raw:
                     passthrough[k] = raw[k]
             if isinstance(raw.get("columns"), list) and not columns_in:

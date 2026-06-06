@@ -18,6 +18,7 @@ and retries up to `max_retries` times before giving up with a clear error.
 """
 from __future__ import annotations
 
+import datetime as _dt
 import logging
 import time
 from contextlib import contextmanager
@@ -29,8 +30,28 @@ from report_skill.adapters.base import NormalizeError
 from report_skill.client import ApiError, ReportArchiveClient
 
 
+# Sentinel for "kwarg not provided". Distinct from None which means
+# "explicit null — clear the field server-side". Used by C4/C7 semantics.
+_UNSET: Any = object()
+
+
 class RevisionConflict(RuntimeError):
     """Raised when expected_revision retries are exhausted."""
+
+
+def _coerce_closed_at(value: Any) -> Any:
+    """Normalize closed_at to an ISO YYYY-MM-DD string (or None to clear).
+
+    Accepts datetime.date, datetime.datetime, or string. None passes through
+    so the caller can explicitly clear the field server-side.
+    """
+    if value is None:
+        return None
+    if isinstance(value, _dt.datetime):
+        return value.date().isoformat()
+    if isinstance(value, _dt.date):
+        return value.isoformat()
+    return value
 
 
 @contextmanager
@@ -106,6 +127,16 @@ def update_blocks(
     page_rich_text_prefix_d0: Optional[str] = None,
     page_rich_text_prefix_d1: Optional[str] = None,
     page_rich_text_prefix_d2: Optional[str] = None,
+    # v0.5.2 — per-page block overrides (silently dropped pre-v0.5.2 bundles)
+    layout_overrides: Optional[dict] = None,
+    props_overrides: Optional[dict] = None,
+    block_sections: Optional[dict] = None,
+    # v0.5.2 — concurrency + null-clear semantics
+    expected_revision: Optional[int] = None,
+    max_retries: int = 1,
+    retry_delay: float = 0.4,
+    # v0.5.2 — closed_at uses _UNSET so explicit None can clear the field
+    closed_at: Any = _UNSET,
 ) -> dict:
     """Patch specific blocks of an existing report.
 
@@ -125,102 +156,165 @@ def update_blocks(
     - `page_*` (10 fields): page-level layout, slide-guide, slide-ratio and
       rich-text-prefix glyphs. Each is omitted from the PATCH body when
       None so the server keeps the current value.
+    - `layout_overrides` / `props_overrides` / `block_sections` (v0.5.2):
+      per-page block-id-keyed override maps. Omitted when None.
+    - `closed_at` (v0.5.2): date | datetime | "YYYY-MM-DD" | None. Uses an
+      `_UNSET` sentinel so the caller can explicitly pass `None` to clear
+      the field server-side. Omitted from the body when not supplied.
+    - `expected_revision` (v0.5.2): when supplied, included as the optimistic
+      lock; on 409 revision_mismatch the call re-fetches and retries up to
+      `max_retries` times (default 1) before raising `RevisionConflict`.
+      When omitted, defaults to the just-fetched report's revision.
 
-    Returns the updated Report record.
+    Returns a dict (the updated Report record) with an added
+    `warnings: list[str]` key when relevant (e.g. phase=finalized patch).
+    Callers should tolerate the extra key.
     """
-    current = fetch_report(client, report_id)
-    pages = list(current.get("pages", []))
-    if not pages:
-        raise ValueError(f"report {report_id} has no pages")
-    if page_index < 0 or page_index >= len(pages):
-        raise IndexError(f"page_index {page_index} out of range (report has {len(pages)} pages)")
+    warnings_acc: list[str] = []
 
-    page = dict(pages[page_index])
-    content = dict(page.get("content", {}))
-
-    if block_patches:
-        for bid, ctn in block_patches.items():
-            content[bid] = ctn
-
-    # CR-11 — when add_extra_blocks is supplied, merge the new ids into the
-    # page's existing blocks_order so the new extras actually render. The
-    # backend hides anything missing from blocks_order, so without this the
-    # new heading/chart/etc would never appear even though it's in content.
-    new_extra_ids: list = []
-    if add_extra_blocks:
-        extras = list(page.get("extra_blocks") or [])
-        for b in add_extra_blocks:
-            extras.append({k: v for k, v in b.items()
-                           if k in ("id", "type", "props", "layout")})
-            if b.get("id"):
-                new_extra_ids.append(b["id"])
-            if "content" in b and b.get("id"):
-                content[b["id"]] = b["content"]
-        page["extra_blocks"] = extras
-
-    # Explicit blocks_order override wins over the auto-merge. Otherwise we
-    # auto-merge new extras into the existing order (preserves the user's
-    # ordering and just appends the new ids at the end).
-    if blocks_order is not None:
-        page["blocks_order"] = list(blocks_order)
-    elif new_extra_ids:
-        from report_skill.report_builder import merge_blocks_order
-        current_order = page.get("blocks_order") or []
-        page["blocks_order"] = merge_blocks_order(current_order, new_extra_ids)
-
-    page["content"] = content
-    pages[page_index] = page
-
-    body: dict = {"pages": pages}
-    if title is not None:
-        body["title"] = title
-    # Backend renamed status→phase. Accept legacy `status` and map.
-    from report_skill.report_builder import normalize_phase
-    resolved_phase = normalize_phase(phase) or normalize_phase(status)
-    if resolved_phase is not None:
-        body["phase"] = resolved_phase
-        if resolved_phase == "finalized":
-            logging.warning(
-                "update_blocks: phase=finalized patch bypasses publish notifications "
-                "— consider using report_publish for finalize+notify behavior."
+    def _build_request_body(report_snapshot: dict) -> tuple[dict, list]:
+        pages_local = list(report_snapshot.get("pages", []))
+        if not pages_local:
+            raise ValueError(f"report {report_id} has no pages")
+        if page_index < 0 or page_index >= len(pages_local):
+            raise IndexError(
+                f"page_index {page_index} out of range "
+                f"(report has {len(pages_local)} pages)"
             )
-    if lifecycle is not None:
-        body["lifecycle"] = lifecycle
-    if tags is not None:
-        body["tags"] = tags
-    # v0.5.0 — related-info: lists use empty-list-clears-all semantics, so
-    # include the key whenever the caller passed any list (even []). None
-    # means "leave unset" so the key is omitted entirely.
-    if collab_workspace_slugs is not None:
-        body["collab_workspace_slugs"] = list(collab_workspace_slugs)
-    if entity_ids is not None:
-        body["entity_ids"] = list(entity_ids)
-    if report_type_id is not None:
-        body["report_type_id"] = report_type_id
-    # v0.5.0 — page-level settings. Each one is an Optional scalar: include
-    # only when explicitly set so the PATCH stays narrow.
-    if page_width_px is not None:
-        body["page_width_px"] = page_width_px
-    if page_gap_px is not None:
-        body["page_gap_px"] = page_gap_px
-    if page_blend_blocks is not None:
-        body["page_blend_blocks"] = page_blend_blocks
-    if page_slide_guide is not None:
-        body["page_slide_guide"] = page_slide_guide
-    if page_slide_ratio is not None:
-        body["page_slide_ratio"] = page_slide_ratio
-    if page_slide_ratio_custom_w is not None:
-        body["page_slide_ratio_custom_w"] = page_slide_ratio_custom_w
-    if page_slide_ratio_custom_h is not None:
-        body["page_slide_ratio_custom_h"] = page_slide_ratio_custom_h
-    if page_rich_text_prefix_d0 is not None:
-        body["page_rich_text_prefix_d0"] = page_rich_text_prefix_d0
-    if page_rich_text_prefix_d1 is not None:
-        body["page_rich_text_prefix_d1"] = page_rich_text_prefix_d1
-    if page_rich_text_prefix_d2 is not None:
-        body["page_rich_text_prefix_d2"] = page_rich_text_prefix_d2
-    with edit_lock(client, report_id):
-        return client._request("PATCH", f"/reports/{report_id}", json=body)
+        page = dict(pages_local[page_index])
+        content = dict(page.get("content", {}))
+        if block_patches:
+            for bid, ctn in block_patches.items():
+                content[bid] = ctn
+
+        # CR-11 — when add_extra_blocks is supplied, merge the new ids into
+        # the page's existing blocks_order so the new extras actually
+        # render. The backend hides anything missing from blocks_order.
+        new_extra_ids: list = []
+        if add_extra_blocks:
+            extras = list(page.get("extra_blocks") or [])
+            for b in add_extra_blocks:
+                extras.append({k: v for k, v in b.items()
+                               if k in ("id", "type", "props", "layout")})
+                if b.get("id"):
+                    new_extra_ids.append(b["id"])
+                if "content" in b and b.get("id"):
+                    content[b["id"]] = b["content"]
+            page["extra_blocks"] = extras
+
+        if blocks_order is not None:
+            page["blocks_order"] = list(blocks_order)
+        elif new_extra_ids:
+            from report_skill.report_builder import merge_blocks_order
+            current_order = page.get("blocks_order") or []
+            page["blocks_order"] = merge_blocks_order(current_order, new_extra_ids)
+
+        page["content"] = content
+
+        # v0.5.2 — per-page block overrides
+        if layout_overrides is not None:
+            page["layout_overrides"] = dict(layout_overrides)
+        if props_overrides is not None:
+            page["props_overrides"] = dict(props_overrides)
+        if block_sections is not None:
+            page["block_sections"] = dict(block_sections)
+
+        pages_local[page_index] = page
+
+        out_body: dict = {"pages": pages_local}
+        # v0.5.2 — optimistic-lock: caller-supplied wins, else fetched revision
+        rev_for_body = expected_revision if expected_revision is not None \
+            else report_snapshot.get("revision")
+        if rev_for_body is not None:
+            out_body["expected_revision"] = rev_for_body
+
+        if title is not None:
+            out_body["title"] = title
+        # Backend renamed status→phase. Accept legacy `status` and map.
+        from report_skill.report_builder import normalize_phase
+        resolved_phase = normalize_phase(phase) or normalize_phase(status)
+        if resolved_phase is not None:
+            out_body["phase"] = resolved_phase
+            if resolved_phase == "finalized":
+                msg = (
+                    "update_blocks: phase=finalized patch bypasses publish "
+                    "notifications — consider using report_publish for "
+                    "finalize+notify behavior."
+                )
+                logging.warning(msg)
+                if msg not in warnings_acc:
+                    warnings_acc.append(msg)
+        if lifecycle is not None:
+            out_body["lifecycle"] = lifecycle
+        if tags is not None:
+            out_body["tags"] = tags
+        # v0.5.0 — related-info: empty list clears all, None leaves unset
+        if collab_workspace_slugs is not None:
+            out_body["collab_workspace_slugs"] = list(collab_workspace_slugs)
+        if entity_ids is not None:
+            out_body["entity_ids"] = list(entity_ids)
+        if report_type_id is not None:
+            out_body["report_type_id"] = report_type_id
+        # v0.5.0 — page-level settings
+        if page_width_px is not None:
+            out_body["page_width_px"] = page_width_px
+        if page_gap_px is not None:
+            out_body["page_gap_px"] = page_gap_px
+        if page_blend_blocks is not None:
+            out_body["page_blend_blocks"] = page_blend_blocks
+        if page_slide_guide is not None:
+            out_body["page_slide_guide"] = page_slide_guide
+        if page_slide_ratio is not None:
+            out_body["page_slide_ratio"] = page_slide_ratio
+        if page_slide_ratio_custom_w is not None:
+            out_body["page_slide_ratio_custom_w"] = page_slide_ratio_custom_w
+        if page_slide_ratio_custom_h is not None:
+            out_body["page_slide_ratio_custom_h"] = page_slide_ratio_custom_h
+        if page_rich_text_prefix_d0 is not None:
+            out_body["page_rich_text_prefix_d0"] = page_rich_text_prefix_d0
+        if page_rich_text_prefix_d1 is not None:
+            out_body["page_rich_text_prefix_d1"] = page_rich_text_prefix_d1
+        if page_rich_text_prefix_d2 is not None:
+            out_body["page_rich_text_prefix_d2"] = page_rich_text_prefix_d2
+        # v0.5.2 — closed_at uses _UNSET sentinel so explicit None clears
+        if closed_at is not _UNSET:
+            out_body["closed_at"] = _coerce_closed_at(closed_at)
+        return out_body, pages_local
+
+    # Retry loop mirrors append_to_blocks pattern (A1).
+    last_err: Optional[ApiError] = None
+    for attempt in range(max_retries + 1):
+        current = fetch_report(client, report_id)
+        body, _pages = _build_request_body(current)
+        try:
+            with edit_lock(client, report_id):
+                result = client._request("PATCH", f"/reports/{report_id}", json=body)
+            if isinstance(result, dict):
+                if warnings_acc:
+                    existing_warnings = list(result.get("warnings") or [])
+                    result["warnings"] = existing_warnings + warnings_acc
+                return result
+            # Defensive: backend returns dict, but normalize for typing.
+            return {"result": result, "warnings": warnings_acc}
+        except ApiError as e:
+            last_err = e
+            code = ""
+            if isinstance(e.payload, dict):
+                errs = e.payload.get("errors") or []
+                if errs and isinstance(errs[0], dict):
+                    code = errs[0].get("code", "")
+            if code == "revision_mismatch" and attempt < max_retries:
+                time.sleep(retry_delay * (2 ** attempt))
+                continue
+            if code == "revision_mismatch":
+                raise RevisionConflict(
+                    f"update_blocks: gave up after {max_retries + 1} attempt(s) "
+                    f"of revision-mismatch on report {report_id}: {e}"
+                ) from e
+            raise
+    raise RevisionConflict(
+        f"update_blocks: exhausted retries without success: {last_err}"
+    )
 
 
 def add_page(
@@ -234,6 +328,14 @@ def add_page(
     extra_blocks: Optional[list[dict]] = None,
     template: Optional[dict] = None,
     blocks_order: Optional[list] = None,
+    # v0.5.2 — per-page block overrides (silently dropped pre-v0.5.2)
+    layout_overrides: Optional[dict] = None,
+    props_overrides: Optional[dict] = None,
+    block_sections: Optional[dict] = None,
+    # v0.5.2 — optimistic-lock + retry mirror of append_to_blocks (A1)
+    expected_revision: Optional[int] = None,
+    max_retries: int = 1,
+    retry_delay: float = 0.4,
 ) -> dict:
     """Append a new page to an existing report.
 
@@ -247,30 +349,70 @@ def add_page(
     (same rules as create). Explicit `blocks_order` overrides the auto
     computation. When `template` is None, no blocks_order is set — the
     backend keeps its old default (all template blocks visible).
+
+    v0.5.2 — accepts `layout_overrides` / `props_overrides` /
+    `block_sections` and writes them onto the new page when supplied.
+    Uses `expected_revision` for optimistic concurrency (retry-once
+    default).
     """
-    current = fetch_report(client, report_id)
-    pages = list(current.get("pages", []))
+    last_err: Optional[ApiError] = None
+    for attempt in range(max_retries + 1):
+        current = fetch_report(client, report_id)
+        pages = list(current.get("pages", []))
 
-    new_page: dict = {
-        "template_id": template_id,
-        "template_version": template_version,
-        "content": content or {},
-    }
-    if name is not None:
-        new_page["name"] = name
-    if extra_blocks:
-        new_page["extra_blocks"] = extra_blocks
+        new_page: dict = {
+            "template_id": template_id,
+            "template_version": template_version,
+            "content": content or {},
+        }
+        if name is not None:
+            new_page["name"] = name
+        if extra_blocks:
+            new_page["extra_blocks"] = extra_blocks
 
-    if template is not None or blocks_order is not None:
-        from report_skill.report_builder import compute_blocks_order
-        new_page["blocks_order"] = compute_blocks_order(
-            template or {}, content or {}, extra_blocks or [],
-            explicit=blocks_order,
-        )
+        if template is not None or blocks_order is not None:
+            from report_skill.report_builder import compute_blocks_order
+            new_page["blocks_order"] = compute_blocks_order(
+                template or {}, content or {}, extra_blocks or [],
+                explicit=blocks_order,
+            )
 
-    pages.append(new_page)
-    with edit_lock(client, report_id):
-        return client._request("PATCH", f"/reports/{report_id}", json={"pages": pages})
+        # v0.5.2 — per-page block overrides
+        if layout_overrides is not None:
+            new_page["layout_overrides"] = dict(layout_overrides)
+        if props_overrides is not None:
+            new_page["props_overrides"] = dict(props_overrides)
+        if block_sections is not None:
+            new_page["block_sections"] = dict(block_sections)
+
+        pages.append(new_page)
+        body: dict = {"pages": pages}
+        rev_for_body = expected_revision if expected_revision is not None \
+            else current.get("revision")
+        if rev_for_body is not None:
+            body["expected_revision"] = rev_for_body
+        try:
+            with edit_lock(client, report_id):
+                return client._request("PATCH", f"/reports/{report_id}", json=body)
+        except ApiError as e:
+            last_err = e
+            code = ""
+            if isinstance(e.payload, dict):
+                errs = e.payload.get("errors") or []
+                if errs and isinstance(errs[0], dict):
+                    code = errs[0].get("code", "")
+            if code == "revision_mismatch" and attempt < max_retries:
+                time.sleep(retry_delay * (2 ** attempt))
+                continue
+            if code == "revision_mismatch":
+                raise RevisionConflict(
+                    f"add_page: gave up after {max_retries + 1} attempt(s) "
+                    f"of revision-mismatch on report {report_id}: {e}"
+                ) from e
+            raise
+    raise RevisionConflict(
+        f"add_page: exhausted retries without success: {last_err}"
+    )
 
 
 def replace_page(
@@ -283,27 +425,85 @@ def replace_page(
     name: Optional[str] = None,
     content: Optional[dict] = None,
     extra_blocks: Optional[list[dict]] = None,
+    # v0.5.2 — per-page block overrides (silently dropped pre-v0.5.2)
+    layout_overrides: Optional[dict] = None,
+    props_overrides: Optional[dict] = None,
+    block_sections: Optional[dict] = None,
+    # v0.5.2 — optimistic-lock + retry mirror of append_to_blocks (A1)
+    expected_revision: Optional[int] = None,
+    max_retries: int = 1,
+    retry_delay: float = 0.4,
 ) -> dict:
     """Wholesale-replace one page. Use when blocks have been added/removed
-    rather than just had their content updated."""
-    current = fetch_report(client, report_id)
-    pages = list(current.get("pages", []))
-    if not pages:
-        raise ValueError(f"report {report_id} has no pages")
-    if page_index < 0 or page_index >= len(pages):
-        raise IndexError(f"page_index {page_index} out of range")
+    rather than just had their content updated.
 
-    existing = pages[page_index]
-    pages[page_index] = {
-        "template_id": template_id or existing["template_id"],
-        "template_version": template_version or existing["template_version"],
-        "name": name if name is not None else existing.get("name"),
-        "content": content if content is not None else existing.get("content", {}),
-        **({"extra_blocks": extra_blocks} if extra_blocks is not None
-           else ({"extra_blocks": existing["extra_blocks"]} if existing.get("extra_blocks") else {})),
-    }
-    with edit_lock(client, report_id):
-        return client._request("PATCH", f"/reports/{report_id}", json={"pages": pages})
+    v0.5.2 — accepts `layout_overrides` / `props_overrides` /
+    `block_sections`; included on the rebuilt page only when provided
+    (otherwise the existing values are preserved). Uses
+    `expected_revision` for optimistic concurrency (retry-once default).
+    """
+    last_err: Optional[ApiError] = None
+    for attempt in range(max_retries + 1):
+        current = fetch_report(client, report_id)
+        pages = list(current.get("pages", []))
+        if not pages:
+            raise ValueError(f"report {report_id} has no pages")
+        if page_index < 0 or page_index >= len(pages):
+            raise IndexError(f"page_index {page_index} out of range")
+
+        existing = pages[page_index]
+        new_page: dict = {
+            "template_id": template_id or existing["template_id"],
+            "template_version": template_version or existing["template_version"],
+            "name": name if name is not None else existing.get("name"),
+            "content": content if content is not None else existing.get("content", {}),
+            **({"extra_blocks": extra_blocks} if extra_blocks is not None
+               else ({"extra_blocks": existing["extra_blocks"]}
+                     if existing.get("extra_blocks") else {})),
+        }
+        # v0.5.2 — per-page block overrides: explicit takes priority,
+        # otherwise preserve the existing page's values.
+        if layout_overrides is not None:
+            new_page["layout_overrides"] = dict(layout_overrides)
+        elif existing.get("layout_overrides") is not None:
+            new_page["layout_overrides"] = existing["layout_overrides"]
+        if props_overrides is not None:
+            new_page["props_overrides"] = dict(props_overrides)
+        elif existing.get("props_overrides") is not None:
+            new_page["props_overrides"] = existing["props_overrides"]
+        if block_sections is not None:
+            new_page["block_sections"] = dict(block_sections)
+        elif existing.get("block_sections") is not None:
+            new_page["block_sections"] = existing["block_sections"]
+
+        pages[page_index] = new_page
+        body: dict = {"pages": pages}
+        rev_for_body = expected_revision if expected_revision is not None \
+            else current.get("revision")
+        if rev_for_body is not None:
+            body["expected_revision"] = rev_for_body
+        try:
+            with edit_lock(client, report_id):
+                return client._request("PATCH", f"/reports/{report_id}", json=body)
+        except ApiError as e:
+            last_err = e
+            code = ""
+            if isinstance(e.payload, dict):
+                errs = e.payload.get("errors") or []
+                if errs and isinstance(errs[0], dict):
+                    code = errs[0].get("code", "")
+            if code == "revision_mismatch" and attempt < max_retries:
+                time.sleep(retry_delay * (2 ** attempt))
+                continue
+            if code == "revision_mismatch":
+                raise RevisionConflict(
+                    f"replace_page: gave up after {max_retries + 1} attempt(s) "
+                    f"of revision-mismatch on report {report_id}: {e}"
+                ) from e
+            raise
+    raise RevisionConflict(
+        f"replace_page: exhausted retries without success: {last_err}"
+    )
 
 
 def delete_report(client: ReportArchiveClient, report_id: int) -> dict:

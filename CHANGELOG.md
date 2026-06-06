@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## 0.5.2 — 2026-06-06
+
+Patch — closes 85 audit gaps from the v0.5.1 deep re-audit. Data-loss prevention + error
+surface + adapter completeness + test coverage. No breaking changes.
+
+Sections: Fixed (concurrency), Fixed (error surface), Fixed (adapter passthrough — 14 widgets),
+Fixed (bundle/builder/lifecycle), Added (preset_create description, 6 CLI mirrors), SKILL.md
+updates, Tests added.
+
+Verified: MCP _DISPATCH stays 54; pytest grows by ~40 new test cases.
+
 ## 0.5.1 — 2026-06-06
 
 Patch — closes 5 critical + 3 minor gaps left by v0.5.0 (the prior verify phase missed MCP-layer

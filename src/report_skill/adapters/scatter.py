@@ -10,6 +10,14 @@ from report_skill.repair import coerce_number, to_slug, truncate
 
 _VALID_MODES = ("scatter", "line", "scatter_line")
 
+_PASSTHROUGH = (
+    "caption", "caption_skip_autofill",
+    "mode",
+    "x_axis_title", "y_axis_title",
+    "x_min", "x_max", "y_min", "y_max",
+    "annotations",
+)
+
 
 class ScatterAdapter(WidgetAdapter):
     type = "scatter"
@@ -20,8 +28,7 @@ class ScatterAdapter(WidgetAdapter):
 
         passthrough: dict = {}
         if isinstance(raw, dict):
-            for k in ("caption", "x_axis_title", "y_axis_title",
-                      "x_min", "x_max", "y_min", "y_max", "mode"):
+            for k in _PASSTHROUGH:
                 if k in raw:
                     passthrough[k] = raw[k]
             if isinstance(raw.get("columns"), list) and not columns_in:

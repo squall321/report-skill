@@ -57,8 +57,10 @@ To make a report visible on a team board (eg. `dx`, `qa`, `dept-mx`), it must be
 | "fix the X block of report 42"                        | **Flow B** below (`report update`)                               |
 | "add a milestone / append items"                      | **Flow F** below (`report milestone add` / `report append`)      |
 | "add a page about Y to that report"                   | **Flow C** below (`report add-page`)                             |
-| "just give it raw text, you figure it out"            | **Flow D** below (`report from-prompt` / `adhoc`)                |
-| "I don't know what template fits"                     | **Flow E** below (`templates suggest` + adhoc)                   |
+| "just give it raw text, you figure it out"            | **Flow D** below (`report from-prompt`)                          |
+| "I don't know what template fits"                     | **Flow E** below (`templates suggest` + `report from-prompt`)    |
+| "use the same setup as last week (preset)"            | [**A.0 — presets**](#a0-check-for-presets-first-skip-a1a3-when-one-fits) |
+| "clone an existing report as a starting point"        | [**A.0b — copy vs preset**](#a0b-copy-an-existing-report-clone-instead-of-recreate) |
 
 ## Flow E — when you don't know which template to use
 
@@ -76,18 +78,17 @@ This prints a ranked list with `score`, `matched_keywords`, `confidence`, and (i
 - **confidence=medium** — show the user the top 2-3 and ask which (or proceed if there's clearly one best fit)
 - **confidence=low** — tell the user "none of these match well; should I use a generic carrier (e.g. monthly-summary) and put everything in extra_blocks instead? Or pick: ..."
 
-### E2. Or skip the picker entirely with `report adhoc`
+### E2. Or skip the picker entirely with `report from-prompt --auto`
 
 ```powershell
-report-skill report adhoc "<user's raw text>" --create
+report-skill report from-prompt "<user's raw text>" --auto --with-extras --create
 ```
 
-This is shorthand for `report from-prompt --auto --with-extras --create`:
 - `--auto`         — runs templates suggest internally; picks top if confidence≥medium, else aborts with suggestions
 - `--with-extras`  — scans the text for chartable data / dates / hierarchies / etc. and auto-adds extra_blocks for visual widgets the template doesn't already cover
 - `--create`       — POSTs after dry-run validates clean
 
-Use `report adhoc` when the user just wants the report to exist and trusts the skill to organize it.
+Use this form when the user just wants the report to exist and trusts the skill to organize it.
 
 ## Flow A — CREATE
 
@@ -114,6 +115,21 @@ report-skill report new-from-preset <preset-id> --title "5월 4주차 백엔드 
 
 If no preset fits, fall through to A1.
 
+#### Worked example — preset flow (LLM call sequence)
+
+```
+1. presets_list                                 → returns [{id: 7, name: "백엔드 주간보고 — 표준 구성", ...}, ...]
+2. choose preset id matching user request       → id = 7
+3. report_new_from_preset(preset_id=7,
+       title="5월 4주차 백엔드 주간보고",
+       folder_id=null)                          → returns {id: 412, workspace_slug: "personal-23"}
+4. (optional) report_update(report_id=412,
+       patch={"tags": ["weekly", "backend"]})   → adjust tags / collab fields the preset did not pin
+5. (optional) report_mount(report_id=412, workspaces=["dx"])   → Flow G to publish
+```
+
+The preset already carries `tags`, `entity_ids`, `collab_workspace_slugs`, `report_type_id`, lifecycle, page settings, and block scaffolding. Only override what the user explicitly asked to change.
+
 ### A.0b Copy an existing report (clone instead of recreate)
 
 When the user says "report X 복사해서 새로 만들어줘" / "같은 구조로 새 보고서" and a specific source report is named, prefer `report copy` over re-running the draft pipeline:
@@ -135,6 +151,18 @@ Modes:
 - `content` — copies title/pages/blocks only; drops related-info, lifecycle, and links. Best when the user wants a clean starting point with the same body structure but different metadata.
 
 The new report always lands in the author's personal workspace. Mount it (Flow G) to publish to a team board.
+
+#### Copy vs preset — when to use which
+
+| situation                                                                       | use                       |
+|---------------------------------------------------------------------------------|---------------------------|
+| user names a specific source report ("같은 구조로 새 보고서", "X 복사해서")       | `report_copy` (A.0b)      |
+| user names a saved configuration / template profile ("지난주랑 똑같이", "preset") | `report_new_from_preset` (A.0) |
+| no specific source AND no preset exists                                         | fall through to A1 (template) |
+| user wants the body filled too (text, rows, images)                             | `report_copy` (body is cloned) |
+| user wants only the SCAFFOLD (block ids, tags, page settings) — fresh body      | `report_new_from_preset`  |
+
+Mnemonic: presets capture *configuration*, copy clones *content*. A preset is reusable across many reports; a copy is a one-off clone of one source.
 
 ### A1. Pick a template
 
@@ -489,6 +517,20 @@ report-skill tools composites-submit \
 
 The note is optional, max 1000 chars, and is shown to the composite owner when they review the queue. Returns the created request id and `status: "pending"`.
 
+Result shape (composites_submit):
+
+```json
+{
+  "id": 184,
+  "composite_id": 27,
+  "report_id": 412,
+  "status": "pending",
+  "submitted_at": "2026-06-05T09:14:22Z"
+}
+```
+
+The composite owner then calls `composites_request_accept` / `_reject` and the request transitions to `accepted` / `rejected`. The author can `composites_request_withdraw` while it's still `pending`.
+
 ### H3. Withdraw a pending request (submitter-only)
 
 If the author changes their mind before the owner decides:
@@ -497,7 +539,7 @@ If the author changes their mind before the owner decides:
 report-skill composites withdraw --composite-id <composite-id> --request-id <request-id>
 ```
 
-`accept` / `reject` (composite owner-only) and `withdraw` (submitter, composite owner, or system admin) all use the `composites` sub-app — see Tools section below for the full list. To inspect existing requests:
+`accept` / `reject` (composite owner-only) and `withdraw` (submitter, composite owner, or system admin) all use the `composites` sub-app — see [v0.5.0 — new MCP tools § Composites](#v050--new-mcp-tools) for the full list. To inspect existing requests:
 
 ```powershell
 report-skill tools composites-requests-list --composite-id <composite-id>
@@ -585,7 +627,7 @@ When run through the bridge provider, `from-prompt` will auto-resolve unambiguou
 **Bridge mode** (uses the current Claude Code session as the LLM, no API key needed):
 ```powershell
 $env:SKILL_LLM_PROVIDER = "bridge"
-report-skill report adhoc "<text>"
+report-skill report from-prompt "<text>" --auto --with-extras --create
 # CLI blocks — in this chat, user says "process bridge queue"
 # /bridge-process skill kicks in, Claude generates responses, CLI continues
 ```
@@ -627,7 +669,14 @@ The following 21 MCP tools were added in 0.5.0. From any MCP client (Claude Desk
 Report-level:
 
 - `report_copy` — POST `/reports/{id}/copy`; full or content-only clone (`mode=full|content`, default `full`).
-- `report_add_link` — POST `/reports/{id}/links`; register a report-to-report link (`kind` default `"related"`).
+- `report_add_link` — POST `/reports/{id}/links`; register a report-to-report link (`kind` default `"related"`, `direction` default `"outgoing"`). `direction="outgoing"` means "this report links TO the other" (the common case — used when the author of THIS report cites the other). `direction="incoming"` means "the other report links TO this one"; use it when the author of the OTHER report (the source) is registering an inbound reference to the current report.
+
+  ```
+  # outgoing — common case: my report references their earlier postmortem
+  report_add_link(report_id=412, target_report_id=298, kind="related", direction="outgoing")
+  # incoming — I am the editor of report 298 and want to record that 412 cites me
+  report_add_link(report_id=298, target_report_id=412, kind="cited-by", direction="incoming")
+  ```
 - `report_types_list` — GET `/report-types`; resolver for `report_type_id`.
 - `report_publish` — POST `/reports/{id}/publish`; finalize phase + fan-out notifications. Author-only.
 - `report_unpublish` — POST `/reports/{id}/unpublish`; revert phase to drafting. Author-only.
@@ -659,3 +708,62 @@ Composites:
 - `composites_request_accept` — POST `/composites/{id}/requests/{req}/accept`; composite owner-only.
 - `composites_request_reject` — POST `/composites/{id}/requests/{req}/reject`; composite owner-only. `reason` accepted for forward-compat but currently ignored server-side.
 - `composites_request_withdraw` — POST `/composites/{id}/requests/{req}/withdraw`; submitter (or composite owner / system admin).
+
+## v0.5.1 / v0.5.2 — author lock, typed errors, lifecycle notes
+
+### report_lock_status — inspect the edit-lock holder
+
+```
+report_lock_status(report_id=<id>)
+→ {
+    "report_id": 412,
+    "locked": true,
+    "holder": {"user_id": 7, "user_name": "홍길동", "user_email": "hong@ex.com",
+                "acquired_at": "2026-06-05T08:55:11Z", "expires_at": "2026-06-05T09:25:11Z"},
+    "self_held": false,
+    "reason": "weekly_review"
+  }
+```
+
+Call before any write operation when the user mentions "잠겨있다 / 누가 편집 중" or after seeing an `author_locked` / `lock_held_by_other` error. When `self_held=true`, the current actor already owns the lock and can keep writing. When `locked=true` AND `self_held=false`, surface the holder name + expiry to the user and STOP — do not retry.
+
+### AuthorLockedError surfacing
+
+When the report's author has set a manual edit lock ("작성자가 수정 잠금 상태입니다") any write tool returns:
+
+```json
+{"error": "author_locked", "reason": "<lock 사유>", "report_id": 412}
+```
+
+LLM behaviour:
+
+- Do NOT retry. The lock is intentional and human-set; immediate retry will fail identically.
+- Tell the user the lock reason and that only the author (or a system admin force-unset) can release it.
+- Offer to call `report_lock_status` to confirm the current holder + ETA, or to wait for unlock.
+- For a different report, the lock is irrelevant — proceed normally.
+
+### Typed error codes (v0.5.2)
+
+The MCP server maps the backend's stable error signatures to typed `{error: <code>, ...}` payloads instead of generic `"API error"`. Use the table below to decide how to react:
+
+| code                          | status | meaning                                                                                  | how the LLM should react                                                                                          |
+|-------------------------------|--------|------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| `author_locked`               | 403    | author has set a manual lock on the report                                               | stop, surface `reason` + `report_id`, do not retry; suggest `report_lock_status` or wait                          |
+| `lock_held_by_other`          | 409    | another user is actively editing (system edit-lock, time-bound)                          | surface holder, wait or retry after expiry; do not force-unlock                                                   |
+| `lock_not_held`               | 409    | tried to release/extend a lock you don't hold                                            | call `report_lock_status` to reconcile state; usually a stale client                                              |
+| `revision_mismatch`           | 409    | someone PATCHed the report since you fetched it                                          | auto-retry up to `--max-retries` (default 3); the skill re-fetches + re-merges; on final failure tell the user    |
+| `composite_revision_mismatch` | 409    | composite items[] was edited concurrently                                                | re-fetch composite via `composite_get`, re-build items list, retry                                                |
+| `finalized_readonly`          | 403    | report is `phase=finalized` — body PATCH is blocked                                      | suggest `report_unpublish` first if the user really wants to edit; otherwise stop                                 |
+| `no_edit_permission`          | 403    | actor is not the author / coauthor / board-default editor                                | stop and surface — mount edit-policy or coauthor list controls this; not retryable                                |
+| `out_of_workspace_scope`      | 403    | actor's workspace tree does not cover the target report / composite                      | stop; resource is invisible to this actor — do not retry under a different workspace slug                         |
+| `snapshot_missing`            | n/a    | local widget catalog snapshot not present                                                | run `report-skill catalog sync` once, then retry                                                                  |
+| `llm_error`                   | n/a    | configured LLM provider returned an error during `from-prompt` / `revise`                | surface `detail`; try `--provider <other>` or set `SKILL_LLM_PROVIDER`                                            |
+| `no_llm_provider`             | n/a    | no LLM provider configured for a tool that needs one                                     | tell the user to set `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / use `bridge` mode                                   |
+
+For all other ApiErrors the legacy `{error: "API error", status_code, message, payload}` shape still applies.
+
+### Lifecycle notes (v0.5.2)
+
+- **phase=finalized self-lock** — direct body PATCH (`report_update`, `report_add_page`, `report_revise`, `report_append`) on a `phase=finalized` report is rejected with `finalized_readonly`. The skill surfaces this in the response `warnings` list when applicable; for any intentional edit, call `report_unpublish` first to drop the report back to `drafting`, then patch, then `report_publish` again. Composite **summary widgets** and mount/folder operations are not blocked by finalize.
+- **mount auto-transitions `drafting` → `reviewing`** — calling `report_mount` on a `drafting` report automatically advances `phase` to `reviewing` (one-way). Subsequent unmounts do not revert. If the user later wants the report back at `drafting`, call `report_unpublish` (no-op on non-finalized) or manually set `phase` via `report_update`.
+- **`report_publish` is idempotent** — calling on an already-finalized report is a no-op that returns current state. Notification fan-out (`report.phase_to_finalized`) only fires on the actual transition, not on idempotent re-calls. Same for `report_unpublish` on an already-drafting report.

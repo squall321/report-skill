@@ -6,16 +6,28 @@ from typing import Any
 from report_skill.adapters.base import NormalizeError, WidgetAdapter
 from report_skill.repair import coerce_number, truncate
 
+_PASSTHROUGH = (
+    "caption", "caption_skip_autofill", "unit",
+    "colorscale", "reverse_scale", "text_info", "branchvalues",
+)
+
 
 class TreemapAdapter(WidgetAdapter):
     type = "treemap"
 
     def normalize(self, raw: Any, props: dict) -> dict:
+        out: dict = {}
+        if isinstance(raw, dict):
+            for k in _PASSTHROUGH:
+                if k in raw:
+                    out[k] = raw[k]
+
         if isinstance(raw, dict) and isinstance(raw.get("rows"), list):
             rows = _coerce_rows(raw["rows"])
             if not rows:
                 raise NormalizeError(f"{self.type}: no usable rows")
-            return {"rows": rows}
+            out["rows"] = rows
+            return out
 
         entries: list[dict] = []
         if isinstance(raw, list):
@@ -30,7 +42,8 @@ class TreemapAdapter(WidgetAdapter):
         rows = _coerce_rows(entries)
         if not rows:
             raise NormalizeError(f"{self.type}: no usable rows")
-        return {"rows": rows}
+        out["rows"] = rows
+        return out
 
     def fallback_to(self) -> str:
         return "table"

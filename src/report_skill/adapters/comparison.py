@@ -25,6 +25,16 @@ from report_skill.adapters.base import NormalizeError, WidgetAdapter
 from report_skill.adapters.table import _clean_note
 from report_skill.repair import to_slug, truncate
 
+# Optional content fields the comparison widget accepts beyond `rows`.
+# Anything in this tuple is copied verbatim from a dict-input into the
+# normalized payload (after type coercion, if needed). Used both for the
+# top-level dict-input branch and the {"rows": [...], ...} envelope branch.
+_PASSTHROUGH_SIMPLE = (
+    "caption",
+    "caption_skip_autofill",
+    "horizontal_scroll",
+)
+
 
 class ComparisonAdapter(WidgetAdapter):
     type = "comparison"
@@ -45,10 +55,15 @@ class ComparisonAdapter(WidgetAdapter):
                 _apply_passthrough(out, raw)
                 return out
             # dict-of-dicts form: row label → case values. Reserved keys
-            # (note / column_widths / row_label_width / table_width_px / merges)
-            # are stripped from the row map so they aren't mistaken for rows.
+            # (note / column_widths / row_label_width / table_width_px / merges
+            #  plus B13 passthrough: caption, caption_skip_autofill, cases,
+            #  horizontal_scroll, max_cases, image_max_height_px) are stripped
+            # from the row map so they aren't mistaken for rows.
             _reserved = {"note", "column_widths", "row_label_width",
-                         "table_width_px", "merges"}
+                         "table_width_px", "merges",
+                         "caption", "caption_skip_autofill", "cases",
+                         "horizontal_scroll", "max_cases",
+                         "image_max_height_px"}
             rows_in = [{"label": k, "values": v}
                        for k, v in raw.items() if k not in _reserved]
             extras = raw
@@ -117,8 +132,13 @@ def _match_case_key(name: str, case_keys: set[str]) -> str | None:
 
 
 def _apply_passthrough(out: dict, raw: dict) -> None:
-    """Copy optional v0.5.0 content fields from a dict-input into the
-    normalized comparison block. Silently ignores wrong types."""
+    """Copy optional content fields from a dict-input into the normalized
+    comparison block. Silently ignores wrong types.
+
+    Covers v0.5.0 fields (note/column_widths/row_label_width/table_width_px/
+    merges) AND v0.5.2 B13 additions (caption/caption_skip_autofill/cases/
+    horizontal_scroll/max_cases/image_max_height_px)."""
+    # v0.5.0 fields ---------------------------------------------------------
     note = raw.get("note")
     if isinstance(note, str):
         cleaned = _clean_note(note)
@@ -141,3 +161,38 @@ def _apply_passthrough(out: dict, raw: dict) -> None:
              if k in {"r", "c", "rs", "cs"} and isinstance(v, (int, float))}
             for m in merges if isinstance(m, dict)
         ]
+
+    # v0.5.2 B13 simple passthroughs (caption/caption_skip_autofill/
+    # horizontal_scroll) — copy verbatim when present.
+    for k in _PASSTHROUGH_SIMPLE:
+        if k in raw:
+            out[k] = raw[k]
+
+    # cases: list of {key, label} (passthrough; orchestrator/server still
+    # validates against block props). Coerce only minimal field shape so
+    # silent garbage doesn't slip in.
+    cases = raw.get("cases")
+    if isinstance(cases, list):
+        coerced_cases: list[dict] = []
+        for c in cases:
+            if not isinstance(c, dict):
+                continue
+            entry: dict = {}
+            if "key" in c:
+                entry["key"] = str(c["key"])
+            if "label" in c:
+                entry["label"] = str(c["label"])
+            if entry:
+                coerced_cases.append(entry)
+        if coerced_cases:
+            out["cases"] = coerced_cases
+
+    # max_cases (int 2..30) — keep simple int coerce; server clamps range.
+    mc = raw.get("max_cases")
+    if isinstance(mc, int) and not isinstance(mc, bool):
+        out["max_cases"] = mc
+
+    # image_max_height_px (int 80..600).
+    imh = raw.get("image_max_height_px")
+    if isinstance(imh, int) and not isinstance(imh, bool):
+        out["image_max_height_px"] = imh

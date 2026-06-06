@@ -37,6 +37,116 @@ class AuthorLockedError(ApiError):
         self.report_id = report_id
 
 
+# ---- 409 typed subclasses ------------------------------------------------ #
+# RA backend returns a stable `payload.errors[0].code` for these via
+# error_response(). We detect that envelope first, then fall back to
+# Korean substring matching for plain HTTPException paths.
+
+
+class LockHeldByOtherError(ApiError):
+    """Raised when another user holds the edit lock (409, code=lock_held_by_other).
+
+    Backend envelope: errors[0]={code, message, holder?:{user_id,user_name,...}}.
+    `holder` is exposed for diagnostics.
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 holder: Optional[dict] = None, status_code: int = 409):
+        super().__init__(message or "lock_held_by_other",
+                         status_code=status_code, payload=payload)
+        self.code = "lock_held_by_other"
+        self.holder = holder
+
+
+class LockNotHeldError(ApiError):
+    """Raised when caller has no edit lock (409, code=lock_not_held)."""
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 status_code: int = 409):
+        super().__init__(message or "lock_not_held",
+                         status_code=status_code, payload=payload)
+        self.code = "lock_not_held"
+
+
+class RevisionMismatchError(ApiError):
+    """Raised when expected_revision != current revision (409, code=revision_mismatch).
+
+    Callers should reload the report (to refresh revision) and retry. The
+    report_ops.append_to_blocks retry loop catches this and rebases up to
+    `max_retries` times before surfacing.
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 status_code: int = 409):
+        super().__init__(message or "revision_mismatch",
+                         status_code=status_code, payload=payload)
+        self.code = "revision_mismatch"
+
+
+class CompositeRevisionConflict(ApiError):
+    """Raised on PATCH /composites/{id} when items[] expected_revision mismatches.
+
+    Backend returns FastAPI default {detail:str} (NOT error_response envelope).
+    Detected by status==409 AND path startswith /composites/.
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 composite_id: Optional[int] = None, status_code: int = 409):
+        super().__init__(message or "composite_revision_mismatch",
+                         status_code=status_code, payload=payload)
+        self.code = "composite_revision_mismatch"
+        self.composite_id = composite_id
+
+
+# ---- 403 typed subclasses ------------------------------------------------ #
+# Detected by Korean / ASCII substring on the response message.
+
+
+class FinalizedReadOnlyError(ApiError):
+    """Raised when editing a finalized (발행된) report (403).
+
+    Backend message prefix: "발행된 보고서는 편집할 수 없습니다.".
+    Caller should unpublish via report_unpublish first.
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 report_id: Optional[int] = None, status_code: int = 403):
+        super().__init__(message or "finalized_read_only",
+                         status_code=status_code, payload=payload)
+        self.code = "finalized_read_only"
+        self.report_id = report_id
+
+
+class NoEditPermissionError(ApiError):
+    """Raised when caller lacks edit permission (403, 편집할 권한이 없).
+
+    Covers 3 backend variants:
+      - "이 보고서를 편집할 권한이 없습니다."
+      - "...편집할 권한이 없어 link 를 추가할 수 없습니다."
+      - "...편집할 권한이 없어 link 를 끊을 수 없습니다."
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 report_id: Optional[int] = None, status_code: int = 403):
+        super().__init__(message or "no_edit_permission",
+                         status_code=status_code, payload=payload)
+        self.code = "no_edit_permission"
+        self.report_id = report_id
+
+
+class OutOfWorkspaceScopeError(ApiError):
+    """Raised when the request targets a workspace outside the caller's scope (403).
+
+    Backend message is ASCII exact: "Out of workspace scope".
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 status_code: int = 403):
+        super().__init__(message or "out_of_workspace_scope",
+                         status_code=status_code, payload=payload)
+        self.code = "out_of_workspace_scope"
+
+
 class ReportArchiveClient:
     """Synchronous httpx-based client. One instance per process is fine."""
 
@@ -426,15 +536,18 @@ class ReportArchiveClient:
         *,
         name: str,
         owner_workspace_slugs: Optional[list[str]] = None,
+        description: Optional[str] = None,
     ) -> dict:
         """POST /presets — capture a report's structure as a reusable preset.
 
         `owner_workspace_slugs=None`/empty means 전사(global) preset.
+        `description=None` keeps the existing server default (empty string);
+        pass any string to override.
         """
         body: dict[str, Any] = {
             "source_report_id": int(report_id),
             "name": name,
-            "description": "",
+            "description": "" if description is None else str(description),
         }
         if owner_workspace_slugs is not None:
             body["owner_workspace_slugs"] = list(owner_workspace_slugs)
@@ -608,23 +721,29 @@ class ReportArchiveClient:
             if body.get("success"):
                 return body.get("data")
             message = body.get("message") or f"{method} {path} failed"
-            if resp.status_code == 403 and "작성자가 수정 잠금" in str(message):
-                raise self._build_author_locked_error(message, path)
+            typed = self._build_typed_error(
+                resp.status_code, str(message), path, body
+            )
+            if typed is not None:
+                raise typed
             raise ApiError(
                 message,
                 status_code=resp.status_code,
                 payload=body,
             )
 
-        # Non-envelope endpoints (eg. health) — just return body
+        # Non-envelope endpoints (eg. health, FastAPI default {detail:str}) — just return body
         if resp.is_error:
             text_body = ""
             if isinstance(body, dict):
                 text_body = str(body.get("message") or body.get("detail") or "")
             elif isinstance(body, str):
                 text_body = body
-            if resp.status_code == 403 and "작성자가 수정 잠금" in text_body:
-                raise self._build_author_locked_error(text_body, path)
+            typed = self._build_typed_error(
+                resp.status_code, text_body, path, body
+            )
+            if typed is not None:
+                raise typed
             raise ApiError(
                 f"{method} {path} returned {resp.status_code}",
                 status_code=resp.status_code,
@@ -645,16 +764,104 @@ class ReportArchiveClient:
             tail = message[idx + len(marker):]
             close = tail.rfind(")")
             reason = (tail[:close] if close != -1 else tail).strip()
-        report_id: Optional[int] = None
-        # /reports/<id>/... or /reports/<id>
+        report_id = ReportArchiveClient._extract_report_id(path)
+        return AuthorLockedError(reason=reason, report_id=report_id, status_code=403)
+
+    @staticmethod
+    def _extract_report_id(path: str) -> Optional[int]:
         try:
             import re as _re
             m = _re.search(r"/reports/(\d+)", path)
             if m:
-                report_id = int(m.group(1))
+                return int(m.group(1))
         except Exception:
-            report_id = None
-        return AuthorLockedError(reason=reason, report_id=report_id, status_code=403)
+            return None
+        return None
+
+    @staticmethod
+    def _extract_composite_id(path: str) -> Optional[int]:
+        try:
+            import re as _re
+            m = _re.search(r"/composites/(\d+)", path)
+            if m:
+                return int(m.group(1))
+        except Exception:
+            return None
+        return None
+
+    @classmethod
+    def _build_typed_error(
+        cls,
+        status_code: int,
+        message: str,
+        path: str,
+        body: Any,
+    ) -> Optional[ApiError]:
+        """Map a (status, message, payload) tuple to the correct typed subclass.
+
+        Returns None when no typed mapping applies — caller falls back to generic
+        ApiError. Order matters: 409 envelope codes first (stable signals), then
+        409 composite-path heuristic, then 403 Korean / ASCII substrings.
+        """
+        # ---- 409: prefer payload.errors[0].code (stable backend code) ---- #
+        if status_code == 409:
+            code = ""
+            if isinstance(body, dict):
+                errs = body.get("errors") or []
+                if errs and isinstance(errs[0], dict):
+                    code = str(errs[0].get("code") or "")
+            if code == "lock_held_by_other":
+                holder = None
+                if isinstance(body, dict):
+                    errs = body.get("errors") or []
+                    if errs and isinstance(errs[0], dict):
+                        holder = errs[0].get("holder")
+                return LockHeldByOtherError(
+                    message, payload=body, holder=holder, status_code=409
+                )
+            if code == "lock_not_held":
+                return LockNotHeldError(message, payload=body, status_code=409)
+            if code == "revision_mismatch":
+                return RevisionMismatchError(message, payload=body, status_code=409)
+            if code == "composite_revision_mismatch":
+                return CompositeRevisionConflict(
+                    message, payload=body,
+                    composite_id=cls._extract_composite_id(path),
+                    status_code=409,
+                )
+            # Composite revision conflict via FastAPI default {detail:str}
+            # (no errors[] envelope). Detect by path.
+            if path.startswith("/composites/") or "/composites/" in path:
+                return CompositeRevisionConflict(
+                    message, payload=body,
+                    composite_id=cls._extract_composite_id(path),
+                    status_code=409,
+                )
+            return None
+
+        # ---- 403: Korean / ASCII substring detection --------------------- #
+        if status_code == 403:
+            if "작성자가 수정 잠금" in message:
+                return cls._build_author_locked_error(message, path)
+            if message.startswith("발행된 보고서"):
+                return FinalizedReadOnlyError(
+                    message, payload=body,
+                    report_id=cls._extract_report_id(path),
+                    status_code=403,
+                )
+            if "편집할 권한이 없" in message:
+                return NoEditPermissionError(
+                    message, payload=body,
+                    report_id=cls._extract_report_id(path),
+                    status_code=403,
+                )
+            if message == "Out of workspace scope" or "Out of workspace scope" in message:
+                return OutOfWorkspaceScopeError(
+                    message, payload=body, status_code=403
+                )
+            return None
+
+        return None
 
     def close(self) -> None:
         self._http.close()

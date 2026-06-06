@@ -31,8 +31,32 @@ from report_skill import (
     tier,
     upload_chain,
 )
-from report_skill.client import ApiError, ReportArchiveClient
+from report_skill.client import (
+    ApiError,
+    AuthorLockedError,
+    FinalizedReadOnlyError,
+    LockHeldByOtherError,
+    NoEditPermissionError,
+    OutOfWorkspaceScopeError,
+    ReportArchiveClient,
+    RevisionMismatchError,
+)
 from report_skill.config import settings
+
+
+# --------------------------------------------------------------------------- #
+# v0.5.2 — F7: typed-exception groups for CLI write-command error handling.
+# Catch these BEFORE generic ApiError so the LLM/user sees the actionable
+# `reason` (author_locked) or class name (lock_held_by_other, etc) instead
+# of an opaque 403/409 envelope dump.
+# --------------------------------------------------------------------------- #
+_TYPED_LOCK_ERRORS = (
+    LockHeldByOtherError,
+    RevisionMismatchError,
+    FinalizedReadOnlyError,
+    NoEditPermissionError,
+    OutOfWorkspaceScopeError,
+)
 
 app = typer.Typer(no_args_is_help=True, add_completion=False,
                   help="External skill layer over ReportArchive.")
@@ -164,6 +188,13 @@ def import_payload(
     with ReportArchiveClient() as client:
         try:
             created = client.create_report(payload)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]POST /reports failed ({e.status_code}):[/red] {e}")
             console.print_json(json.dumps(e.payload, ensure_ascii=False))
@@ -405,6 +436,13 @@ def report_create(
         )
         try:
             created = client.create_report(payload)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]POST /reports failed ({e.status_code}):[/red] {e}")
             console.print_json(json.dumps(e.payload, ensure_ascii=False))
@@ -423,6 +461,13 @@ def report_create(
                     mount_client, int(rid),
                     workspace_slugs=list(mount_to),
                 )
+            except AuthorLockedError as e:
+                console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                              f"report_id={e.report_id}")
+                raise typer.Exit(4)
+            except _TYPED_LOCK_ERRORS as e:
+                console.print(f"[red][{type(e).__name__}][/red] {e}")
+                raise typer.Exit(4)
             except ApiError as e:
                 console.print(f"[red]auto-mount failed ({e.status_code}):[/red] {e}")
                 raise typer.Exit(4)
@@ -893,6 +938,13 @@ def report_from_prompt(
         )
         try:
             created = client.create_report(payload)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]POST failed:[/red] {e}")
             raise typer.Exit(3)
@@ -1037,6 +1089,13 @@ def report_update(
                 status=status or draft.get("status"),
                 tags=draft.get("tags"),
             )
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]PATCH /reports/{report_id} failed ({e.status_code}):[/red] {e}")
             console.print_json(json.dumps(e.payload, ensure_ascii=False))
@@ -1094,6 +1153,13 @@ def report_add_page(
                 template=tpl,
                 blocks_order=draft.get("blocks_order"),
             )
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]PATCH /reports/{report_id} failed ({e.status_code}):[/red] {e}")
             console.print_json(json.dumps(e.payload, ensure_ascii=False))
@@ -1284,6 +1350,13 @@ def report_revise(
                 page_index=page_index,
                 block_patches=patch,
             )
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]PATCH /reports/{report_id} failed:[/red] {e}")
             raise typer.Exit(3)
@@ -1327,6 +1400,13 @@ def report_append(
         except (KeyError, ValueError) as e:
             console.print(f"[red]{e}[/red]")
             raise typer.Exit(1)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]PATCH failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(3)
@@ -1384,6 +1464,13 @@ def report_milestone(
                     page_index=page_index,
                     match=match,
                 )
+            except AuthorLockedError as e:
+                console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                              f"report_id={e.report_id}")
+                raise typer.Exit(4)
+            except _TYPED_LOCK_ERRORS as e:
+                console.print(f"[red][{type(e).__name__}][/red] {e}")
+                raise typer.Exit(4)
             except (ApiError, ValueError, KeyError, IndexError) as e:
                 console.print(f"[red]remove failed:[/red] {e}")
                 raise typer.Exit(2)
@@ -1425,6 +1512,13 @@ def report_milestone(
                 block_appends={target_bid: {"items": [item]}},
                 page_index=page_index,
             )
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except (report_ops.RevisionConflict, ApiError, ValueError) as e:
             console.print(f"[red]append failed:[/red] {e}")
             raise typer.Exit(2)
@@ -1595,6 +1689,13 @@ def report_mount(
                 note=note,
                 folder_id=folder_id,
             )
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]mount failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -1617,6 +1718,13 @@ def report_unmount(
     with ReportArchiveClient() as client:
         try:
             report_ops.unmount_report(client, report_id, workspace)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]unmount failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -1650,6 +1758,54 @@ def report_mounts(report_id: int = typer.Argument(...)):
     console.print(tbl)
 
 
+@report_app.command("add-link")
+def report_add_link(
+    report_id: int = typer.Argument(..., help="source report id"),
+    to_report_id: int = typer.Option(..., "--to",
+                                     help="other report id to link to"),
+    direction: str = typer.Option(
+        "outgoing", "--direction",
+        help="outgoing (default — this report → other) | incoming (other → this report)",
+    ),
+    kind: str = typer.Option("related", "--kind",
+                             help="link kind (e.g. related / blocks / follows / supersedes)"),
+    label: Optional[str] = typer.Option(None, "--label",
+                                        help="optional human-readable link label"),
+):
+    """POST /reports/{id}/links — link this report to another.
+
+    `--direction outgoing` (default) creates a link FROM this report TO the
+    other. `--direction incoming` flips it: the server swaps from/to so the
+    link points the OTHER way (other report → this report). Use incoming
+    when this report is being CITED by another and you want the citation to
+    show up as a back-reference.
+    """
+    if direction not in ("outgoing", "incoming"):
+        console.print(f"[red]invalid --direction '{direction}' "
+                      "(expected: outgoing | incoming)[/red]")
+        raise typer.Exit(1)
+    with ReportArchiveClient() as client:
+        try:
+            link = client.add_report_link(
+                report_id,
+                to_report_id=to_report_id,
+                kind=kind,
+                label=label,
+                direction=direction,
+            )
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
+        except ApiError as e:
+            console.print(f"[red]add-link failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(link, ensure_ascii=False))
+
+
 @report_app.command("delete")
 def report_delete(
     report_id: int = typer.Argument(...),
@@ -1663,6 +1819,13 @@ def report_delete(
     with ReportArchiveClient() as client:
         try:
             report_ops.delete_report(client, report_id)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]DELETE /reports/{report_id} failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(3)
@@ -1776,6 +1939,13 @@ def report_copy(
                 mode=mode,
                 folder_id=folder_id,
             )
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]copy failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -1793,6 +1963,13 @@ def report_publish(
     with ReportArchiveClient() as client:
         try:
             updated = client.publish_report(report_id)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]publish failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -1808,6 +1985,13 @@ def report_unpublish(
     with ReportArchiveClient() as client:
         try:
             updated = client.unpublish_report(report_id)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]unpublish failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -1831,6 +2015,13 @@ def report_new_from_preset(
                 title=title,
                 folder_id=folder_id,
             )
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]new-from-preset failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -1913,13 +2104,152 @@ def tools_composites_submit(
     args: dict[str, Any] = {"composite_id": composite_id, "report_id": report_id}
     if note is not None:
         args["note"] = note
-    row = _do_composites_submit(args)
+    try:
+        row = _do_composites_submit(args)
+    except AuthorLockedError as e:
+        console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                      f"report_id={e.report_id}")
+        raise typer.Exit(4)
+    except _TYPED_LOCK_ERRORS as e:
+        console.print(f"[red][{type(e).__name__}][/red] {e}")
+        raise typer.Exit(4)
+    except ApiError as e:
+        console.print(f"[red]submit failed ({e.status_code}):[/red] {e}")
+        raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+# --------------------------------------------------------------------------- #
+# v0.5.2 — tools sub-app: preset-create / preset-delete / widgets-* mirrors
+# --------------------------------------------------------------------------- #
+@tools_app.command("preset-create")
+def tools_preset_create(
+    from_report: int = typer.Option(..., "--from-report",
+                                    help="source report id to snapshot into a preset"),
+    name: str = typer.Option(..., "--name",
+                             help="preset name (shown in the new-from-preset picker)"),
+    description: Optional[str] = typer.Option(
+        None, "--description",
+        help="optional human-readable description (max 1000 chars)",
+    ),
+    workspace: Optional[list[str]] = typer.Option(
+        None, "--workspace",
+        help="workspace slug(s) that own the preset (repeat for multiple); "
+             "omit to use the report's home workspace",
+    ),
+):
+    """POST /presets — snapshot a report into a reusable preset.
+
+    Wrapper around the `preset_create` MCP tool. Slug arg `--workspace`
+    is plural — repeat the flag for each owner workspace.
+    """
+    args: dict[str, Any] = {"report_id": from_report, "name": name}
+    if description is not None:
+        args["description"] = description
+    if workspace:
+        args["owner_workspace_slugs"] = list(workspace)
+    from report_skill.mcp_server import _do_preset_create
+    try:
+        row = _do_preset_create(args)
+    except AuthorLockedError as e:
+        console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                      f"report_id={e.report_id}")
+        raise typer.Exit(4)
+    except _TYPED_LOCK_ERRORS as e:
+        console.print(f"[red][{type(e).__name__}][/red] {e}")
+        raise typer.Exit(4)
+    except ApiError as e:
+        console.print(f"[red]preset-create failed ({e.status_code}):[/red] {e}")
+        raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@tools_app.command("preset-delete")
+def tools_preset_delete(
+    preset_id: int = typer.Argument(..., help="preset id to delete"),
+):
+    """DELETE /presets/{id} — remove a preset. Wrapper around `preset_delete`."""
+    from report_skill.mcp_server import _do_preset_delete
+    try:
+        row = _do_preset_delete({"preset_id": preset_id})
+    except AuthorLockedError as e:
+        console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                      f"report_id={e.report_id}")
+        raise typer.Exit(4)
+    except _TYPED_LOCK_ERRORS as e:
+        console.print(f"[red][{type(e).__name__}][/red] {e}")
+        raise typer.Exit(4)
+    except ApiError as e:
+        console.print(f"[red]preset-delete failed ({e.status_code}):[/red] {e}")
+        raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@tools_app.command("widgets-suggest-extras")
+def tools_widgets_suggest_extras(
+    topic: str = typer.Option(..., "--topic",
+                              help="raw user text — scanned for chartable/temporal/hierarchy patterns"),
+    max_extras: int = typer.Option(5, "--max-extras", min=0, max=20,
+                                   help="cap on suggestion count"),
+    use_llm: str = typer.Option("auto", "--use-llm",
+                                help="auto | yes | no — whether to call the LLM for ranking"),
+):
+    """Suggest extra (visual) blocks for a given user-text topic.
+
+    Wrapper around the `widgets_suggest_extras` MCP tool — output is a
+    JSON list of {suggested_id, widget_type, props, input, confidence,
+    matched_pattern, source}.
+    """
+    from report_skill.mcp_server import _do_widgets_suggest_extras
+    rows = _do_widgets_suggest_extras({
+        "text": topic, "max_extras": max_extras, "use_llm": use_llm,
+    })
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@tools_app.command("widgets-catalog")
+def tools_widgets_catalog(
+    widget_type: Optional[str] = typer.Option(
+        None, "--type",
+        help="single widget slug (e.g. table) — returns that widget's full "
+             "catalog entry. Omit to get a summary across the cached catalog.",
+    ),
+):
+    """Show the cached widget catalog (or one widget's entry).
+
+    Wrapper around the `widgets_catalog` MCP tool. The catalog is read from
+    .skill-cache/widgets.json — run `catalog sync` if it's missing.
+    """
+    from report_skill.mcp_server import _do_widgets_catalog
+    args: dict[str, Any] = {}
+    if widget_type is not None:
+        args["widget_type"] = widget_type
+    try:
+        row = _do_widgets_catalog(args)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
     console.print_json(json.dumps(row, ensure_ascii=False))
 
 
 # --------------------------------------------------------------------------- #
 # v0.5.0 — composites sub-app: accept / reject / withdraw
+# v0.5.2 — composites get
 # --------------------------------------------------------------------------- #
+@composites_app.command("get")
+def composites_get(
+    composite_id: int = typer.Argument(..., help="composite report id"),
+):
+    """GET /composites/{id} — fetch a composite report's full state."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.get_composite(composite_id)
+        except ApiError as e:
+            console.print(f"[red]get composite failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(1)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
 @composites_app.command("accept")
 def composites_accept(
     composite_id: int = typer.Option(..., "--composite-id"),
@@ -1929,6 +2259,13 @@ def composites_accept(
     with ReportArchiveClient() as client:
         try:
             row = client.accept_composite_request(composite_id, request_id)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]accept failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -1946,6 +2283,13 @@ def composites_reject(
     with ReportArchiveClient() as client:
         try:
             row = client.reject_composite_request(composite_id, request_id, reason=reason)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]reject failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -1961,6 +2305,13 @@ def composites_withdraw(
     with ReportArchiveClient() as client:
         try:
             row = client.withdraw_composite_request(composite_id, request_id)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]withdraw failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -1981,6 +2332,13 @@ def mounts_set_folder(
     with ReportArchiveClient() as client:
         try:
             row = client.set_mount_folder(report_id, workspace, folder_id=folder_id)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]set-folder failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -2002,6 +2360,13 @@ def mounts_set_edit_policy(
     with ReportArchiveClient() as client:
         try:
             row = client.set_mount_edit_policy(report_id, workspace, edit_policy=policy)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]set-edit-policy failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
