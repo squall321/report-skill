@@ -68,7 +68,7 @@ $env:SKILL_LLM_PROVIDER = "bridge"
 
 ## MCP server (any MCP client can call it)
 
-In addition to the CLI and the Claude Code skill, `report-skill` ships an MCP server (`report-skill-mcp`) that exposes 23 tools via stdio. Wire it into Claude Desktop / Continue / Cursor / any MCP client:
+In addition to the CLI and the Claude Code skill, `report-skill` ships an MCP server (`report-skill-mcp`) that exposes 66 MCP tools via stdio. Wire it into Claude Desktop / Continue / Cursor / any MCP client:
 
 ```json
 {

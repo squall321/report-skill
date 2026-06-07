@@ -76,7 +76,7 @@ Add to your client's `mcp.json`:
 }
 ```
 
-The server advertises 23 tools (`report_create`, `report_update`, `report_append`, `report_milestone_add`, `templates_suggest`, `widgets_suggest_extras`, `file_upload`, …). Any LLM agent on the other side can call them with just the server URL stored in `.env`.
+The server advertises 66 tools — including reads (`reports_search`, `workspaces_list`, `entities_list`, `report_types_list`, `folders_list`, `widget_relations_list`, `notifications_list`, …), writes (`report_create`, `report_update`, `report_append`, `report_copy`, `report_publish`, `composite_create`, `composite_items_set`, `preset_create`, `template_set_scope`, …), milestones (`report_milestone_add`/`remove`), and maintenance (`catalog_sync`, `widgets_suggest_extras`, `file_upload`, `report_lock_status`, …). Any LLM agent on the other side can call them with just the server URL stored in `.env`. Verify the live count with `python -c "from report_skill.mcp_server import _DISPATCH; print(len(_DISPATCH))"`.
 
 ### Path C — Pure CLI (scripting / automation)
 

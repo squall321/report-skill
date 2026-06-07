@@ -6,11 +6,14 @@ standard `{success, data, message, errors}` envelope.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 import httpx
 
 from report_skill.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class ApiError(RuntimeError):
@@ -165,6 +168,17 @@ class ReportArchiveClient:
             base_url=settings.report_api_base_url,
             timeout=httpx.Timeout(30.0, read=60.0),
         )
+        try:
+            # Reserved for future init steps (e.g., warm-up auth or capability
+            # probe). Anything that may raise must go inside this try so the
+            # httpx client is closed on partial-construction failure.
+            pass
+        except Exception:
+            try:
+                self._http.close()
+            except Exception:
+                logger.debug("error closing httpx client during failed init", exc_info=True)
+            raise
 
     # ---- auth ---------------------------------------------------------- #
 
@@ -176,6 +190,7 @@ class ReportArchiveClient:
         }, _no_auth=True)
         self._token = env["access_token"]
         self._user_id = env["user_id"]
+        logger.info("login OK user_id=%s", self._user_id)
         return env
 
     def ensure_logged_in(self) -> None:
@@ -430,21 +445,21 @@ class ReportArchiveClient:
             return list(body.get("items") or [])
         return list(body or []) if isinstance(body, list) else []
 
-    def publish_report(self, report_id) -> dict:
+    def publish_report(self, report_id: int) -> dict:
         """POST /reports/{report_id}/publish — flip phase to finalized.
 
         Owner-only; idempotent. Fans out activity + notifications.
         """
         return self.post(f"/reports/{report_id}/publish", json={})
 
-    def unpublish_report(self, report_id) -> dict:
+    def unpublish_report(self, report_id: int) -> dict:
         """POST /reports/{report_id}/unpublish — flip phase back to drafting.
 
         Owner-only; no-op if not currently finalized.
         """
         return self.post(f"/reports/{report_id}/unpublish", json={})
 
-    def fetch_report_lock_status(self, report_id) -> dict:
+    def fetch_report_lock_status(self, report_id: int) -> dict:
         """GET /reports/{report_id} projected to the 3 author-lock fields.
 
         Returns {author_lock_enabled, author_lock_reason, author_lock_set_at}.
@@ -595,7 +610,7 @@ class ReportArchiveClient:
 
     # ---- composites ---------------------------------------------------- #
 
-    def get_composite(self, composite_id) -> dict:
+    def get_composite(self, composite_id: int) -> dict:
         """GET /composites/{composite_id} — returns the full composite
         report record (summary_widgets, items, perms).
         """
@@ -765,7 +780,7 @@ class ReportArchiveClient:
             body["note"] = note
         return self.post(f"/composites/{composite_id}/requests", json=body)
 
-    def accept_composite_request(self, composite_id, request_id) -> dict:
+    def accept_composite_request(self, composite_id: int, request_id: int) -> dict:
         """POST /composites/{composite_id}/requests/{request_id}/accept —
         composite owner / sys admin only.
         """
@@ -775,8 +790,8 @@ class ReportArchiveClient:
 
     def reject_composite_request(
         self,
-        composite_id,
-        request_id,
+        composite_id: int,
+        request_id: int,
         *,
         reason: Optional[str] = None,
     ) -> dict:
@@ -791,7 +806,7 @@ class ReportArchiveClient:
             f"/composites/{composite_id}/requests/{request_id}/reject", json=body
         )
 
-    def withdraw_composite_request(self, composite_id, request_id) -> dict:
+    def withdraw_composite_request(self, composite_id: int, request_id: int) -> dict:
         """POST /composites/{composite_id}/requests/{request_id}/withdraw —
         requester self / composite owner / sys admin only.
         """
@@ -876,10 +891,10 @@ class ReportArchiveClient:
 
     # ---- low-level wrappers -------------------------------------------- #
 
-    def get(self, path: str, *, params: Optional[dict] = None) -> Any:
+    def get(self, path: str, *, params: Optional[dict] = None) -> dict[str, Any] | list[Any]:
         return self._request("GET", path, params=params)
 
-    def post(self, path: str, *, json: Optional[dict] = None) -> Any:
+    def post(self, path: str, *, json: Optional[dict] = None) -> dict[str, Any] | list[Any]:
         return self._request("POST", path, json=json)
 
     def _post(self, path: str, *, json: Optional[dict] = None, _no_auth: bool = False) -> Any:
@@ -1057,7 +1072,10 @@ class ReportArchiveClient:
         return None
 
     def close(self) -> None:
-        self._http.close()
+        try:
+            self._http.close()
+        except Exception:
+            logger.debug("error closing httpx client", exc_info=True)
 
     def __enter__(self) -> "ReportArchiveClient":
         return self

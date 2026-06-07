@@ -926,3 +926,14 @@ Notifications:
 Widget relations:
 
 - `widget_relations_list` — GET `/api/widget-relations`. List relation slugs that `rich_text` mention chips can target.
+
+---
+
+## MCP tool inventory (v0.7.x)
+
+The MCP server now exposes **66 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the v0.5.0 / v0.6.0 / v0.7.0 inventory sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
+
+```powershell
+report-skill-mcp --help   # or:
+python -c "from report_skill.mcp_server import _DISPATCH; print(len(_DISPATCH))"
+```

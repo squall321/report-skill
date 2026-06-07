@@ -1,5 +1,93 @@
 ﻿# Changelog
 
+## 0.7.1 — 2026-06-07
+
+Patch — robustness hardening only (no new features, no behavior change on success path).
+
+Resource lifecycle:
+
+- `ReportArchiveClient.__init__` now wraps the post-`httpx.Client()` block in a
+  try/except that closes the underlying httpx client on partial-construction
+  failure (previously a theoretical leak if any future init step raised).
+- `ReportArchiveClient.close()` swallows shutdown errors with a debug log
+  instead of propagating, so cleanup is never the cause of a visible failure.
+
+Logging discipline:
+
+- Module loggers (`logger = logging.getLogger(__name__)`) initialized in
+  `client.py`, `mcp_server.py`, `report_ops.py`.
+- `login()` now logs `login OK user_id=...` at INFO.
+- 12 write dispatchers in `mcp_server.py` (report create/update/delete/mount/
+  unmount/publish/unpublish, composite create/delete, preset create/delete,
+  template_set_scope) emit an INFO line before the HTTP call, so write
+  activity is auditable even if the call raises.
+- 4 write methods in `report_ops.py` (update_blocks, add_page, replace_page,
+  delete_report) emit INFO at entry.
+- The prior bare `logging.warning(...)` in `report_ops.py:244` is now
+  `logger.warning(...)` for namespace consistency.
+
+Input validation:
+
+- New `_int_arg(args, key, *, default=None)` helper in `mcp_server.py` —
+  raises `ValueError("argument '<key>' must be integer, got <type>: <repr>")`
+  with the offending value, instead of the cryptic
+  `ValueError: invalid literal for int()`. 46 `int(args["..."])` call sites
+  across all dispatchers were routed through the helper.
+- `cli.py` user-supplied `json.loads(...)` paths (6 sites) now catch
+  `JSONDecodeError` and print `Invalid JSON in <source>: line N, col M: <msg>`
+  via `typer.echo(..., err=True); raise typer.Exit(1)`.
+- `cli.py` user-supplied file reads (6 sites) catch `FileNotFoundError` with a
+  helpful message naming the offending option label.
+
+Error message quality:
+
+- `_do_report_delete` confirm gate: "confirm parameter must be true (boolean)
+  to delete" (was "confirm must be true to actually delete").
+- `_do_report_revise`: "must pass one of: block_ids (list of ids) or
+  revise_all (true)" (was "either block_ids or revise_all is required").
+- `composite_summary_set` widgets type check: now interpolates
+  `type(value).__name__` so the caller sees `dict` / `str` instead of a
+  generic "must be a list".
+- `composite_items_set` items type check: same treatment.
+- `report_ops` "no pages" guards now name the operation
+  (`cannot update_blocks` / `cannot replace_page`).
+
+Type hint tightening:
+
+- `client.py` `get(...) -> Any` / `post(...) -> Any` → `-> dict[str, Any] |
+  list[Any]`.
+- 8 public methods (`publish_report`, `unpublish_report`,
+  `fetch_report_lock_status`, `get_composite`, `accept_composite_request`,
+  `reject_composite_request`, `withdraw_composite_request`,
+  `delete_report`) gained `report_id: int` / `composite_id: int` /
+  `request_id: int` annotations where they were previously untyped.
+
+Retry discipline (confirmed correct, no change required):
+
+- `report_ops.py` `edit_lock` acquire path classifies transient (5xx /
+  status==0) vs non-transient (4xx) — only 5xx retries, 4xx raises
+  immediately. Documented in code comment; no behavioral change.
+- `append_to_blocks`, `update_blocks`, `add_page`, `replace_page` 409 retry
+  loops all bounded by `max_retries + 1` with exponential backoff; verified
+  correct.
+
+Docs drift:
+
+- `docs/RECEIVER.md`: stale "advertises 23 tools" → full 66-tool description
+  with categories (reads / writes / milestones / maintenance) plus a one-line
+  `_DISPATCH` count verification snippet.
+- `docs/BUILDING.md`: aligned to current `_DISPATCH = 66`.
+- `.env.example`: confirmed complete coverage of all settings used at runtime
+  (`OLLAMA_*`, `SKILL_LLM_*`, `SKILL_AI_TIER`, `SKILL_BRIDGE_TIMEOUT`,
+  `REPORT_API_*`, `REPORT_BACKEND_PATH`) — no missing variables.
+
+Verified:
+
+- pytest 446 passed, 5 skipped (no failures).
+- MCP `_DISPATCH` count = 66 (unchanged).
+- `report-skill --version` → 0.7.1.
+- `report-skill-mcp` stdio handshake works (no regression in entry point).
+
 ## 0.7.0 — 2026-06-07
 
 Minor — closes the Med + Low audit gaps from the v0.6.0 recheck. CLI parity,

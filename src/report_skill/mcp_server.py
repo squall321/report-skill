@@ -39,7 +39,10 @@ except (AttributeError, OSError):
 
 import asyncio
 import json
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -964,6 +967,19 @@ def _text(payload: Any) -> list[TextContent]:
     return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False, indent=2))]
 
 
+def _int_arg(args: dict, key: str, *, default=None) -> int:
+    """Coerce args[key] to int with a clear error if missing or non-numeric."""
+    if key not in args:
+        if default is not None:
+            return default
+        raise ValueError(f"required argument '{key}' missing")
+    v = args[key]
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"argument '{key}' must be integer, got {type(v).__name__}: {v!r}") from None
+
+
 def _do_ping(_args: dict) -> Any:
     from report_skill import __version__
     with ReportArchiveClient() as c:
@@ -1045,7 +1061,7 @@ def _do_widgets_suggest_extras(args: dict) -> Any:
 
 def _do_report_show(args: dict) -> Any:
     with ReportArchiveClient() as c:
-        report = report_ops.fetch_report(c, int(args["report_id"]))
+        report = report_ops.fetch_report(c, _int_arg(args, "report_id"))
     page_index = args.get("page_index")
     summary: dict = {
         "id": report.get("id"),
@@ -1087,7 +1103,7 @@ def _do_report_lock_status(args: dict) -> Any:
     Read-only diagnostic. Service accounts cannot set the lock (owner-only
     on the RA side), so there is no companion `report_lock_set` tool.
     """
-    rid = int(args["report_id"])
+    rid = _int_arg(args, "report_id")
     with ReportArchiveClient() as c:
         info = c.fetch_report_lock_status(rid)
     return {
@@ -1203,6 +1219,7 @@ def _normalize_and_upload(c: ReportArchiveClient, tpl: dict,
 
 
 def _do_report_create(args: dict) -> Any:
+    logger.info("report_create title=%s", args.get("title", ""))
     snap = schemas.load()
     with ReportArchiveClient() as c:
         tpl = c.fetch_template(args["template_id"])
@@ -1251,8 +1268,9 @@ def _do_report_create(args: dict) -> Any:
 
 
 def _do_report_update(args: dict) -> Any:
+    logger.info("report_update id=%s", args.get("report_id"))
     snap = schemas.load()
-    rid = int(args["report_id"])
+    rid = _int_arg(args, "report_id")
     page_index = int(args.get("page_index", 0))
     with ReportArchiveClient() as c:
         existing = report_ops.fetch_report(c, rid)
@@ -1313,7 +1331,7 @@ def _do_report_update(args: dict) -> Any:
 def _do_report_append(args: dict) -> Any:
     with ReportArchiveClient() as c:
         updated = report_ops.append_to_blocks(
-            c, int(args["report_id"]),
+            c, _int_arg(args, "report_id"),
             block_appends=args["blocks"],
             page_index=int(args.get("page_index", 0)),
             max_retries=int(args.get("max_retries", 3)),
@@ -1324,7 +1342,7 @@ def _do_report_append(args: dict) -> Any:
 
 def _do_report_add_page(args: dict) -> Any:
     snap = schemas.load()
-    rid = int(args["report_id"])
+    rid = _int_arg(args, "report_id")
     with ReportArchiveClient() as c:
         tpl = c.fetch_template(args["template_id"])
         result = _normalize_and_upload(c, tpl, args["blocks"],
@@ -1354,15 +1372,18 @@ def _do_report_add_page(args: dict) -> Any:
 
 
 def _do_report_delete(args: dict) -> Any:
+    logger.info("report_delete id=%s", args.get("report_id"))
     if not args.get("confirm"):
-        raise ValueError("confirm must be true to actually delete")
+        raise ValueError("confirm parameter must be true (boolean) to delete")
     with ReportArchiveClient() as c:
-        report_ops.delete_report(c, int(args["report_id"]))
-    return {"deleted": True, "id": int(args["report_id"])}
+        report_ops.delete_report(c, _int_arg(args, "report_id"))
+    return {"deleted": True, "id": _int_arg(args, "report_id")}
 
 
 def _do_report_mount(args: dict) -> Any:
-    rid = int(args["report_id"])
+    logger.info("report_mount id=%s workspaces=%s",
+                args.get("report_id"), args.get("workspace_slugs"))
+    rid = _int_arg(args, "report_id")
     with ReportArchiveClient() as c:
         created = report_ops.mount_report(
             c, rid,
@@ -1380,20 +1401,22 @@ def _do_report_mount(args: dict) -> Any:
 
 
 def _do_report_unmount(args: dict) -> Any:
+    logger.info("report_unmount id=%s workspace=%s",
+                args.get("report_id"), args.get("workspace_slug"))
     with ReportArchiveClient() as c:
-        report_ops.unmount_report(c, int(args["report_id"]), args["workspace_slug"])
-    return {"unmounted": True, "report_id": int(args["report_id"]),
+        report_ops.unmount_report(c, _int_arg(args, "report_id"), args["workspace_slug"])
+    return {"unmounted": True, "report_id": _int_arg(args, "report_id"),
             "workspace_slug": args["workspace_slug"]}
 
 
 def _do_report_mounts(args: dict) -> Any:
     with ReportArchiveClient() as c:
-        mounts = report_ops.list_mounts(c, int(args["report_id"]))
-    return {"report_id": int(args["report_id"]), "mounts": mounts, "count": len(mounts)}
+        mounts = report_ops.list_mounts(c, _int_arg(args, "report_id"))
+    return {"report_id": _int_arg(args, "report_id"), "mounts": mounts, "count": len(mounts)}
 
 
 def _do_report_milestone_add(args: dict) -> Any:
-    rid = int(args["report_id"])
+    rid = _int_arg(args, "report_id")
     item: dict = {"date": args["date"], "label": args["label"]}
     if args.get("status"):
         item["status"] = args["status"]
@@ -1419,7 +1442,7 @@ def _do_report_milestone_add(args: dict) -> Any:
 
 
 def _do_report_milestone_remove(args: dict) -> Any:
-    rid = int(args["report_id"])
+    rid = _int_arg(args, "report_id")
     page_index = int(args.get("page_index", 0))
     match: dict = {"date": args["date"]}
     if args.get("label"):
@@ -1536,7 +1559,7 @@ def _do_report_revise(args: dict) -> Any:
             "OLLAMA_BASE_URL / SKILL_LLM_PROVIDER=bridge)"
         )
 
-    rid = int(args["report_id"])
+    rid = _int_arg(args, "report_id")
     instruction = args["instruction"]
     block_ids = list(args.get("block_ids") or [])
     revise_all = bool(args.get("revise_all", False))
@@ -1545,7 +1568,7 @@ def _do_report_revise(args: dict) -> Any:
     max_tokens = int(args.get("max_tokens", 800))
 
     if not block_ids and not revise_all:
-        raise ValueError("either block_ids or revise_all is required")
+        raise ValueError("must pass one of: block_ids (list of ids) or revise_all (true)")
 
     snap = schemas.load()
     with ReportArchiveClient() as c:
@@ -1660,7 +1683,7 @@ def _do_report_dump(args: dict) -> Any:
     """Pack a report + referenced files into a bundle.zip."""
     from pathlib import Path as _Path
     from report_skill import bundle as bundle_mod
-    rid = int(args["report_id"])
+    rid = _int_arg(args, "report_id")
     out = _Path(args.get("out_path") or f"bundle-report-{rid}.zip")
     with ReportArchiveClient() as c:
         summary = bundle_mod.pack_report_bundle(c, rid, out)
@@ -1858,7 +1881,7 @@ def _do_widget_relations_list(_args: dict) -> Any:
 
 # ---- v0.5.0 dispatchers ---------------------------------------------- #
 def _do_report_copy(args: dict) -> Any:
-    rid = int(args["report_id"])
+    rid = _int_arg(args, "report_id")
     title = str(args["title"])
     mode = args.get("mode") or "full"
     folder_id = args.get("folder_id")
@@ -1877,8 +1900,8 @@ def _do_report_copy(args: dict) -> Any:
 
 
 def _do_report_add_link(args: dict) -> Any:
-    rid = int(args["report_id"])
-    to_rid = int(args["to_report_id"])
+    rid = _int_arg(args, "report_id")
+    to_rid = _int_arg(args, "to_report_id")
     kind = args.get("kind") or "related"
     label = args.get("label")
     # v0.5.1 — 'outgoing' (default) or 'incoming'; server swaps from/to
@@ -1903,7 +1926,8 @@ def _do_report_types_list(_args: dict) -> Any:
 
 
 def _do_report_publish(args: dict) -> Any:
-    rid = int(args["report_id"])
+    logger.info("report_publish id=%s", args.get("report_id"))
+    rid = _int_arg(args, "report_id")
     with ReportArchiveClient() as c:
         report = c.publish_report(rid)
     return {
@@ -1916,7 +1940,8 @@ def _do_report_publish(args: dict) -> Any:
 
 
 def _do_report_unpublish(args: dict) -> Any:
-    rid = int(args["report_id"])
+    logger.info("report_unpublish id=%s", args.get("report_id"))
+    rid = _int_arg(args, "report_id")
     with ReportArchiveClient() as c:
         report = c.unpublish_report(rid)
     return {
@@ -1947,7 +1972,7 @@ def _do_folders_list(args: dict) -> Any:
 
 
 def _do_report_mount_set_folder(args: dict) -> Any:
-    rid = int(args["report_id"])
+    rid = _int_arg(args, "report_id")
     slug = str(args["workspace_slug"])
     folder_id_raw = args.get("folder_id")
     folder_id = int(folder_id_raw) if folder_id_raw is not None else None
@@ -1957,7 +1982,7 @@ def _do_report_mount_set_folder(args: dict) -> Any:
 
 
 def _do_report_mount_set_edit_policy(args: dict) -> Any:
-    rid = int(args["report_id"])
+    rid = _int_arg(args, "report_id")
     slug = str(args["workspace_slug"])
     policy = str(args["edit_policy"])
     with ReportArchiveClient() as c:
@@ -1966,6 +1991,7 @@ def _do_report_mount_set_edit_policy(args: dict) -> Any:
 
 
 def _do_template_set_scope(args: dict) -> Any:
+    logger.info("template_set_scope id=%s", args.get("template_id"))
     # v0.5.1 — template_id is a SLUG (e.g. 'engineering-rca'), not an int.
     # RA backend TemplateScopeUpdate uses string pattern ^[a-z0-9][a-z0-9-]*$.
     tid = str(args["template_id"])
@@ -1985,7 +2011,9 @@ def _do_presets_list(args: dict) -> Any:
 
 
 def _do_preset_create(args: dict) -> Any:
-    rid = int(args["report_id"])
+    logger.info("preset_create from_report=%s name=%s",
+                args.get("report_id"), args.get("name"))
+    rid = _int_arg(args, "report_id")
     name = str(args["name"])
     slugs = args.get("owner_workspace_slugs")
     if slugs is not None:
@@ -2004,7 +2032,7 @@ def _do_preset_create(args: dict) -> Any:
 
 
 def _do_report_new_from_preset(args: dict) -> Any:
-    pid = int(args["preset_id"])
+    pid = _int_arg(args, "preset_id")
     title = args.get("title")
     folder_id_raw = args.get("folder_id")
     folder_id = int(folder_id_raw) if folder_id_raw is not None else None
@@ -2019,23 +2047,24 @@ def _do_report_new_from_preset(args: dict) -> Any:
 
 
 def _do_preset_delete(args: dict) -> Any:
-    pid = int(args["preset_id"])
+    logger.info("preset_delete id=%s", args.get("preset_id"))
+    pid = _int_arg(args, "preset_id")
     with ReportArchiveClient() as c:
         c.delete_preset(pid)
     return {"deleted": True, "id": pid}
 
 
 def _do_composite_get(args: dict) -> Any:
-    cid = int(args["composite_id"])
+    cid = _int_arg(args, "composite_id")
     with ReportArchiveClient() as c:
         return c.get_composite(cid)
 
 
 def _do_composite_summary_set(args: dict) -> Any:
-    cid = int(args["composite_id"])
+    cid = _int_arg(args, "composite_id")
     widgets = args["summary_widgets"]
     if not isinstance(widgets, list):
-        raise ValueError("summary_widgets must be a list")
+        raise ValueError(f"summary_widgets must be a JSON array; got {type(widgets).__name__}")
     expected_revision = args.get("expected_revision")
     if expected_revision is not None:
         expected_revision = int(expected_revision)
@@ -2052,13 +2081,13 @@ def _do_composite_summary_set(args: dict) -> Any:
 
 
 def _do_composites_submittable_for(args: dict) -> Any:
-    rid = int(args["report_id"])
+    rid = _int_arg(args, "report_id")
     with ReportArchiveClient() as c:
         return c.list_submittable_composites(rid)
 
 
 def _do_composites_requests_list(args: dict) -> Any:
-    cid = int(args["composite_id"])
+    cid = _int_arg(args, "composite_id")
     status_filter = args.get("status_filter")
     with ReportArchiveClient() as c:
         return c.list_composite_requests(cid, status_filter=status_filter) \
@@ -2066,31 +2095,31 @@ def _do_composites_requests_list(args: dict) -> Any:
 
 
 def _do_composites_submit(args: dict) -> Any:
-    cid = int(args["composite_id"])
-    rid = int(args["report_id"])
+    cid = _int_arg(args, "composite_id")
+    rid = _int_arg(args, "report_id")
     note = args.get("note")
     with ReportArchiveClient() as c:
         return c.submit_to_composite(cid, report_id=rid, note=note)
 
 
 def _do_composites_request_accept(args: dict) -> Any:
-    cid = int(args["composite_id"])
-    req_id = int(args["request_id"])
+    cid = _int_arg(args, "composite_id")
+    req_id = _int_arg(args, "request_id")
     with ReportArchiveClient() as c:
         return c.accept_composite_request(cid, req_id)
 
 
 def _do_composites_request_reject(args: dict) -> Any:
-    cid = int(args["composite_id"])
-    req_id = int(args["request_id"])
+    cid = _int_arg(args, "composite_id")
+    req_id = _int_arg(args, "request_id")
     reason = args.get("reason")
     with ReportArchiveClient() as c:
         return c.reject_composite_request(cid, req_id, reason=reason)
 
 
 def _do_composites_request_withdraw(args: dict) -> Any:
-    cid = int(args["composite_id"])
-    req_id = int(args["request_id"])
+    cid = _int_arg(args, "composite_id")
+    req_id = _int_arg(args, "request_id")
     with ReportArchiveClient() as c:
         return c.withdraw_composite_request(cid, req_id)
 
@@ -2099,6 +2128,7 @@ def _do_composites_request_withdraw(args: dict) -> Any:
 # v0.6.0 — composites body editing dispatchers
 # --------------------------------------------------------------------------- #
 def _do_composite_create(args: dict) -> Any:
+    logger.info("composite_create title=%s", args.get("title", ""))
     title = args["title"]
     kind = args["kind"]
     kwargs: dict[str, Any] = {
@@ -2134,7 +2164,7 @@ def _do_composite_create(args: dict) -> Any:
 
 
 def _do_composite_update(args: dict) -> Any:
-    cid = int(args["composite_id"])
+    cid = _int_arg(args, "composite_id")
     kwargs: dict[str, Any] = {}
     if "title" in args:
         kwargs["title"] = args.get("title")
@@ -2152,7 +2182,7 @@ def _do_composite_update(args: dict) -> Any:
     if "period_date" in args:
         kwargs["period_date"] = args.get("period_date")
     if "expected_revision" in args and args.get("expected_revision") is not None:
-        kwargs["expected_revision"] = int(args["expected_revision"])
+        kwargs["expected_revision"] = _int_arg(args, "expected_revision")
     with ReportArchiveClient() as c:
         updated = c.update_composite(cid, **kwargs)
     if isinstance(updated, dict):
@@ -2167,10 +2197,10 @@ def _do_composite_update(args: dict) -> Any:
 
 
 def _do_composite_items_set(args: dict) -> Any:
-    cid = int(args["composite_id"])
+    cid = _int_arg(args, "composite_id")
     items = args["items"]
     if not isinstance(items, list):
-        raise ValueError("items must be a list")
+        raise ValueError(f"items must be a JSON array; got {type(items).__name__}")
     expected_revision = args.get("expected_revision")
     if expected_revision is not None:
         expected_revision = int(expected_revision)
@@ -2191,14 +2221,15 @@ def _do_composite_items_set(args: dict) -> Any:
 
 
 def _do_composite_delete(args: dict) -> Any:
-    cid = int(args["composite_id"])
+    logger.info("composite_delete id=%s", args.get("composite_id"))
+    cid = _int_arg(args, "composite_id")
     with ReportArchiveClient() as c:
         c.delete_composite(cid)
     return {"deleted": True, "id": cid}
 
 
 def _do_composite_publish(args: dict) -> Any:
-    cid = int(args["composite_id"])
+    cid = _int_arg(args, "composite_id")
     with ReportArchiveClient() as c:
         published = c.publish_composite(cid)
     if isinstance(published, dict):
@@ -2212,7 +2243,7 @@ def _do_composite_publish(args: dict) -> Any:
 
 
 def _do_composite_unpublish(args: dict) -> Any:
-    cid = int(args["composite_id"])
+    cid = _int_arg(args, "composite_id")
     with ReportArchiveClient() as c:
         unpublished = c.unpublish_composite(cid)
     if isinstance(unpublished, dict):
@@ -2229,7 +2260,7 @@ def _do_composite_unpublish(args: dict) -> Any:
 # v0.6.0 — activities + notifications dispatchers
 # --------------------------------------------------------------------------- #
 def _do_report_activities(args: dict) -> Any:
-    rid = int(args["report_id"])
+    rid = _int_arg(args, "report_id")
     limit = int(args.get("limit", 20))
     before_id = args.get("before_id")
     if before_id is not None:
@@ -2269,7 +2300,7 @@ def _do_notifications_unread_count(_args: dict) -> Any:
 
 
 def _do_notification_mark_read(args: dict) -> Any:
-    nid = int(args["notification_id"])
+    nid = _int_arg(args, "notification_id")
     with ReportArchiveClient() as c:
         out = c.mark_notification_read(nid)
     if isinstance(out, dict):

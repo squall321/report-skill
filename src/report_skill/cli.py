@@ -187,7 +187,20 @@ def import_payload(
     if not payload_path.is_file():
         console.print(f"[red]payload not found:[/red] {payload_path}")
         raise typer.Exit(1)
-    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    try:
+        raw_text = payload_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        console.print(f"[red]payload file disappeared while reading:[/red] {payload_path}")
+        raise typer.Exit(1)
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        typer.echo(
+            f"Invalid JSON in {payload_path}: line {e.lineno}, "
+            f"column {e.colno}: {e.msg}",
+            err=True,
+        )
+        raise typer.Exit(1)
     with ReportArchiveClient() as client:
         try:
             created = client.create_report(payload)
@@ -259,7 +272,20 @@ def _load_draft(path: Path) -> dict:
     if not path.is_file():
         console.print(f"[red]draft file not found:[/red] {path}")
         raise typer.Exit(1)
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        console.print(f"[red]draft file disappeared while reading:[/red] {path}")
+        raise typer.Exit(1)
+    try:
+        return json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        typer.echo(
+            f"Invalid JSON in {path}: line {e.lineno}, "
+            f"column {e.colno}: {e.msg}",
+            err=True,
+        )
+        raise typer.Exit(1)
 
 
 def _print_block_table(result: orchestrator.NormalizeResult) -> None:
@@ -2328,8 +2354,20 @@ def composites_create(
     """
     items: Optional[list[dict]] = None
     if items_file is not None:
-        text = items_file.read_text(encoding="utf-8")
-        payload = json.loads(text)
+        try:
+            text = items_file.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            console.print(f"[red]--items-file not found:[/red] {items_file}")
+            raise typer.Exit(1)
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as e:
+            typer.echo(
+                f"Invalid JSON in --items-file ({items_file}): line {e.lineno}, "
+                f"column {e.colno}: {e.msg}",
+                err=True,
+            )
+            raise typer.Exit(1)
         if isinstance(payload, dict) and "items" in payload:
             items = list(payload.get("items") or [])
         elif isinstance(payload, list):
@@ -2341,8 +2379,23 @@ def composites_create(
 
     summary_widgets: Optional[list[dict]] = None
     if summary_widgets_file is not None:
-        text = summary_widgets_file.read_text(encoding="utf-8")
-        sw_payload = json.loads(text)
+        try:
+            text = summary_widgets_file.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            console.print(
+                f"[red]--summary-widgets-file not found:[/red] {summary_widgets_file}"
+            )
+            raise typer.Exit(1)
+        try:
+            sw_payload = json.loads(text)
+        except json.JSONDecodeError as e:
+            typer.echo(
+                f"Invalid JSON in --summary-widgets-file "
+                f"({summary_widgets_file}): line {e.lineno}, "
+                f"column {e.colno}: {e.msg}",
+                err=True,
+            )
+            raise typer.Exit(1)
         if isinstance(sw_payload, list):
             summary_widgets = list(sw_payload)
         elif isinstance(sw_payload, dict) and "summary_widgets" in sw_payload:
@@ -2414,8 +2467,23 @@ def composites_update(
         # Empty string is the CLI signal for "clear" (None reaches the body).
         kwargs["period_date"] = period_date if period_date else None
     if summary_widgets_file is not None:
-        text = summary_widgets_file.read_text(encoding="utf-8")
-        sw_payload = json.loads(text)
+        try:
+            text = summary_widgets_file.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            console.print(
+                f"[red]--summary-widgets-file not found:[/red] {summary_widgets_file}"
+            )
+            raise typer.Exit(1)
+        try:
+            sw_payload = json.loads(text)
+        except json.JSONDecodeError as e:
+            typer.echo(
+                f"Invalid JSON in --summary-widgets-file "
+                f"({summary_widgets_file}): line {e.lineno}, "
+                f"column {e.colno}: {e.msg}",
+                err=True,
+            )
+            raise typer.Exit(1)
         if isinstance(sw_payload, list):
             kwargs["summary_widgets"] = list(sw_payload)
         elif isinstance(sw_payload, dict) and "summary_widgets" in sw_payload:
@@ -2464,8 +2532,20 @@ def composites_items_set(
     plus optional `note` / `display_column` / `group_name`. Order matters
     (position is taken from list index).
     """
-    text = items_file.read_text(encoding="utf-8")
-    payload = json.loads(text)
+    try:
+        text = items_file.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        console.print(f"[red]--items-file not found:[/red] {items_file}")
+        raise typer.Exit(1)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as e:
+        typer.echo(
+            f"Invalid JSON in --items-file ({items_file}): line {e.lineno}, "
+            f"column {e.colno}: {e.msg}",
+            err=True,
+        )
+        raise typer.Exit(1)
     if isinstance(payload, dict) and "items" in payload:
         items = list(payload.get("items") or [])
     elif isinstance(payload, list):

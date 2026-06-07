@@ -30,6 +30,9 @@ from report_skill.adapters.base import NormalizeError
 from report_skill.client import ApiError, ReportArchiveClient
 
 
+logger = logging.getLogger(__name__)
+
+
 # Sentinel for "kwarg not provided". Distinct from None which means
 # "explicit null — clear the field server-side". Used by C4/C7 semantics.
 _UNSET: Any = object()
@@ -170,12 +173,20 @@ def update_blocks(
     `warnings: list[str]` key when relevant (e.g. phase=finalized patch).
     Callers should tolerate the extra key.
     """
+    logger.info(
+        "update_blocks report=%s page=%s blocks=%s",
+        report_id,
+        page_index,
+        list(block_patches.keys()) if isinstance(block_patches, dict) else None,
+    )
     warnings_acc: list[str] = []
 
     def _build_request_body(report_snapshot: dict) -> tuple[dict, list]:
         pages_local = list(report_snapshot.get("pages", []))
         if not pages_local:
-            raise ValueError(f"report {report_id} has no pages")
+            raise ValueError(
+                f"report {report_id} has no pages — cannot update_blocks"
+            )
         if page_index < 0 or page_index >= len(pages_local):
             raise IndexError(
                 f"page_index {page_index} out of range "
@@ -241,7 +252,7 @@ def update_blocks(
                     "notifications — consider using report_publish for "
                     "finalize+notify behavior."
                 )
-                logging.warning(msg)
+                logger.warning(msg)
                 if msg not in warnings_acc:
                     warnings_acc.append(msg)
         if lifecycle is not None:
@@ -355,6 +366,7 @@ def add_page(
     Uses `expected_revision` for optimistic concurrency (retry-once
     default).
     """
+    logger.info("add_page report=%s position=%s", report_id, "append")
     last_err: Optional[ApiError] = None
     for attempt in range(max_retries + 1):
         current = fetch_report(client, report_id)
@@ -442,12 +454,15 @@ def replace_page(
     (otherwise the existing values are preserved). Uses
     `expected_revision` for optimistic concurrency (retry-once default).
     """
+    logger.info("replace_page report=%s page=%s", report_id, page_index)
     last_err: Optional[ApiError] = None
     for attempt in range(max_retries + 1):
         current = fetch_report(client, report_id)
         pages = list(current.get("pages", []))
         if not pages:
-            raise ValueError(f"report {report_id} has no pages")
+            raise ValueError(
+                f"report {report_id} has no pages — cannot replace_page"
+            )
         if page_index < 0 or page_index >= len(pages):
             raise IndexError(f"page_index {page_index} out of range")
 
@@ -508,6 +523,7 @@ def replace_page(
 
 def delete_report(client: ReportArchiveClient, report_id: int) -> dict:
     """DELETE /reports/{id}. No edit lock needed — delete is unconditional."""
+    logger.info("delete_report report=%s", report_id)
     return client._request("DELETE", f"/reports/{report_id}")
 
 

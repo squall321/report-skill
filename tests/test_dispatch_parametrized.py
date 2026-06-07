@@ -454,7 +454,7 @@ def test_composite_summary_set_non_list_widgets_raises_valueerror(monkeypatch) -
     _install_stubs(monkeypatch)
     _install_fake_client(monkeypatch, _build_fake_client())
     fn = _DISPATCH["composite_summary_set"]
-    with pytest.raises(ValueError, match="summary_widgets must be a list"):
+    with pytest.raises(ValueError, match="summary_widgets must be a JSON array"):
         fn({"composite_id": 10, "summary_widgets": {"not": "a list"}})
 
 

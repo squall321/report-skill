@@ -31,7 +31,7 @@ LLM은 `SKILL.md`에서 "무엇을 할 수 있고 언제 어떤 순서로 호출
         │  (LLM이 SKILL.md를 본 뒤 도구 선택)
         │
 src/report_skill/
-├── mcp_server.py        MCP stdio 서버 + _DISPATCH 53 tools
+├── mcp_server.py        MCP stdio 서버 + _DISPATCH 66 tools
 ├── cli.py               Typer sub-apps (report / tools / mounts / composites / templates …)
 ├── client.py            httpx 동기 래퍼 — REST 호출 1:1
 │
@@ -312,7 +312,7 @@ bin/report-skill/_internal/
 
 ```
 pytest -x --tb=short                      → 280/280 통과
-python -c "from … import _DISPATCH; print(len(_DISPATCH))"  → 32 + 21 = 53
+python -c "from … import _DISPATCH; print(len(_DISPATCH))"  → 66 (v0.7.x)
 어댑터 sanity (rich_text/table/comparison/image)
 CLI smoke (--help, 새 sub-app 노출 확인)
 client method hasattr 체크 (copy_report, list_presets, …)
