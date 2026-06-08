@@ -126,6 +126,11 @@ def _clean_note(s: str) -> str:
 
 _PASSTHROUGH = (
     "caption", "caption_skip_autofill", "columns",
+    # v0.9.0 — RA c2d9663 — per-cell color tokens. Side-table keyed by
+    # "rowKey::columnKey" with {bg?, fg?} token enum. Backend validates via
+    # _CELL_STYLES_SCHEMA so unknown keys are rejected; we pass through dict
+    # untouched and let the server reject anything malformed.
+    "cell_styles",
 )
 
 
@@ -133,7 +138,8 @@ def _extract_content_extras(raw: dict) -> dict:
     """Passthrough optional v0.5.0+ content fields from a dict input.
 
     Keys handled: note, column_widths, table_width_px, merges (v0.5.0) +
-    caption, caption_skip_autofill, columns (v0.5.2 — per-report override).
+    caption, caption_skip_autofill, columns (v0.5.2 — per-report override) +
+    cell_styles (v0.9.0 — RA c2d9663, per-cell bg/fg color tokens).
     Empty/invalid values are dropped silently."""
     out: dict = {}
     for k in _PASSTHROUGH:

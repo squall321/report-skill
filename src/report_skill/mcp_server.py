@@ -584,6 +584,16 @@ TOOLS: list[Tool] = [
         {},
     ),
 
+    # ---- v0.9.0 — #widget cross-reference categories (RA 074233d) ------- #
+    _tool(
+        "widget_ref_categories_list",
+        "List the ordered reference categories the rich_text body uses for "
+        "#widget cross-references (그림 N / 표 N / 비교표 N / 수식 N / 목록 N ...). "
+        "Returned categories: {key, label}. Numbers are derived at render time per "
+        "(page, id) reading order, not stored. Projection of GET /api/widgets.",
+        {},
+    ),
+
     # ---- v0.8.0 — unified grants / sharing ------------------------------ #
     # Three resource taxonomies — content (reports + composites), folders,
     # board (workspace slug). principal_type: workspace | workspace_manager
@@ -1992,6 +2002,12 @@ def _do_widget_relations_list(_args: dict) -> Any:
         return c.list_widget_relations()
 
 
+def _do_widget_ref_categories_list(_args: dict) -> Any:
+    """v0.9.0 — projection of GET /widgets → ref_categories."""
+    with ReportArchiveClient() as c:
+        return c.list_ref_categories()
+
+
 # ---- v0.8.0 grants dispatchers --------------------------------------- #
 def _do_content_shares_list(args: dict) -> Any:
     ct = str(args["content_type"])
@@ -2531,6 +2547,8 @@ _DISPATCH = {
     "entity_types_list": _do_entity_types_list,
     "entities_list": _do_entities_list,
     "widget_relations_list": _do_widget_relations_list,
+    # v0.9.0 — RA 074233d
+    "widget_ref_categories_list": _do_widget_ref_categories_list,
     # v0.8.0 unified grants / sharing
     "content_shares_list": _do_content_shares_list,
     "content_share_add": _do_content_share_add,

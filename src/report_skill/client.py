@@ -230,13 +230,30 @@ class ReportArchiveClient:
     # ---- public endpoints ---------------------------------------------- #
 
     def fetch_widgets(self) -> dict:
-        """GET /widgets — returns {schema_version, widgets:[...]}.
+        """GET /widgets — returns {schema_version, widgets:[...], ref_categories:[...]}.
 
         Note: each widget entry contains props_schema but NOT content_schema
         (which is computed server-side as a Python function of props). Use
         the bridge script for the latter.
+
+        v0.9.0+ (RA 074233d): the response also includes `ref_categories`,
+        ordered metadata ({key, label}) the rich_text body uses for #widget
+        cross-references (그림 N / 표 N / 비교표 N / 수식 N / 목록 N ...).
         """
         return self.get("/widgets")
+
+    def list_ref_categories(self) -> list[dict]:
+        """Convenience projection: GET /widgets → ref_categories.
+
+        Returns the ordered category metadata the rich_text body uses for
+        #widget references. v0.9.0+ (RA 074233d).
+        """
+        body = self.fetch_widgets()
+        if isinstance(body, dict):
+            cats = body.get("ref_categories")
+            if isinstance(cats, list):
+                return cats
+        return []
 
     def fetch_templates(self, *, latest_only: bool = True) -> list[dict]:
         params = {"latest_only": "true"} if latest_only else None

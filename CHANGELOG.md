@@ -1,5 +1,73 @@
 ﻿# Changelog
 
+## 0.9.0 — 2026-06-09
+
+Minor — covers 4 newly landed ReportArchive features on the widget surface:
+text-color tokens (defcb74), `#widget` cross-references + inline font + caption
+header alignment (074233d), password recovery (d7cdd4d — service-account no-op),
+and per-cell bg/fg color tokens on table / comparison (c2d9663). MCP _DISPATCH
+grows 75 → 76. Backward-compatible: existing tools unchanged.
+
+Added — 1 new MCP tool + matching CLI command:
+
+- `widget_ref_categories_list` — projection of `GET /api/widgets` → the new
+  `ref_categories` field shipped by RA 074233d. Returns the ordered category
+  metadata (`[{key, label}]`: 그림 / 표 / 비교표 / 키-값 / RACI / 수식 / 목록
+  / 첨부 / 영상 / 임베드) the rich_text body uses for `#widget` cross-references.
+  Numbers are derived at render time per `(page, id)` reading order, so the
+  LLM only needs to know which categories exist when composing references.
+
+Added — adapter passthrough for new widget content fields:
+
+- `table.py` `_PASSTHROUGH` gains `cell_styles` — per-cell `{bg?, fg?}` color
+  tokens keyed by `"rowKey::columnKey"`. v0.5.0/v0.5.2 cleanup notes preserved.
+  Server validates via `_CELL_STYLES_SCHEMA` (RA c2d9663), so adapter passes
+  the dict through unchanged.
+- `comparison.py` `_PASSTHROUGH_SIMPLE` gains `cell_styles` — same shape but
+  keyed by `"rowKey::caseKey"`.
+
+Added — client wrapper + docstring update:
+
+- `client.list_ref_categories()` — convenience projection of `fetch_widgets()`
+  return shape to just the `ref_categories` list. v0.9.0+ (RA 074233d).
+- `fetch_widgets()` docstring notes the new `ref_categories` field in the
+  response envelope.
+
+Skipped — RA d7cdd4d (password recovery + signup default host):
+
+- The change adds `POST /users/forgot-password` and admin-mediated reset
+  endpoints. `report-skill` authenticates as a long-lived service account
+  whose JWT is configured via `.env` (`REPORT_API_EMAIL` /
+  `REPORT_API_PASSWORD`), so password recovery is operator territory. No
+  client / MCP / CLI wrapper added.
+
+SKILL.md:
+
+- New "v0.9.0 — widget styling + cross-references" section near the v0.8.0
+  grants section documents cell color tokens on table / comparison, the
+  `widget_ref_categories_list` tool, and the new rich_text inline FontFamily
+  + text-color tokens (defcb74). Includes the per-widget category mapping rule
+  (`REF_CATEGORY_BY_TYPE`) so the LLM knows table is the only widget under
+  `"table"` and visual widgets share `"figure"`.
+
+Tests — pytest 458 → 459 (+1):
+
+- `tests/test_dispatch_parametrized.py`:
+  - `_ARGS_BY_TOOL["widget_ref_categories_list"] = {}` so the dispatch sweep
+    runs the new tool.
+  - Fake client mock gains `list_ref_categories.return_value = []`.
+- `tests/test_mcp_roundtrip.py::test_dispatch_count_is_76` + 
+  `tests/test_widget_relations.py::test_dispatch_count_is_76` —
+  renamed and bumped 75 → 76 to lock the new surface size.
+
+Verified:
+
+- pytest 459 passed, 5 skipped (no failures).
+- MCP `_DISPATCH` count = 76.
+- `widget_ref_categories_list` registered + dispatches via fake client.
+- `cell_styles` passthrough confirmed via adapter unit tests (existing fixtures).
+- `report-skill --version` reports 0.9.0.
+
 ## 0.8.3 — 2026-06-09
 
 Patch — closes 1 high + 1 med leftover from the v0.8.2 audit.

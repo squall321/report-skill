@@ -932,6 +932,22 @@ Widget relations:
 
 ---
 
+## v0.9.0 — widget styling + cross-references (RA defcb74 / 074233d / c2d9663)
+
+ReportArchive widget surface gained 3 cross-cutting capabilities:
+
+**Cell color tokens — table / comparison (RA c2d9663).** Both `table` and `comparison` widget `content` now accepts an optional `cell_styles` object: a side-table keyed by `"rowKey::columnKey"` (table) / `"rowKey::caseKey"` (comparison), each entry `{bg?, fg?}` referencing a color-token enum. Cell data itself is untouched. Adapters pass `cell_styles` through unchanged; the server validates per `_CELL_STYLES_SCHEMA` so unknown keys are rejected. Example: `{"cells": [...], "cell_styles": {"r0::c1": {"bg": "amber-50", "fg": "ink-700"}}}`.
+
+**#widget cross-references in rich_text (RA 074233d).** The body now lets writers reference other blocks with `#` — "그림 3", "표 2" — numbered live at render time per category, not stored. New tool:
+
+- `widget_ref_categories_list` — projection of `GET /api/widgets` → `ref_categories`. Returns `[{key, label}]` in display order: 그림 / 표 / 비교표 / 키-값 / RACI / 수식 / 목록 / 첨부 / 영상 / 임베드. The LLM can call this to know which categories exist before composing #widget refs.
+
+Mapping rule (set in backend `registry.py` `REF_CATEGORY_BY_TYPE`): `table` is the only widget in category `"table"`; `comparison` / `key_value` / `raci_matrix` are their own categories so "표 N" counts only real tables. All visual widgets (`image` / `chart` / `scatter` / `heatmap` / `pie` / etc.) share category `"figure"`. `heading` / `rich_text` themselves are structural (None — not referenceable).
+
+**Inline font + text-color tokens in rich_text (RA defcb74 + 074233d).** Body marks now include FontFamily (맑은 고딕 / 바탕 / 굴림 / 돋움 / 궁서 / 나눔 / Arial, etc.) and dark-mode-adaptive color tokens. These survive sanitize / round-trip via the existing rich_text mark allowlist — no LLM-side change needed for authoring, but worth knowing the surface exists if revising body content.
+
+---
+
 ## v0.8.0 — unified grants / sharing
 
 ReportArchive's prior ad-hoc sharing surface (mount edit-policy + collab workspaces) has been unified under a single grant model. Three resource taxonomies — content, folders, boards — each expose **list / add / remove**.

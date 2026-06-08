@@ -2300,6 +2300,17 @@ def tools_widget_relations_list():
         console.print_json(json.dumps(c.list_widget_relations(), ensure_ascii=False))
 
 
+@tools_app.command("widget-ref-categories-list")
+def tools_widget_ref_categories_list():
+    """List #widget cross-reference categories (그림 / 표 / 비교표 / 수식 / 목록 ...).
+
+    v0.9.0+ (RA 074233d). Projection of GET /api/widgets → ref_categories.
+    The rich_text body uses these for #widget refs, numbered live at render time
+    per (page, id) reading order — categories drive the human prefix (그림 N, 표 N)."""
+    with ReportArchiveClient() as c:
+        console.print_json(json.dumps(c.list_ref_categories(), ensure_ascii=False))
+
+
 # --------------------------------------------------------------------------- #
 # v0.5.0 — composites sub-app: accept / reject / withdraw
 # v0.5.2 — composites get

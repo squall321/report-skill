@@ -220,6 +220,7 @@ def _build_fake_client() -> MagicMock:
     m.fetch_entity_types.return_value = []
     m.fetch_entities.return_value = []
     m.list_widget_relations.return_value = []
+    m.list_ref_categories.return_value = []
     # v0.8.0 — unified grants / sharing
     m.list_content_shares.return_value = []
     m.list_folder_shares.return_value = []
@@ -328,6 +329,7 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "entity_types_list": {},
     "entities_list": {"q": "HFP"},
     "widget_relations_list": {},
+    "widget_ref_categories_list": {},
 
     # ---- v0.5.0 ----
     "report_copy": {"report_id": 1, "title": "copy"},

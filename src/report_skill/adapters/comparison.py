@@ -33,6 +33,9 @@ _PASSTHROUGH_SIMPLE = (
     "caption",
     "caption_skip_autofill",
     "horizontal_scroll",
+    # v0.9.0 — RA c2d9663 — per-cell color tokens. Side-table keyed by
+    # "rowKey::caseKey" with {bg?, fg?} token enum.
+    "cell_styles",
 )
 
 
