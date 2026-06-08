@@ -41,6 +41,7 @@ To make a report visible on a team board (eg. `dx`, `qa`, `dept-mx`), it must be
 - `default` — author + that board's lead can edit (Korean org default)
 - `owner_only` — strictly the author
 - `coauthor` — every board member can edit
+- `manager` — author + that board's managers (auto-syncs a `workspace_manager` grant on the report; v0.8.0+, RA p27)
 
 **Heuristic for picking** `--mount-to`:
 - The user mentions a team / 부서 / 보드 (`dx`, `mx`, `qa`, etc) → use `--mount-to <slug>` matching the team
@@ -814,7 +815,7 @@ Folders + mounts:
 
 - `folders_list` — GET `/folders?workspace_slug=...`; folders inside a workspace board.
 - `report_mount_set_folder` — PUT `/mounts/{rid}/{slug}/folder`; move a mount into a folder. `folder_id=null` clears.
-- `report_mount_set_edit_policy` — PUT `/mounts/{rid}/{slug}/edit-policy`; one of `default | owner_only | coauthor`.
+- `report_mount_set_edit_policy` — PUT `/mounts/{rid}/{slug}/edit-policy`; one of `default | owner_only | coauthor | manager`. `manager` (v0.8.0+) auto-syncs a `workspace_manager` grant on the report.
 
 Templates:
 

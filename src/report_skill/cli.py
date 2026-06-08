@@ -2750,12 +2750,18 @@ def mounts_set_edit_policy(
     report_id: int = typer.Option(..., "--report-id"),
     workspace: str = typer.Option(..., "--workspace", "--workspace-slug", help="workspace slug of the mount"),
     policy: str = typer.Option(..., "--policy",
-                               help="default | owner_only | coauthor"),
+                               help="default | owner_only | coauthor | manager"),
 ):
-    """PUT /mounts/{rid}/{slug}/edit-policy — change the mount's edit policy."""
-    if policy not in ("default", "owner_only", "coauthor"):
+    """PUT /mounts/{rid}/{slug}/edit-policy — change the mount's edit policy.
+
+    Policy values (RA p27 adds `manager`):
+      default     — 작성자 + 보직장.
+      owner_only  — 작성자만.
+      coauthor    — 게시판 멤버 전원 편집.
+      manager     — 작성자 + 게시판 매니저 (auto-syncs workspace_manager grant)."""
+    if policy not in ("default", "owner_only", "coauthor", "manager"):
         console.print(f"[red]invalid policy '{policy}' "
-                      "(expected: default | owner_only | coauthor)[/red]")
+                      "(expected: default | owner_only | coauthor | manager)[/red]")
         raise typer.Exit(1)
     with ReportArchiveClient() as client:
         try:

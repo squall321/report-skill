@@ -1,5 +1,38 @@
 ﻿# Changelog
 
+## 0.8.1 — 2026-06-08
+
+Patch — closes 4 high + 1 med gap left by v0.8.0's RA-grants rollout.
+
+Fixed (high) — `manager` edit-policy value exposed end-to-end:
+
+- `mcp_server.py` `report_mount_set_edit_policy` tool schema enum now includes
+  `manager` (was missing — v0.8.0 documented the value in SKILL.md but the MCP
+  schema still rejected it). Tool description updated with Korean meaning of
+  each policy.
+- `cli.py` `mounts set-edit-policy --policy` accepts `manager` (was rejected by
+  hardcoded 3-tuple validation). Help text + invalid-value error text updated.
+- `report_ops.py` `set_mount_edit_policy` docstring lists `manager` with the
+  RA p27 auto-sync note.
+- `SKILL.md` mount edit-policy section adds the 4th value with RA reference.
+
+Fixed (med) — new 403 reasons typed:
+
+- `client.py` adds two typed exceptions: `ShareSetupForbiddenError`
+  (`공유 설정은 작성자(또는 시스템 관리자)만`) and `BoardShareForbiddenError`
+  (`게시판 공유는 그 게시판 매니저(또는 시스템 관리자)만`). Both subclass
+  `ApiError` (existing-handler-compatible). Detected in `_build_typed_error`
+  before falling through to generic 403. LLM now sees structured
+  `{error: "share_setup_forbidden"}` / `{error: "board_share_forbidden"}`
+  instead of opaque 403.
+
+Verified:
+
+- pytest 455 passed, 5 skipped.
+- MCP `_DISPATCH` count = 75 (unchanged).
+- New exceptions importable from `report_skill.client`.
+- `report-skill mounts set-edit-policy --help` shows 4 policy values.
+
 ## 0.8.0 — 2026-06-08
 
 Minor — covers the ReportArchive "통합 grant 기반 공유/권한 체계" landed at RA

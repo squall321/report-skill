@@ -608,7 +608,9 @@ def set_mount_edit_policy(
 ) -> dict:
     """PUT /mounts/{report_id}/{workspace_slug}/edit-policy — update policy.
 
-    `edit_policy` must be one of `default` / `owner_only` / `coauthor`.
+    `edit_policy` must be one of `default` / `owner_only` / `coauthor` / `manager`.
+    `manager` (RA p27, 2026-06-07): 작성자 + 게시판 매니저만 편집 — RA auto-syncs a
+    workspace_manager grant on the target board.
     Owner-only (Phase 3). Returns {report_id, workspace_slug, edit_policy}.
     """
     return client.set_mount_edit_policy(

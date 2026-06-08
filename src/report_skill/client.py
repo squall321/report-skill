@@ -151,6 +151,36 @@ class OutOfWorkspaceScopeError(ApiError):
         self.code = "out_of_workspace_scope"
 
 
+class ShareSetupForbiddenError(ApiError):
+    """Raised when the caller is not the content owner or sys admin and tries to
+    add/remove a content-level share (403).
+
+    Backend message: "공유 설정은 작성자(또는 시스템 관리자)만 변경할 수 있습니다.".
+    Hits `content_share_add` / `content_share_remove` from non-owners.
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 status_code: int = 403):
+        super().__init__(message or "share_setup_forbidden",
+                         status_code=status_code, payload=payload)
+        self.code = "share_setup_forbidden"
+
+
+class BoardShareForbiddenError(ApiError):
+    """Raised when the caller is not a board manager or sys admin and tries to
+    add/remove a board / folder grant (403).
+
+    Backend message: "게시판 공유는 그 게시판 매니저(또는 시스템 관리자)만 변경할 수 있습니다.".
+    Hits `board_share_*` and `folder_share_*` from non-managers.
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 status_code: int = 403):
+        super().__init__(message or "board_share_forbidden",
+                         status_code=status_code, payload=payload)
+        self.code = "board_share_forbidden"
+
+
 # v0.6.0 — sentinel for update_composite tri-state semantics on nullable
 # scalar fields (period_date): default = omit key from body
 # (server leaves alone); explicit None = send {"key": null} so server
@@ -1153,6 +1183,15 @@ class ReportArchiveClient:
                 )
             if message == "Out of workspace scope" or "Out of workspace scope" in message:
                 return OutOfWorkspaceScopeError(
+                    message, payload=body, status_code=403
+                )
+            # v0.8.1 — grants 403 paths from RA dbdbf99/c6308ae.
+            if message.startswith("공유 설정은 작성자"):
+                return ShareSetupForbiddenError(
+                    message, payload=body, status_code=403
+                )
+            if message.startswith("게시판 공유는"):
+                return BoardShareForbiddenError(
                     message, payload=body, status_code=403
                 )
             return None

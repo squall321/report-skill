@@ -758,12 +758,13 @@ TOOLS: list[Tool] = [
     _tool(
         "report_mount_set_edit_policy",
         "Set the edit policy for a mount. PUT /api/mounts/{rid}/{slug}/edit-policy. "
-        "Owner-only. Valid policies: default, owner_only, coauthor.",
+        "Owner-only. Valid policies: default (작성자+보직장), owner_only (작성자만), "
+        "coauthor (게시판 멤버 전원), manager (작성자+게시판 매니저; 자동 workspace_manager grant 동기화).",
         {
             "report_id": {"type": "integer"},
             "workspace_slug": {"type": "string"},
             "edit_policy": {"type": "string",
-                            "enum": ["default", "owner_only", "coauthor"]},
+                            "enum": ["default", "owner_only", "coauthor", "manager"]},
         },
         ["report_id", "workspace_slug", "edit_policy"],
     ),
