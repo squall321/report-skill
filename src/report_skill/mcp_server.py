@@ -573,6 +573,107 @@ TOOLS: list[Tool] = [
         {},
     ),
 
+    # ---- v0.8.0 — unified grants / sharing ------------------------------ #
+    # Three resource taxonomies — content (reports + composites), folders,
+    # board (workspace slug). principal_type: workspace | workspace_manager
+    # | all_org | user. level: view | edit. all_org forces view + no ref.
+    _tool(
+        "content_shares_list",
+        "List grants on a report or composite. GET /api/{content_type}/{id}/shares.",
+        {
+            "content_type": {"type": "string", "enum": ["reports", "composites"]},
+            "content_id": {"type": "integer"},
+        },
+        ["content_type", "content_id"],
+    ),
+    _tool(
+        "content_share_add",
+        "Add or update a grant on a report or composite. Owner / sys admin only. "
+        "POST /api/{content_type}/{id}/shares.",
+        {
+            "content_type": {"type": "string", "enum": ["reports", "composites"]},
+            "content_id": {"type": "integer"},
+            "principal_type": {
+                "type": "string",
+                "enum": ["workspace", "workspace_manager", "all_org", "user"],
+            },
+            "principal_ref": {
+                "type": "string",
+                "description": "workspace slug for workspace/workspace_manager; user id (string) for user; omit for all_org",
+            },
+            "level": {"type": "string", "enum": ["view", "edit"], "default": "view"},
+        },
+        ["content_type", "content_id", "principal_type"],
+    ),
+    _tool(
+        "content_share_remove",
+        "Remove a grant from a report or composite. DELETE /api/{content_type}/{id}/shares/{grant_id}.",
+        {
+            "content_type": {"type": "string", "enum": ["reports", "composites"]},
+            "content_id": {"type": "integer"},
+            "grant_id": {"type": "integer"},
+        },
+        ["content_type", "content_id", "grant_id"],
+    ),
+    _tool(
+        "folder_shares_list",
+        "List grants on an org folder. GET /api/folders/{id}/shares.",
+        {"folder_id": {"type": "integer"}},
+        ["folder_id"],
+    ),
+    _tool(
+        "folder_share_add",
+        "Add or update a grant on an org folder. Board manager / sys admin only.",
+        {
+            "folder_id": {"type": "integer"},
+            "principal_type": {
+                "type": "string",
+                "enum": ["workspace", "workspace_manager", "all_org", "user"],
+            },
+            "principal_ref": {"type": "string"},
+            "level": {"type": "string", "enum": ["view", "edit"], "default": "view"},
+        },
+        ["folder_id", "principal_type"],
+    ),
+    _tool(
+        "folder_share_remove",
+        "Remove a grant from a folder. DELETE /api/folders/{folder_id}/shares/{grant_id}.",
+        {
+            "folder_id": {"type": "integer"},
+            "grant_id": {"type": "integer"},
+        },
+        ["folder_id", "grant_id"],
+    ),
+    _tool(
+        "board_shares_list",
+        "List grants on a board (workspace). GET /api/workspaces/{slug}/shares.",
+        {"workspace_slug": {"type": "string"}},
+        ["workspace_slug"],
+    ),
+    _tool(
+        "board_share_add",
+        "Add or update a grant on a board. Board manager / sys admin only.",
+        {
+            "workspace_slug": {"type": "string"},
+            "principal_type": {
+                "type": "string",
+                "enum": ["workspace", "workspace_manager", "all_org", "user"],
+            },
+            "principal_ref": {"type": "string"},
+            "level": {"type": "string", "enum": ["view", "edit"], "default": "view"},
+        },
+        ["workspace_slug", "principal_type"],
+    ),
+    _tool(
+        "board_share_remove",
+        "Remove a grant from a board. DELETE /api/workspaces/{slug}/shares/{grant_id}.",
+        {
+            "workspace_slug": {"type": "string"},
+            "grant_id": {"type": "integer"},
+        },
+        ["workspace_slug", "grant_id"],
+    ),
+
     # ---- v0.5.0 — copy / link / report-types ---------------------------- #
     _tool(
         "report_copy",
@@ -1879,6 +1980,85 @@ def _do_widget_relations_list(_args: dict) -> Any:
         return c.list_widget_relations()
 
 
+# ---- v0.8.0 grants dispatchers --------------------------------------- #
+def _do_content_shares_list(args: dict) -> Any:
+    ct = str(args["content_type"])
+    cid = _int_arg(args, "content_id")
+    with ReportArchiveClient() as c:
+        return c.list_content_shares(ct, cid)
+
+
+def _do_content_share_add(args: dict) -> Any:
+    ct = str(args["content_type"])
+    cid = _int_arg(args, "content_id")
+    with ReportArchiveClient() as c:
+        return c.add_content_share(
+            ct, cid,
+            principal_type=str(args["principal_type"]),
+            principal_ref=args.get("principal_ref"),
+            level=args.get("level", "view"),
+        )
+
+
+def _do_content_share_remove(args: dict) -> Any:
+    ct = str(args["content_type"])
+    cid = _int_arg(args, "content_id")
+    gid = _int_arg(args, "grant_id")
+    with ReportArchiveClient() as c:
+        c.remove_content_share(ct, cid, gid)
+    return {"ok": True}
+
+
+def _do_folder_shares_list(args: dict) -> Any:
+    fid = _int_arg(args, "folder_id")
+    with ReportArchiveClient() as c:
+        return c.list_folder_shares(fid)
+
+
+def _do_folder_share_add(args: dict) -> Any:
+    fid = _int_arg(args, "folder_id")
+    with ReportArchiveClient() as c:
+        return c.add_folder_share(
+            fid,
+            principal_type=str(args["principal_type"]),
+            principal_ref=args.get("principal_ref"),
+            level=args.get("level", "view"),
+        )
+
+
+def _do_folder_share_remove(args: dict) -> Any:
+    fid = _int_arg(args, "folder_id")
+    gid = _int_arg(args, "grant_id")
+    with ReportArchiveClient() as c:
+        c.remove_folder_share(fid, gid)
+    return {"ok": True}
+
+
+def _do_board_shares_list(args: dict) -> Any:
+    slug = str(args["workspace_slug"])
+    with ReportArchiveClient() as c:
+        return c.list_board_shares(slug)
+
+
+def _do_board_share_add(args: dict) -> Any:
+    slug = str(args["workspace_slug"])
+    with ReportArchiveClient() as c:
+        return c.add_board_share(
+            slug,
+            principal_type=str(args["principal_type"]),
+            principal_ref=args.get("principal_ref"),
+            level=args.get("level", "view"),
+        )
+
+
+def _do_board_share_remove(args: dict) -> Any:
+    slug = str(args["workspace_slug"])
+    gid = _int_arg(args, "grant_id")
+    with ReportArchiveClient() as c:
+        c.remove_board_share(slug, gid)
+    return {"ok": True}
+
+
 # ---- v0.5.0 dispatchers ---------------------------------------------- #
 def _do_report_copy(args: dict) -> Any:
     rid = _int_arg(args, "report_id")
@@ -2339,6 +2519,16 @@ _DISPATCH = {
     "entity_types_list": _do_entity_types_list,
     "entities_list": _do_entities_list,
     "widget_relations_list": _do_widget_relations_list,
+    # v0.8.0 unified grants / sharing
+    "content_shares_list": _do_content_shares_list,
+    "content_share_add": _do_content_share_add,
+    "content_share_remove": _do_content_share_remove,
+    "folder_shares_list": _do_folder_shares_list,
+    "folder_share_add": _do_folder_share_add,
+    "folder_share_remove": _do_folder_share_remove,
+    "board_shares_list": _do_board_shares_list,
+    "board_share_add": _do_board_share_add,
+    "board_share_remove": _do_board_share_remove,
     "report_milestone_add": _do_report_milestone_add,
     "report_milestone_remove": _do_report_milestone_remove,
     "file_upload": _do_file_upload,

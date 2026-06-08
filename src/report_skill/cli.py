@@ -73,6 +73,8 @@ composites_app = typer.Typer(no_args_is_help=True,
                               help="Composite report body editing + submissions.")
 notifications_app = typer.Typer(no_args_is_help=True,
                                  help="Notification inbox — react to events.")
+shares_app = typer.Typer(no_args_is_help=True,
+                          help="Unified grants — share reports / composites / folders / boards.")
 app.add_typer(catalog_app, name="catalog")
 app.add_typer(report_app, name="report")
 app.add_typer(tier_app, name="tier")
@@ -81,6 +83,7 @@ app.add_typer(tools_app, name="tools")
 app.add_typer(mounts_app, name="mounts")
 app.add_typer(composites_app, name="composites")
 app.add_typer(notifications_app, name="notifications")
+app.add_typer(shares_app, name="shares")
 app.add_typer(cli_examples.app, name="examples")
 app.add_typer(cli_llm.app, name="llm")
 app.add_typer(cli_files.app, name="files")
@@ -2840,6 +2843,151 @@ def notifications_mark_all_read_cmd():
                           f"[/red] {e}")
             raise typer.Exit(2)
     console.print_json(json.dumps({"marked_read": int(n)}, ensure_ascii=False))
+
+
+# --------------------------------------------------------------------------- #
+# v0.8.0 — unified grants / sharing CLI
+# --------------------------------------------------------------------------- #
+@shares_app.command("content-list")
+def shares_content_list(
+    content_type: str = typer.Argument(..., help="reports | composites"),
+    content_id: int = typer.Argument(..., help="report or composite id"),
+):
+    """GET /api/{content_type}/{id}/shares — list grants."""
+    with ReportArchiveClient() as client:
+        try:
+            rows = client.list_content_shares(content_type, content_id)
+        except ApiError as e:
+            console.print(f"[red]content-list failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@shares_app.command("content-add")
+def shares_content_add(
+    content_type: str = typer.Argument(..., help="reports | composites"),
+    content_id: int = typer.Argument(..., help="report or composite id"),
+    principal_type: str = typer.Option(..., "--principal-type",
+        help="workspace | workspace_manager | all_org | user"),
+    principal_ref: Optional[str] = typer.Option(None, "--principal-ref",
+        help="workspace slug, user id, or omit for all_org"),
+    level: str = typer.Option("view", "--level", help="view | edit"),
+):
+    """POST /api/{content_type}/{id}/shares — owner / sys admin only."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.add_content_share(content_type, content_id,
+                principal_type=principal_type, principal_ref=principal_ref, level=level)
+        except ApiError as e:
+            console.print(f"[red]content-add failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@shares_app.command("content-remove")
+def shares_content_remove(
+    content_type: str = typer.Argument(..., help="reports | composites"),
+    content_id: int = typer.Argument(..., help="report or composite id"),
+    grant_id: int = typer.Argument(..., help="grant id to delete"),
+):
+    """DELETE /api/{content_type}/{id}/shares/{grant_id}."""
+    with ReportArchiveClient() as client:
+        try:
+            client.remove_content_share(content_type, content_id, grant_id)
+        except ApiError as e:
+            console.print(f"[red]content-remove failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps({"ok": True}, ensure_ascii=False))
+
+
+@shares_app.command("folder-list")
+def shares_folder_list(folder_id: int = typer.Argument(..., help="org folder id")):
+    """GET /api/folders/{id}/shares — list grants."""
+    with ReportArchiveClient() as client:
+        try:
+            rows = client.list_folder_shares(folder_id)
+        except ApiError as e:
+            console.print(f"[red]folder-list failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@shares_app.command("folder-add")
+def shares_folder_add(
+    folder_id: int = typer.Argument(..., help="org folder id"),
+    principal_type: str = typer.Option(..., "--principal-type"),
+    principal_ref: Optional[str] = typer.Option(None, "--principal-ref"),
+    level: str = typer.Option("view", "--level"),
+):
+    """POST /api/folders/{id}/shares — board manager / sys admin only."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.add_folder_share(folder_id,
+                principal_type=principal_type, principal_ref=principal_ref, level=level)
+        except ApiError as e:
+            console.print(f"[red]folder-add failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@shares_app.command("folder-remove")
+def shares_folder_remove(
+    folder_id: int = typer.Argument(..., help="org folder id"),
+    grant_id: int = typer.Argument(..., help="grant id"),
+):
+    """DELETE /api/folders/{id}/shares/{grant_id}."""
+    with ReportArchiveClient() as client:
+        try:
+            client.remove_folder_share(folder_id, grant_id)
+        except ApiError as e:
+            console.print(f"[red]folder-remove failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps({"ok": True}, ensure_ascii=False))
+
+
+@shares_app.command("board-list")
+def shares_board_list(workspace_slug: str = typer.Argument(..., help="board workspace slug")):
+    """GET /api/workspaces/{slug}/shares — list grants."""
+    with ReportArchiveClient() as client:
+        try:
+            rows = client.list_board_shares(workspace_slug)
+        except ApiError as e:
+            console.print(f"[red]board-list failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@shares_app.command("board-add")
+def shares_board_add(
+    workspace_slug: str = typer.Argument(..., help="board slug"),
+    principal_type: str = typer.Option(..., "--principal-type"),
+    principal_ref: Optional[str] = typer.Option(None, "--principal-ref"),
+    level: str = typer.Option("view", "--level"),
+):
+    """POST /api/workspaces/{slug}/shares — board manager / sys admin only."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.add_board_share(workspace_slug,
+                principal_type=principal_type, principal_ref=principal_ref, level=level)
+        except ApiError as e:
+            console.print(f"[red]board-add failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@shares_app.command("board-remove")
+def shares_board_remove(
+    workspace_slug: str = typer.Argument(..., help="board slug"),
+    grant_id: int = typer.Argument(..., help="grant id"),
+):
+    """DELETE /api/workspaces/{slug}/shares/{grant_id}."""
+    with ReportArchiveClient() as client:
+        try:
+            client.remove_board_share(workspace_slug, grant_id)
+        except ApiError as e:
+            console.print(f"[red]board-remove failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps({"ok": True}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

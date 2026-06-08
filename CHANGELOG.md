@@ -1,5 +1,74 @@
 ﻿# Changelog
 
+## 0.8.0 — 2026-06-08
+
+Minor — covers the ReportArchive "통합 grant 기반 공유/권한 체계" landed at RA
+`dbdbf99` + `c6308ae` (2026-06-07). Adds 9 new MCP tools, 9 CLI commands, and a
+SKILL.md section documenting the unified grant taxonomy and authorization rules.
+No breaking changes to existing tools.
+
+Added — unified grants / sharing surface (9 new MCP tools, _DISPATCH 66 → 75):
+
+Content grants (reports + composites) — owner / sys admin only for writes:
+
+- `content_shares_list` — GET `/api/{content_type}/{id}/shares`. content_type
+  ∈ {reports, composites}.
+- `content_share_add` — POST. Upsert a grant for a principal
+  (workspace / workspace_manager / all_org / user). `level` ∈ {view, edit};
+  all_org forces view + no principal_ref.
+- `content_share_remove` — DELETE `/api/{content_type}/{id}/shares/{grant_id}`.
+
+Folder grants (org folders only) — board manager / sys admin only for writes:
+
+- `folder_shares_list`, `folder_share_add`, `folder_share_remove` — analogous
+  to content grants, scoped to `/api/folders/{folder_id}/shares*`.
+
+Board grants (org workspaces only) — board manager / sys admin only for writes:
+
+- `board_shares_list`, `board_share_add`, `board_share_remove` — analogous,
+  scoped to `/api/workspaces/{slug}/shares*`.
+
+Added — `shares` Typer sub-app with 9 commands mirroring the MCP surface:
+`content-list / content-add / content-remove`,
+`folder-list / folder-add / folder-remove`,
+`board-list / board-add / board-remove`.
+Each write command wraps `ApiError` with a typed-exception-aware error path.
+
+Added — `client.py` gains 9 thin wrappers:
+`list_content_shares` / `add_content_share` / `remove_content_share`,
+`list_folder_shares` / `add_folder_share` / `remove_folder_share`,
+`list_board_shares` / `add_board_share` / `remove_board_share`. Each write
+emits a module-level INFO log line before the HTTP call.
+
+New principal taxonomy reflected in MCP tool schemas:
+
+- `workspace_manager` — RA p27 enum addition. Used by mount edit-policy
+  `manager` (작성자 + 게시판 매니저). Auto-synced by RA on `report_mount_set_edit_policy`
+  policy changes.
+
+Tests — pytest 446 → 455 (+9):
+
+- `tests/test_dispatch_parametrized.py` `_ARGS_BY_TOOL` extended with 9 grant
+  entries; fake client gains mock returns for the 9 new methods.
+- `tests/test_mcp_roundtrip.py::test_dispatch_count_is_75` / 
+  `tests/test_widget_relations.py::test_dispatch_count_is_75` renamed + bumped
+  to 75 to lock the new surface size.
+
+SKILL.md:
+
+- New "v0.8.0 — unified grants / sharing" section documents the principal
+  taxonomy table, 403 / 400 error reasons, mount-policy ↔ grant interaction,
+  and the service-account ownership quirk.
+- Tool inventory header updated to "MCP tool inventory (v0.8.x)" with 75-tool
+  count.
+
+Verified:
+
+- pytest 455 passed, 5 skipped.
+- MCP `_DISPATCH` count = 75 (was 66 in v0.7.1).
+- All 9 share methods importable from `report_skill.client.ReportArchiveClient`.
+- `report-skill shares --help` displays the 9 new commands.
+
 ## 0.7.1 — 2026-06-07
 
 Patch — robustness hardening only (no new features, no behavior change on success path).

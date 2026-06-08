@@ -220,6 +220,19 @@ def _build_fake_client() -> MagicMock:
     m.fetch_entity_types.return_value = []
     m.fetch_entities.return_value = []
     m.list_widget_relations.return_value = []
+    # v0.8.0 — unified grants / sharing
+    m.list_content_shares.return_value = []
+    m.list_folder_shares.return_value = []
+    m.list_board_shares.return_value = []
+    m.add_content_share.return_value = {"id": 1, "principal_type": "workspace",
+                                         "principal_ref": "dx", "level": "view"}
+    m.add_folder_share.return_value = {"id": 1, "principal_type": "workspace",
+                                        "principal_ref": "dx", "level": "view"}
+    m.add_board_share.return_value = {"id": 1, "principal_type": "workspace",
+                                       "principal_ref": "dx", "level": "view"}
+    m.remove_content_share.return_value = None
+    m.remove_folder_share.return_value = None
+    m.remove_board_share.return_value = None
     m.upload_file.return_value = {"file_id": "f_abc", "filename": "x.png",
                                    "mime_type": "image/png", "size": 1}
     # `c.get(...)` is called by a few dispatchers (examples_mine_from_report,
@@ -358,6 +371,28 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "notifications_unread_count": {},
     "notification_mark_read": {"notification_id": 5},
     "notifications_mark_all_read": {},
+
+    # ---- v0.8.0 unified grants ----
+    "content_shares_list": {"content_type": "reports", "content_id": 1},
+    "content_share_add": {
+        "content_type": "reports", "content_id": 1,
+        "principal_type": "workspace", "principal_ref": "dx", "level": "view",
+    },
+    "content_share_remove": {
+        "content_type": "reports", "content_id": 1, "grant_id": 9,
+    },
+    "folder_shares_list": {"folder_id": 1},
+    "folder_share_add": {
+        "folder_id": 1,
+        "principal_type": "workspace", "principal_ref": "dx", "level": "view",
+    },
+    "folder_share_remove": {"folder_id": 1, "grant_id": 9},
+    "board_shares_list": {"workspace_slug": "dx"},
+    "board_share_add": {
+        "workspace_slug": "dx",
+        "principal_type": "workspace", "principal_ref": "dx", "level": "view",
+    },
+    "board_share_remove": {"workspace_slug": "dx", "grant_id": 9},
 }
 
 

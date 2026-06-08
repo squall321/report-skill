@@ -929,9 +929,56 @@ Widget relations:
 
 ---
 
-## MCP tool inventory (v0.7.x)
+## v0.8.0 — unified grants / sharing
 
-The MCP server now exposes **66 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the v0.5.0 / v0.6.0 / v0.7.0 inventory sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
+ReportArchive's prior ad-hoc sharing surface (mount edit-policy + collab workspaces) has been unified under a single grant model. Three resource taxonomies — content, folders, boards — each expose **list / add / remove**.
+
+Principal taxonomy:
+
+| `principal_type` | `principal_ref` | Notes |
+|---|---|---|
+| `workspace` | board slug | the board's members get the grant; inherited by descendant boards |
+| `workspace_manager` | board slug | only that board's managers — used by mount edit-policy=`manager` |
+| `user` | user id (string) | single-person grant |
+| `all_org` | (omit) | force `level=view`, 전체 공개 |
+
+Levels: `view` | `edit`.
+
+Content (reports + composites) — owner / sys admin only for add/remove:
+
+- `content_shares_list` — `{content_type: "reports"|"composites", content_id}` → GET `/api/{content_type}/{id}/shares`.
+- `content_share_add` — `{content_type, content_id, principal_type, principal_ref?, level?}` → POST `/api/{content_type}/{id}/shares`. Upsert.
+- `content_share_remove` — `{content_type, content_id, grant_id}` → DELETE `/api/{content_type}/{id}/shares/{grant_id}`.
+
+Folders — board manager / sys admin only for add/remove. Only org folders are shareable:
+
+- `folder_shares_list` — `{folder_id}` → GET `/api/folders/{id}/shares`.
+- `folder_share_add` — `{folder_id, principal_type, principal_ref?, level?}` → POST.
+- `folder_share_remove` — `{folder_id, grant_id}` → DELETE.
+
+Boards (workspace) — board manager / sys admin only for add/remove. Only org boards are shareable:
+
+- `board_shares_list` — `{workspace_slug}` → GET `/api/workspaces/{slug}/shares`.
+- `board_share_add` — `{workspace_slug, principal_type, principal_ref?, level?}` → POST.
+- `board_share_remove` — `{workspace_slug, grant_id}` → DELETE.
+
+Mount edit-policy (`report_mount_set_edit_policy`) interaction: setting policy to `manager` causes the server to auto-create the matching `workspace_manager` grant on the report; switching back to `owner_only` / `default` removes it. Use `content_shares_list` to inspect the result after a policy change.
+
+Authorization rules — common 403 reasons:
+
+- `공유 설정은 작성자(또는 시스템 관리자)만 변경할 수 있습니다.` — `content_share_add/remove` from a non-owner non-admin.
+- `게시판 공유는 그 게시판 매니저(또는 시스템 관리자)만 변경할 수 있습니다.` — `board_share_*` / `folder_share_*` without manager rights on the target board.
+- `Out of scope` — viewer is outside the visible scope of the content.
+
+400 errors: `조직 부서만 공유 대상이 될 수 있습니다.` (workspace ref must be an org board), `잘못된 사용자 id` (`user` ref not numeric).
+
+Service-account quirk: `report-skill` typically authenticates as a service account, so most `content_share_*` calls fail unless the service account is the report owner. Use the calls primarily for read (`*_list`) and for boards/folders the service account manages.
+
+---
+
+## MCP tool inventory (v0.8.x)
+
+The MCP server now exposes **75 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the v0.5.0 / v0.6.0 / v0.7.0 inventory sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
 
 ```powershell
 report-skill-mcp --help   # or:

@@ -475,6 +475,94 @@ class ReportArchiveClient:
             "author_lock_set_at": body.get("author_lock_set_at"),
         }
 
+    # ---- grants / unified sharing (v0.8.0) ----------------------------- #
+    # Three resource taxonomies — content (reports + composites), folders,
+    # board (workspace). Each exposes list/create/delete. The new sharing
+    # surface replaces the prior ad-hoc collab_workspace_slugs + mount
+    # edit-policy hand-waving with a single grant model:
+    #   principal_type ∈ {workspace, workspace_manager, all_org, user}
+    #   level          ∈ {view, edit}
+    # all_org grants force level=view and ignore principal_ref (전체 공개).
+
+    def list_content_shares(self, content_type: str, content_id: int) -> list[dict]:
+        """GET /{content_type}/{id}/shares — content_type ∈ {reports, composites}."""
+        body = self.get(f"/{content_type}/{content_id}/shares")
+        return body if isinstance(body, list) else (body.get("items", body) if isinstance(body, dict) else [])
+
+    def add_content_share(
+        self,
+        content_type: str,
+        content_id: int,
+        *,
+        principal_type: str,
+        principal_ref: Optional[str] = None,
+        level: str = "view",
+    ) -> dict:
+        """POST /{content_type}/{id}/shares — owner / sys admin only."""
+        logger.info("add_content_share %s id=%s principal=%s ref=%s level=%s",
+                    content_type, content_id, principal_type, principal_ref, level)
+        body = {"principal_type": principal_type, "level": level}
+        if principal_ref is not None:
+            body["principal_ref"] = principal_ref
+        return self.post(f"/{content_type}/{content_id}/shares", json=body)
+
+    def remove_content_share(self, content_type: str, content_id: int, grant_id: int) -> None:
+        """DELETE /{content_type}/{id}/shares/{grant_id} — owner / sys admin only."""
+        logger.info("remove_content_share %s id=%s grant=%s", content_type, content_id, grant_id)
+        self._request("DELETE", f"/{content_type}/{content_id}/shares/{grant_id}")
+
+    def list_folder_shares(self, folder_id: int) -> list[dict]:
+        """GET /folders/{id}/shares — org folders only."""
+        body = self.get(f"/folders/{folder_id}/shares")
+        return body if isinstance(body, list) else (body.get("items", body) if isinstance(body, dict) else [])
+
+    def add_folder_share(
+        self,
+        folder_id: int,
+        *,
+        principal_type: str,
+        principal_ref: Optional[str] = None,
+        level: str = "view",
+    ) -> dict:
+        """POST /folders/{id}/shares — board manager / sys admin only."""
+        logger.info("add_folder_share id=%s principal=%s ref=%s level=%s",
+                    folder_id, principal_type, principal_ref, level)
+        body = {"principal_type": principal_type, "level": level}
+        if principal_ref is not None:
+            body["principal_ref"] = principal_ref
+        return self.post(f"/folders/{folder_id}/shares", json=body)
+
+    def remove_folder_share(self, folder_id: int, grant_id: int) -> None:
+        """DELETE /folders/{id}/shares/{grant_id} — board manager / sys admin only."""
+        logger.info("remove_folder_share id=%s grant=%s", folder_id, grant_id)
+        self._request("DELETE", f"/folders/{folder_id}/shares/{grant_id}")
+
+    def list_board_shares(self, workspace_slug: str) -> list[dict]:
+        """GET /workspaces/{slug}/shares — org boards only."""
+        body = self.get(f"/workspaces/{workspace_slug}/shares")
+        return body if isinstance(body, list) else (body.get("items", body) if isinstance(body, dict) else [])
+
+    def add_board_share(
+        self,
+        workspace_slug: str,
+        *,
+        principal_type: str,
+        principal_ref: Optional[str] = None,
+        level: str = "view",
+    ) -> dict:
+        """POST /workspaces/{slug}/shares — board manager / sys admin only."""
+        logger.info("add_board_share slug=%s principal=%s ref=%s level=%s",
+                    workspace_slug, principal_type, principal_ref, level)
+        body = {"principal_type": principal_type, "level": level}
+        if principal_ref is not None:
+            body["principal_ref"] = principal_ref
+        return self.post(f"/workspaces/{workspace_slug}/shares", json=body)
+
+    def remove_board_share(self, workspace_slug: str, grant_id: int) -> None:
+        """DELETE /workspaces/{slug}/shares/{grant_id} — board manager / sys admin only."""
+        logger.info("remove_board_share slug=%s grant=%s", workspace_slug, grant_id)
+        self._request("DELETE", f"/workspaces/{workspace_slug}/shares/{grant_id}")
+
     # ---- widget relations --------------------------------------------- #
 
     def list_widget_relations(self) -> list[dict]:
