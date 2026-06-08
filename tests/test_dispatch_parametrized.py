@@ -338,7 +338,9 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "folders_list": {},
     "report_mount_set_folder": {"report_id": 1, "workspace_slug": "dx"},
     "report_mount_set_edit_policy": {
-        "report_id": 1, "workspace_slug": "dx", "edit_policy": "coauthor",
+        # v0.8.1+: manager policy auto-syncs a workspace_manager grant on RA.
+        # Exercise the new value so the dispatch path is locked.
+        "report_id": 1, "workspace_slug": "dx", "edit_policy": "manager",
     },
     "template_set_scope": {"template_id": "engineering-rca",
                             "owner_workspace_slugs": ["dx"]},

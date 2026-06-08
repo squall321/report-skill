@@ -34,12 +34,14 @@ from report_skill import (
 from report_skill.client import (
     ApiError,
     AuthorLockedError,
+    BoardShareForbiddenError,
     FinalizedReadOnlyError,
     LockHeldByOtherError,
     NoEditPermissionError,
     OutOfWorkspaceScopeError,
     ReportArchiveClient,
     RevisionMismatchError,
+    ShareSetupForbiddenError,
 )
 from report_skill.config import settings
 
@@ -2884,6 +2886,10 @@ def shares_content_add(
         try:
             row = client.add_content_share(content_type, content_id,
                 principal_type=principal_type, principal_ref=principal_ref, level=level)
+        except ShareSetupForbiddenError as e:
+            console.print(f"[red][share_setup_forbidden][/red] {e}  "
+                          "(only the content owner / sys admin may add/remove shares)")
+            raise typer.Exit(3)
         except ApiError as e:
             console.print(f"[red]content-add failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -2900,6 +2906,10 @@ def shares_content_remove(
     with ReportArchiveClient() as client:
         try:
             client.remove_content_share(content_type, content_id, grant_id)
+        except ShareSetupForbiddenError as e:
+            console.print(f"[red][share_setup_forbidden][/red] {e}  "
+                          "(only the content owner / sys admin may add/remove shares)")
+            raise typer.Exit(3)
         except ApiError as e:
             console.print(f"[red]content-remove failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -2930,6 +2940,10 @@ def shares_folder_add(
         try:
             row = client.add_folder_share(folder_id,
                 principal_type=principal_type, principal_ref=principal_ref, level=level)
+        except BoardShareForbiddenError as e:
+            console.print(f"[red][board_share_forbidden][/red] {e}  "
+                          "(only the target board's manager / sys admin may add/remove folder grants)")
+            raise typer.Exit(3)
         except ApiError as e:
             console.print(f"[red]folder-add failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -2945,6 +2959,10 @@ def shares_folder_remove(
     with ReportArchiveClient() as client:
         try:
             client.remove_folder_share(folder_id, grant_id)
+        except BoardShareForbiddenError as e:
+            console.print(f"[red][board_share_forbidden][/red] {e}  "
+                          "(only the target board's manager / sys admin may add/remove folder grants)")
+            raise typer.Exit(3)
         except ApiError as e:
             console.print(f"[red]folder-remove failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -2975,6 +2993,10 @@ def shares_board_add(
         try:
             row = client.add_board_share(workspace_slug,
                 principal_type=principal_type, principal_ref=principal_ref, level=level)
+        except BoardShareForbiddenError as e:
+            console.print(f"[red][board_share_forbidden][/red] {e}  "
+                          "(only this board's manager / sys admin may add/remove board grants)")
+            raise typer.Exit(3)
         except ApiError as e:
             console.print(f"[red]board-add failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -2990,6 +3012,10 @@ def shares_board_remove(
     with ReportArchiveClient() as client:
         try:
             client.remove_board_share(workspace_slug, grant_id)
+        except BoardShareForbiddenError as e:
+            console.print(f"[red][board_share_forbidden][/red] {e}  "
+                          "(only this board's manager / sys admin may add/remove board grants)")
+            raise typer.Exit(3)
         except ApiError as e:
             console.print(f"[red]board-remove failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)

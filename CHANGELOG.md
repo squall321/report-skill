@@ -1,5 +1,37 @@
 ﻿# Changelog
 
+## 0.8.3 — 2026-06-09
+
+Patch — closes 1 high + 1 med leftover from the v0.8.2 audit.
+
+Fixed (high) — manager edit-policy now exercised in the test suite:
+
+- `tests/test_dispatch_parametrized.py` `_ARGS_BY_TOOL["report_mount_set_edit_policy"]`
+  now uses `"manager"` (was `"coauthor"`). The previous value left the
+  v0.8.1/v0.8.2 manager-policy code path completely untested through the
+  parametrized dispatch sweep, so a regression on the manager dispatch
+  would have slipped silently. The `manager` value flows through the
+  schema enum check + dispatcher pass-through + client wrapper, matching
+  the same shape the LLM will use.
+
+Fixed (med) — CLI shares commands surface typed exceptions:
+
+- `cli.py` imports `ShareSetupForbiddenError` + `BoardShareForbiddenError`.
+- 6 `shares` add/remove commands (content-add, content-remove,
+  folder-add, folder-remove, board-add, board-remove) now catch the
+  matching typed exception BEFORE the generic `ApiError` and emit a
+  human-readable `[share_setup_forbidden]` / `[board_share_forbidden]`
+  message with a parenthetical hint about who actually has permission.
+  Exit code 3 distinguishes typed-forbidden from generic HTTP error
+  (exit 2), matching the convention used elsewhere in the CLI.
+
+Verified:
+
+- pytest 458 passed, 5 skipped (unchanged from v0.8.2).
+- MCP `_DISPATCH` count = 75 (unchanged — patch only).
+- `report-skill --version` reports 0.8.3.
+- Standalone install migrated to 0.8.3; stale 0.8.2 dist-info removed.
+
 ## 0.8.2 — 2026-06-08
 
 Patch — closes 4 high + 1 med leftover gap that v0.8.1's audit missed. The
