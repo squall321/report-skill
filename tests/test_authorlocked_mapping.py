@@ -25,6 +25,7 @@ from report_skill import mcp_server
 from report_skill.client import (
     ApiError,
     AuthorLockedError,
+    BoardShareForbiddenError,
     CompositeRevisionConflict,
     FinalizedReadOnlyError,
     LockHeldByOtherError,
@@ -33,6 +34,7 @@ from report_skill.client import (
     OutOfWorkspaceScopeError,
     ReportArchiveClient,
     RevisionMismatchError,
+    ShareSetupForbiddenError,
 )
 
 
@@ -358,3 +360,54 @@ def test_build_typed_error_classifies_out_of_workspace_scope() -> None:
         f"got {type(err).__name__ if err else 'None'}"
     )
     assert err.code == "out_of_workspace_scope"
+
+
+# --------------------------------------------------------------------------- #
+# v0.8.1/v0.8.2 — grants 403 typed exceptions (RA dbdbf99)
+# --------------------------------------------------------------------------- #
+def test_build_typed_error_classifies_share_setup_forbidden() -> None:
+    """403 + Korean 'public/content share gate' message → ShareSetupForbiddenError."""
+    msg = "공유 설정은 작성자(또는 시스템 관리자)만 변경할 수 있습니다."
+    body = {"success": False, "message": msg, "errors": None}
+    err = ReportArchiveClient._build_typed_error(
+        status_code=403,
+        message=msg,
+        path="/reports/7/shares",
+        body=body,
+    )
+    assert isinstance(err, ShareSetupForbiddenError), (
+        f"403 share-owner gate must map to ShareSetupForbiddenError; "
+        f"got {type(err).__name__ if err else 'None'}"
+    )
+    assert err.code == "share_setup_forbidden"
+
+
+def test_build_typed_error_classifies_board_share_forbidden() -> None:
+    """403 + Korean 'board share gate' message → BoardShareForbiddenError."""
+    msg = "게시판 공유는 그 게시판 매니저(또는 시스템 관리자)만 변경할 수 있습니다."
+    body = {"success": False, "message": msg, "errors": None}
+    err = ReportArchiveClient._build_typed_error(
+        status_code=403,
+        message=msg,
+        path="/workspaces/dx/shares",
+        body=body,
+    )
+    assert isinstance(err, BoardShareForbiddenError), (
+        f"403 board-share gate must map to BoardShareForbiddenError; "
+        f"got {type(err).__name__ if err else 'None'}"
+    )
+    assert err.code == "board_share_forbidden"
+
+
+def test_typed_error_map_includes_grants_classes(monkeypatch) -> None:
+    """v0.8.2 — the call_tool error map must include the two grants subclasses
+    so the LLM receives structured {error: 'share_setup_forbidden' | 'board_share_forbidden'}
+    instead of opaque ApiError."""
+    table = mcp_server._build_typed_error_map()
+    codes = [code for (_cls, code, _) in table]
+    assert "share_setup_forbidden" in codes, (
+        f"share_setup_forbidden missing from _TYPED_ERROR_MAP: {codes}"
+    )
+    assert "board_share_forbidden" in codes, (
+        f"board_share_forbidden missing from _TYPED_ERROR_MAP: {codes}"
+    )

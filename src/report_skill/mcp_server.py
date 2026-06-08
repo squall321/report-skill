@@ -87,6 +87,17 @@ except ImportError:  # pragma: no cover — older client.py without typed subcla
     OutOfWorkspaceScopeError = None  # type: ignore[assignment,misc]
     RevisionMismatchError = None  # type: ignore[assignment,misc]
 
+# v0.8.1 — grants 403 typed exceptions (RA dbdbf99). Imported defensively so
+# the server keeps loading against an older client.py.
+try:
+    from report_skill.client import (
+        BoardShareForbiddenError,
+        ShareSetupForbiddenError,
+    )
+except ImportError:  # pragma: no cover
+    BoardShareForbiddenError = None  # type: ignore[assignment,misc]
+    ShareSetupForbiddenError = None  # type: ignore[assignment,misc]
+
 SERVER_NAME = "report-skill"
 
 # v0.5.1 — 13 optional fields shared by report_create / report_update.
@@ -366,7 +377,7 @@ TOOLS: list[Tool] = [
             "workspace_slugs": {"type": "array", "items": {"type": "string"},
                                 "minItems": 1, "description": "target board slug(s)"},
             "edit_policy": {"type": "string",
-                            "enum": ["default", "owner_only", "coauthor"],
+                            "enum": ["default", "owner_only", "coauthor", "manager"],
                             "default": "default"},
             "note": {"type": "string"},
             "folder_id": {"type": "integer", "description": "org folder within target workspace"},
@@ -2603,6 +2614,9 @@ def _build_typed_error_map() -> list[tuple[type, str, bool]]:
         (FinalizedReadOnlyError, "finalized_readonly", True),
         (NoEditPermissionError, "no_edit_permission", True),
         (OutOfWorkspaceScopeError, "out_of_workspace_scope", True),
+        # 403 — grants (v0.8.0/v0.8.1)
+        (ShareSetupForbiddenError, "share_setup_forbidden", False),
+        (BoardShareForbiddenError, "board_share_forbidden", False),
         # 409 — reports lock + revision (errors[0].code)
         (LockHeldByOtherError, "lock_held_by_other", True),
         (LockNotHeldError, "lock_not_held", True),

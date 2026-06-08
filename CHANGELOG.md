@@ -1,5 +1,53 @@
 ﻿# Changelog
 
+## 0.8.2 — 2026-06-08
+
+Patch — closes 4 high + 1 med leftover gap that v0.8.1's audit missed. The
+critical one: v0.8.1 added the two grants typed exceptions to client.py but
+did NOT register them in the `call_tool` typed-error map, so the LLM still
+saw opaque `ApiError` envelopes — v0.8.1's headline feature was sliently
+undelivered at the MCP surface, the same "builder receives but MCP doesn't"
+asymmetry as v0.5.0 → v0.5.1.
+
+Fixed (high):
+
+- `mcp_server.py` defensive import block now also imports
+  `ShareSetupForbiddenError` and `BoardShareForbiddenError`.
+- `mcp_server.py` `_build_typed_error_map()` includes both grants subclasses
+  in the dispatch table (before the 409 codes). `call_tool` now surfaces
+  `{error: "share_setup_forbidden"}` / `{error: "board_share_forbidden"}`
+  to the LLM, matching the rest of the typed-exception family.
+- `mcp_server.py` `report_mount` tool schema enum gains `manager` (the
+  policy was added to `report_mount_set_edit_policy` in v0.8.1 but the
+  initial-mount schema still rejected it).
+- `client.py` `set_mount_edit_policy` docstring now lists `manager` with
+  the RA p27 auto-sync note (was missed by v0.8.1's high-priority sweep).
+- `report_ops.py` `mount_report` docstring lists `manager` similarly.
+
+Added (med) — SKILL.md error-code table:
+
+- Two new rows `share_setup_forbidden` (403, owner / sys admin only) and
+  `board_share_forbidden` (403, manager / sys admin only) so the LLM has a
+  documented handling guide for each.
+
+Tests — pytest 455 → 458 (+3):
+
+- `tests/test_authorlocked_mapping.py`:
+  - `test_build_typed_error_classifies_share_setup_forbidden` —
+    `_build_typed_error` correctly classifies the Korean owner-gate string.
+  - `test_build_typed_error_classifies_board_share_forbidden` — same for
+    the board-manager-gate string.
+  - `test_typed_error_map_includes_grants_classes` — locks the
+    `_build_typed_error_map()` contents so the v0.8.1 omission cannot recur.
+
+Verified:
+
+- pytest 458 passed, 5 skipped.
+- MCP `_DISPATCH` count = 75 (unchanged).
+- `_TYPED_ERROR_MAP` contains both new codes (asserted by new test).
+- `report-skill --version` reports 0.8.2.
+- Standalone install migrated to 0.8.2; stale 0.8.1 dist-info removed.
+
 ## 0.8.1 — 2026-06-08
 
 Patch — closes 4 high + 1 med gap left by v0.8.0's RA-grants rollout.

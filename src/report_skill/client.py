@@ -643,7 +643,8 @@ class ReportArchiveClient:
     ) -> dict:
         """PUT /mounts/{report_id}/{workspace_slug}/edit-policy — change
         the per-mount edit policy. Valid values: 'default', 'owner_only',
-        'coauthor'.
+        'coauthor', 'manager' (RA p27 — 작성자+게시판 매니저, auto-syncs a
+        workspace_manager grant).
         """
         body = {"edit_policy": edit_policy}
         return self._request(

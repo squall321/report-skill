@@ -555,7 +555,9 @@ def mount_report(
     """POST /mounts — promote `report_id` to one or more org boards.
 
     `edit_policy`: `default` (author + board lead) / `owner_only`
-    (author only) / `coauthor` (all board members can edit).
+    (author only) / `coauthor` (all board members can edit) /
+    `manager` (RA p27 — author + board managers; server auto-syncs a
+    workspace_manager grant on the report).
     Idempotent per-board: already-mounted targets get silently skipped.
     Returns the list of NEWLY-created mounts (may be empty if all
     requested boards already had a mount).
