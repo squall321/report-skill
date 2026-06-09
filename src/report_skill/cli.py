@@ -2426,6 +2426,78 @@ def tools_takedown_reject(
     console.print_json(json.dumps(row, ensure_ascii=False))
 
 
+@tools_app.command("composites-by-report")
+def tools_composites_by_report(
+    report_id: int = typer.Argument(..., help="report id"),
+):
+    """List composites that reference this report (reverse navigation)."""
+    with ReportArchiveClient() as c:
+        console.print_json(json.dumps(
+            c.list_composites_by_report(report_id), ensure_ascii=False))
+
+
+@tools_app.command("reports-list")
+def tools_reports_list(
+    entity_ids: Optional[list[int]] = typer.Option(None, "--entity-id",
+        help="filter by entity id (repeat for multiple)"),
+    folder_id: Optional[str] = typer.Option(None, "--folder-id",
+        help="'uncategorized' or numeric folder id (personal-space only)"),
+    include_public: bool = typer.Option(False, "--include-public",
+        help="org-context: include cross-org public reports"),
+    include_descendants: bool = typer.Option(False, "--include-descendants",
+        help="org-context: include child boards"),
+    workspace: Optional[str] = typer.Option(None, "--workspace",
+        "--workspace-slug", help="X-Workspace-Slug override"),
+):
+    """General report list (vs reports-search which targets mention chips)."""
+    with ReportArchiveClient() as c:
+        rows = c.list_reports(
+            entity_ids=list(entity_ids) if entity_ids else None,
+            folder_id=folder_id,
+            include_public=include_public,
+            include_descendants=include_descendants,
+            workspace_slug=workspace,
+        )
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@tools_app.command("comments-inbox-list")
+def tools_comments_inbox_list():
+    """Show the current actor's open / unread review threads."""
+    with ReportArchiveClient() as c:
+        console.print_json(json.dumps(c.list_comments_inbox(), ensure_ascii=False))
+
+
+@tools_app.command("entities-usage-list")
+def tools_entities_usage_list(
+    type_id: Optional[int] = typer.Option(None, "--type-id"),
+    q: Optional[str] = typer.Option(None, "--q",
+        help="free-text filter on entity name"),
+    include_deprecated: bool = typer.Option(False, "--include-deprecated"),
+    limit: int = typer.Option(50, "--limit", min=1, max=200),
+):
+    """Entities with usage_count populated — for deprecation / merge planning."""
+    with ReportArchiveClient() as c:
+        rows = c.list_entities_with_usage(
+            type_id=type_id, q=q, include_deprecated=include_deprecated,
+            limit=limit,
+        )
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@tools_app.command("workspace-members-list")
+def tools_workspace_members_list(
+    workspace_slug: str = typer.Argument(..., help="board slug"),
+    include_inherited: bool = typer.Option(False, "--include-inherited",
+        help="include ancestor-board members"),
+):
+    """List a board's members + roles."""
+    with ReportArchiveClient() as c:
+        rows = c.list_workspace_members(
+            workspace_slug, include_inherited=include_inherited)
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
 @tools_app.command("widget-ref-categories-list")
 def tools_widget_ref_categories_list():
     """List #widget cross-reference categories (그림 / 표 / 비교표 / 수식 / 목록 ...).

@@ -609,6 +609,71 @@ TOOLS: list[Tool] = [
         {},
     ),
 
+    # ---- v0.12.0 — high-value read surface (P1 backlog) ----------------- #
+    _tool(
+        "composites_by_report",
+        "Reverse navigation: list every composite that references the given "
+        "report as an item. GET /api/composites/by-report/{report_id}. Useful "
+        "when the LLM is about to edit a report and needs to know which "
+        "weekly / theme composites will refresh.",
+        {"report_id": {"type": "integer"}},
+        ["report_id"],
+    ),
+    _tool(
+        "reports_list",
+        "General report list — distinct from reports_search (which targets "
+        "mention chips on the linkable subset). GET /api/reports with rich "
+        "filters: entity_ids (entity-tagged), folder_id ('uncategorized' or "
+        "numeric), include_public (cross-org), include_descendants (child "
+        "boards). Use this for 'list my recent reports' / 'list everything "
+        "tagged HFP'.",
+        {
+            "entity_ids": {"type": "array", "items": {"type": "integer"}},
+            "folder_id": {"type": "string",
+                          "description": "'uncategorized' or numeric id"},
+            "include_public": {"type": "boolean", "default": False},
+            "include_descendants": {"type": "boolean", "default": False},
+            "workspace_slug": {"type": "string",
+                                "description": "X-Workspace-Slug override; "
+                                "rarely needed"},
+        },
+        [],
+    ),
+    _tool(
+        "comments_inbox_list",
+        "Current actor's comment inbox — open / unread review threads across "
+        "every report the actor can see. GET /api/comments/inbox. Useful for "
+        "the LLM to surface pending review pings before posting a new edit.",
+        {},
+    ),
+    _tool(
+        "entities_usage_list",
+        "List entities (taxonomy values) with usage_count populated. GET "
+        "/api/entities?with_usage=true. Useful for deprecation / merge "
+        "planning: identifies entities used on 0 reports, or hottest tags.",
+        {
+            "type_id": {"type": "integer"},
+            "q": {"type": "string"},
+            "include_deprecated": {"type": "boolean", "default": False},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 200,
+                       "default": 50},
+        },
+        [],
+    ),
+    _tool(
+        "workspace_members_list",
+        "List a board's members and roles. GET /api/workspaces/{slug}/members. "
+        "Use to answer 'who can edit this board?' / 'who is the manager?' "
+        "before recommending a mount edit-policy or filing a takedown.",
+        {
+            "workspace_slug": {"type": "string"},
+            "include_inherited": {"type": "boolean", "default": False,
+                                   "description": "include ancestor-board "
+                                   "members"},
+        },
+        ["workspace_slug"],
+    ),
+
     # ---- v0.11.0 — content-aware read surface --------------------------- #
     # The Claude Desktop / Cursor LLM driving this skill needs to SEE current
     # content (not just block ids) before patching. report_show gives a tree
@@ -2146,6 +2211,54 @@ def _do_widget_ref_categories_list(_args: dict) -> Any:
         return c.list_ref_categories()
 
 
+# ---- v0.12.0 — high-value read dispatchers --------------------------- #
+
+def _do_composites_by_report(args: dict) -> Any:
+    rid = _int_arg(args, "report_id")
+    with ReportArchiveClient() as c:
+        return c.list_composites_by_report(rid)
+
+
+def _do_reports_list(args: dict) -> Any:
+    entity_ids = args.get("entity_ids")
+    if entity_ids is not None:
+        entity_ids = [int(x) for x in entity_ids]
+    with ReportArchiveClient() as c:
+        return c.list_reports(
+            entity_ids=entity_ids,
+            folder_id=args.get("folder_id"),
+            include_public=bool(args.get("include_public", False)),
+            include_descendants=bool(args.get("include_descendants", False)),
+            workspace_slug=args.get("workspace_slug"),
+        )
+
+
+def _do_comments_inbox_list(_args: dict) -> Any:
+    with ReportArchiveClient() as c:
+        return c.list_comments_inbox()
+
+
+def _do_entities_usage_list(args: dict) -> Any:
+    type_id = args.get("type_id")
+    if type_id is not None:
+        type_id = int(type_id)
+    with ReportArchiveClient() as c:
+        return c.list_entities_with_usage(
+            type_id=type_id,
+            q=args.get("q"),
+            include_deprecated=bool(args.get("include_deprecated", False)),
+            limit=int(args.get("limit", 50)),
+        )
+
+
+def _do_workspace_members_list(args: dict) -> Any:
+    slug = str(args["workspace_slug"])
+    with ReportArchiveClient() as c:
+        return c.list_workspace_members(
+            slug, include_inherited=bool(args.get("include_inherited", False)),
+        )
+
+
 # ---- v0.11.0 — content-aware read surface ---------------------------- #
 
 def _block_title_preview(content: Any, wtype: str, max_chars: int = 80) -> str:
@@ -3044,6 +3157,12 @@ _DISPATCH = {
     "widget_relations_list": _do_widget_relations_list,
     # v0.9.0 — RA 074233d
     "widget_ref_categories_list": _do_widget_ref_categories_list,
+    # v0.12.0 — high-value read surface (P1 backlog)
+    "composites_by_report": _do_composites_by_report,
+    "reports_list": _do_reports_list,
+    "comments_inbox_list": _do_comments_inbox_list,
+    "entities_usage_list": _do_entities_usage_list,
+    "workspace_members_list": _do_workspace_members_list,
     # v0.11.0 — content-aware read surface
     "report_outline": _do_report_outline,
     "page_show_content": _do_page_show_content,

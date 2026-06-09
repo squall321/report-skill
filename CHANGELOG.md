@@ -1,5 +1,74 @@
 ﻿# Changelog
 
+## 0.12.0 — 2026-06-10
+
+Minor — first release driven by structural-improvement analysis instead of
+"RA shipped X, react." Closes 3 of the 5 priority backlogs surfaced in the
+v0.11.0 cold-eye review.
+
+Added — 5 new MCP tools (P1 backlog), _DISPATCH 86 → 91:
+
+- `composites_by_report` — reverse navigation: every composite that
+  references the report as an item. GET /api/composites/by-report/{id}.
+- `reports_list` — general report list with entity_ids / folder_id /
+  include_public / include_descendants filters. Distinct from
+  `reports_search` (mention-chip linkable subset).
+- `comments_inbox_list` — open / unread review threads. GET
+  /api/comments/inbox.
+- `entities_usage_list` — entities with usage_count populated. GET
+  /api/entities?with_usage=true.
+- `workspace_members_list` — board members + roles. GET
+  /api/workspaces/{slug}/members.
+
+Each has a matching CLI command under `report-skill tools …`.
+
+Added — change-detection automation (P0 backlog):
+
+- `scripts/watch_ra.ps1` — daily scanner for RA upstream. Detects new
+  commits since last check (persists cursor at
+  `%LOCALAPPDATA%/report-skill/last_ra_check.txt`), groups by
+  conventional prefix (feat / fix / refactor / chore), tallies file
+  impact (backend Python, frontend-only, migrations, routes / schemas /
+  registry touched). Recommends running the deeper impact analyzer when
+  backend changes detected; otherwise reports "frontend-only, no
+  report-skill action needed".
+- `scripts/check_ra_impact.py` — automated gap analysis. Diffs RA
+  `@router` decorators, widget content_schema field additions, and new
+  Korean error strings against report-skill coverage; surfaces concrete
+  gaps. Closes the manual-discovery half of the audit pattern that
+  v0.4-v0.11 cycles repeated by hand.
+
+Added — prompt hint coverage from 12/33 → 33/33 widgets (P1 backlog):
+
+- `prompt.py` `_WIDGET_INPUT_HINTS` extended to chart, scatter,
+  scatter3d, box, density, contour, heatmap, sankey, network, mind_map,
+  tree, radar, milestone, flowchart, equation, video, attachment,
+  cad_3d, raci_matrix, key_value, quadrant — 21 new entries. Every
+  widget the LLM might author now has a 1-3-line authoring guide with
+  required fields + key optional fields + common pitfalls.
+
+SKILL.md:
+
+- New "v0.12.0 — high-value read surface + change detection automation"
+  section documents the 5 new tools (with "use when" mapping) and the
+  watch_ra / check_ra_impact operator scripts.
+- Tool inventory header bumped to "MCP tool inventory (v0.12.x)" + 91.
+
+Tests — pytest 474 → 479 (+5):
+
+- `_ARGS_BY_TOOL` gains 5 entries (composites_by_report etc.).
+- fake-client mock gains 5 method return values.
+- `test_dispatch_count_is_91` in `test_mcp_roundtrip.py` and
+  `test_widget_relations.py` lock the new surface size.
+
+Verified:
+
+- pytest 479 passed, 5 skipped (no failures).
+- MCP `_DISPATCH` count = 91.
+- All 5 new client methods importable.
+- `_WIDGET_INPUT_HINTS` now has 33 entries (1 per widget).
+- `report-skill --version` reports 0.12.0.
+
 ## 0.11.0 — 2026-06-10
 
 Minor — adds 4 content-aware read tools so the driving LLM (Claude Desktop /

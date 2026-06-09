@@ -190,6 +190,141 @@ _WIDGET_INPUT_HINTS: dict[str, str] = {
         "`description` (<=1000), `cover_file_id` (poster image shown before load). "
         "There is no `url` field — uploaded bundles only."
     ),
+
+    # v0.12.0 — hint coverage extended from 12 to 33 widgets so every widget
+    # type the LLM might touch has a 1-3-line authoring guide alongside the
+    # JSON schema dump. Each hint is best-effort short: required fields +
+    # key optional fields + any common author pitfalls.
+
+    "chart": (
+        "Line / bar / area chart. Required: `series` list — each item "
+        "`{name, data: [{x, y}, ...]}`. Optional: `x_axis_title`, "
+        "`y_axis_title`, `x_min` / `x_max` / `y_min` / `y_max`, "
+        "`annotations`. `caption_html` (RA defcb74) carries per-char color."
+    ),
+    "scatter": (
+        "X-Y scatter. Required: `rows` of `{x, y, label?, group?}`. "
+        "Optional: axis min/max, `annotations`. group enables color "
+        "legend; label shows on hover."
+    ),
+    "scatter3d": (
+        "3D scatter / surface. Required: `rows` of `{x, y, z, label?}` "
+        "for points OR explicit `series` for surface plots. Surface mode: "
+        "set `series.kind=\"surface\"` and the adapter preserves it — DO "
+        "NOT pass rows when authoring a surface."
+    ),
+    "box": (
+        "Box-and-whisker. Required: `rows` of `{group, values: [..]}` OR "
+        "`{values: [..]}` for single. Optional: `y_min` / `y_max`, "
+        "`box_points` (\"outliers\"|\"all\"|\"none\"), `box_mean` (bool), "
+        "`jitter` (0-1)."
+    ),
+    "density": (
+        "Distribution density plot. Required: `rows` of `{group, values: "
+        "[..]}` OR `{values: [..]}`. Optional: `bandwidth_mode` "
+        "(\"auto\"|\"manual\"), `bandwidth` (when manual), `samples` "
+        "(curve resolution), `fill` / `show_dots` / `dot_opacity`."
+    ),
+    "contour": (
+        "Contour plot. Required: `z` matrix (list-of-lists) or `rows` of "
+        "`{x, y, z}`. Optional: `colorscale`, `reverse_scale`, `z_min` / "
+        "`z_max`, `ncontours`, `contours_coloring` (\"fill\"|\"lines\"), "
+        "`show_lines` / `show_labels` / `connect_gaps`."
+    ),
+    "heatmap": (
+        "Heatmap. Required: `z` matrix (list-of-lists numeric) OR `rows` "
+        "of `{x, y, z}`. Optional: `x_axis_title`, `y_axis_title`, "
+        "`colorscale`, `reverse_scale`, `z_min` / `z_max`, `show_values`."
+    ),
+    "sankey": (
+        "Sankey flow. Required: `nodes` (list of `{id, label}`) + `links` "
+        "(list of `{source, target, value}` where source/target reference "
+        "node ids). Optional: `arrangement` (\"snap\"|\"perpendicular\"|"
+        "\"freeform\"|\"fixed\"), `node_pad`, `node_thickness`, `unit`."
+    ),
+    "network": (
+        "Graph / network. Required: `nodes` (`{id, label?, group?, value?, "
+        "color?, x?, y?, fixed?}`) + `edges` (`{source, target, weight?, "
+        "label?, color?}`). Optional: `directed`, `layout` (\"force\"|"
+        "\"circular\"|\"grid\"), `node_shape`, `show_labels`, "
+        "`color_by_group`, `node_size_by_value`."
+    ),
+    "mind_map": (
+        "Mind map / hierarchical tree. Required: `rows` of `{label, "
+        "parent?, color?}` — empty parent = root. Optional: `layout` "
+        "(\"radial\"|\"horizontal\"|\"vertical\"), `branch_style`, "
+        "`color_by_group`, `show_root_emphasis`."
+    ),
+    "tree": (
+        "Org / decision tree. Required: `rows` of `{label, parent?, "
+        "subtitle?, color?}` — empty parent = root. Optional: "
+        "`orientation` (\"vertical\"|\"horizontal\"), `node_shape`, "
+        "`edge_style`, `color_by_group`, `node_padding_x` / `_y`."
+    ),
+    "radar": (
+        "Radar / spider chart. Required: `rows` of `{axis, value, "
+        "series?}`. Multi-series = pass a `series` key per row. "
+        "Optional: `value_min` / `value_max`, `fill_opacity` (0-1), "
+        "`show_legend`."
+    ),
+    "milestone": (
+        "Timeline of milestones. Required: `items` of `{date, label, "
+        "kind?, color?}` (YYYY-MM-DD). Optional top-level: `start_date` "
+        "/ `end_date` (window), `annotations`. Common pitfall: use the "
+        "`report_milestone_add` tool for a single-item shortcut rather "
+        "than authoring this content directly."
+    ),
+    "flowchart": (
+        "Flow diagram. Required: `items` (or `steps` / `nodes`) of "
+        "`{id, label, kind?, edges: [{to, label?}]?}`. Optional: "
+        "`orientation` (\"vertical\"|\"horizontal\"|\"top-to-bottom\"|"
+        "\"left-to-right\"). String input is parsed as a numbered list."
+    ),
+    "equation": (
+        "LaTeX equation. Required: `latex` string (the formula source, "
+        "max 5000 chars). Optional: `caption` (max 200), `display_mode` "
+        "(\"block\"|\"inline\"), `number` (label like \"식 3\")."
+    ),
+    "video": (
+        "Embedded video. Required: at least one uploaded `file_id` "
+        "(upload via POST /api/files first — paths / URLs are not "
+        "accepted). Optional: `caption` (max 200), `max_count` (limit "
+        "for the player's file picker), and boolean playback flags "
+        "(autoplay / muted / loop) as the schema allows. `caption_html` "
+        "carries per-char color."
+    ),
+    "attachment": (
+        "File attachment list. Required: at least one `file_id` from a "
+        "prior POST /api/files upload (URLs / paths are rejected). "
+        "Optional: `caption` (max 200), `max_count`. To attach images / "
+        "videos prefer the dedicated `image` / `video` widgets."
+    ),
+    "cad_3d": (
+        "Embedded CAD viewer. Required: `model` (`{file_id, format?}`) "
+        "OR `model_file_id`. Optional: `caption`, `annotations` — each "
+        "annotation is `{kind: \"distance_3d\"|\"point_3d\", points: "
+        "[[x,y,z], ...], label?}`. `caption_html` carries per-char color."
+    ),
+    "raci_matrix": (
+        "RACI table. Required: `rows` of `{activity, assignments: "
+        "{role_key: \"R\"|\"A\"|\"C\"|\"I\"}}`. The adapter ALSO "
+        "accepts a flat dict `{activity: {role: code}}` and rewrites it. "
+        "Optional: `roles` (list of `{key, label}` — derived from the "
+        "rows if omitted)."
+    ),
+    "key_value": (
+        "Key-value pair block. Required: `items` of `{key, value}` OR "
+        "pass a flat dict at the top level (`{foo: \"bar\", baz: 42}`) "
+        "and the adapter packs it into items. Korean / non-ASCII keys "
+        "are preserved literally."
+    ),
+    "quadrant": (
+        "2x2 / 4-quadrant chart. Two modes: (1) PLOT — list of `{x, y, "
+        "label?}` for scatter-style plotting; (2) BUCKET — pre-binned "
+        "`bucket_items` keyed by quadrant. Optional: axis labels + "
+        "quadrant labels. Adapter rejects list input unless x/y is "
+        "present on every item."
+    ),
 }
 
 

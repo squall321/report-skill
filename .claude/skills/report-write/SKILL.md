@@ -1052,9 +1052,36 @@ These are READ-ONLY — none of the 4 mutate state. They safely precede any writ
 
 ---
 
-## MCP tool inventory (v0.11.x)
+## v0.12.0 — high-value read surface + change detection automation
 
-The MCP server now exposes **86 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the v0.5.0 / v0.6.0 / v0.7.0 inventory sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
+v0.12.0 ships 5 new MCP tools the LLM has been missing — surfaces that prior audits had flagged but were postponed. It also adds two scripts that close the manual-discovery loop on RA upstream changes.
+
+### 5 new MCP tools (LLM use cases)
+
+| Tool | Use when |
+|---|---|
+| `composites_by_report` | "Which weekly composites use this report?" — reverse navigation before editing |
+| `reports_list` | General report list with filters (entity_ids, folder_id, include_public, include_descendants) — distinct from `reports_search` (mention-chip linkable subset) |
+| `comments_inbox_list` | "What review threads need my attention?" — open / unread threads across all visible reports |
+| `entities_usage_list` | "Which entities are unused / deprecated candidates?" — `with_usage=true` projection |
+| `workspace_members_list` | "Who can edit this board?" / "Who is the manager?" — before recommending edit-policy or filing a takedown |
+
+### Change detection scripts (operator side)
+
+These are NOT MCP tools — they are dev-side scripts for keeping report-skill in sync with RA upstream:
+
+- `scripts/watch_ra.ps1` — daily diff scanner. Run on schedule; reports new RA commits since last check, grouped by conventional prefix, with file impact tally (backend Python files, frontend-only files, migrations added, routes/schemas/registry touched). Recommends running `check_ra_impact.py` when backend changes detected.
+- `scripts/check_ra_impact.py` — automated gap analysis. Compares RA `@router` decorators, widget content_schema field additions, and Korean error strings against report-skill coverage; surfaces concrete gaps (un-wrapped endpoints, missing adapter passthroughs, undetected error strings). Closes the manual-discovery half of the audit pattern.
+
+### Prompt hint coverage (full)
+
+`prompt.py` `_WIDGET_INPUT_HINTS` now covers all 33 widgets (was 12). Every widget the LLM might author gets a 1-3-line input guide alongside the JSON schema dump, with key fields + common pitfalls. The hints are merged into `build_create_prompt` / `build_block_revise_prompt` / `build_block_batch_prompt` automatically.
+
+---
+
+## MCP tool inventory (v0.12.x)
+
+The MCP server now exposes **91 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the v0.5.0 / v0.6.0 / v0.7.0 inventory sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
 
 ```powershell
 report-skill-mcp --help   # or:

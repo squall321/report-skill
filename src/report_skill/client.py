@@ -557,6 +557,114 @@ class ReportArchiveClient:
 
     # ---- soft delete (v0.10.0 — RA dc8bd45 + ff64778) ----------------- #
 
+    # ---- v0.12.0 — high-value read tools (P1 audit backlog) ----------- #
+
+    def list_composites_by_report(self, report_id: int) -> list[dict]:
+        """GET /composites/by-report/{report_id} — every composite that
+        references this report as an item. Backs reverse-navigation: "what
+        weekly composites does this report appear in?"."""
+        body = self.get(f"/composites/by-report/{report_id}")
+        if isinstance(body, list):
+            return body
+        if isinstance(body, dict):
+            return list(body.get("items", body) or [])
+        return []
+
+    def list_reports(
+        self,
+        *,
+        entity_ids: Optional[list[int]] = None,
+        folder_id: Optional[str] = None,
+        include_public: bool = False,
+        include_descendants: bool = False,
+        workspace_slug: Optional[str] = None,
+    ) -> list[dict]:
+        """GET /reports — general report list with filters. Distinct from
+        reports_search (which targets mention chips on linkable subset).
+
+        entity_ids       narrow to reports tagged with all the given entities
+        folder_id        "uncategorized" or numeric id (personal only)
+        include_public   org-context cross-org public reports
+        include_descendants  org-context: include child boards
+        workspace_slug   X-Workspace-Slug override (rarely needed — the
+                         client sends the configured slug automatically)
+        """
+        params: dict[str, Any] = {}
+        if entity_ids:
+            params["entity_ids"] = list(entity_ids)
+        if folder_id is not None:
+            params["folder_id"] = folder_id
+        if include_public:
+            params["include_public"] = "true"
+        if include_descendants:
+            params["include_descendants"] = "true"
+        headers: Optional[dict[str, str]] = None
+        if workspace_slug is not None:
+            headers = {"X-Workspace-Slug": workspace_slug}
+        body = self._request("GET", "/reports", params=params or None,
+                             headers=headers)
+        if isinstance(body, list):
+            return body
+        if isinstance(body, dict):
+            return list(body.get("items", body) or [])
+        return []
+
+    def list_comments_inbox(self) -> dict:
+        """GET /comments/inbox — current user's comment inbox: unread / open
+        threads across all reports the actor can see. The shape (dict with
+        items, counts) is preserved as-is so the LLM sees the same envelope
+        the frontend reads."""
+        body = self.get("/comments/inbox")
+        return body if isinstance(body, dict) else {"items": body or []}
+
+    def list_entities_with_usage(
+        self,
+        *,
+        type_id: Optional[int] = None,
+        q: Optional[str] = None,
+        include_deprecated: bool = False,
+        limit: int = 50,
+    ) -> list[dict]:
+        """GET /entities?with_usage=true — list entities (taxonomy values)
+        with their `usage_count` populated. Useful for deprecation / merge
+        planning: "which entity has been used on 0 reports?"."""
+        params: dict[str, Any] = {"with_usage": "true", "limit": int(limit)}
+        if type_id is not None:
+            params["type_id"] = int(type_id)
+        if q is not None:
+            params["q"] = q
+        if include_deprecated:
+            params["include_deprecated"] = "true"
+        body = self.get("/entities", params=params)
+        if isinstance(body, list):
+            return body
+        if isinstance(body, dict):
+            return list(body.get("items", body) or [])
+        return []
+
+    def list_workspace_members(
+        self,
+        workspace_slug: str,
+        *,
+        include_inherited: bool = False,
+    ) -> list[dict]:
+        """GET /workspaces/{slug}/members — board members + roles.
+
+        Useful for the LLM to answer "who can edit this board?" / "who is
+        the manager?" before recommending a mount edit-policy. The members
+        route is on its own /workspaces/{slug}/members router.
+        """
+        params: dict[str, Any] = {}
+        if include_inherited:
+            params["include_inherited"] = "true"
+        body = self.get(f"/workspaces/{workspace_slug}/members",
+                        params=params or None)
+        if isinstance(body, list):
+            return body
+        if isinstance(body, dict):
+            return list(body.get("items", body) or [])
+        return []
+
     def trash_report(self, report_id: int) -> dict:
         """POST /reports/{report_id}/trash — move to trash (soft delete).
 

@@ -226,6 +226,12 @@ def _build_fake_client() -> MagicMock:
     m.fetch_entities.return_value = []
     m.list_widget_relations.return_value = []
     m.list_ref_categories.return_value = []
+    # v0.12.0 — high-value read surface
+    m.list_composites_by_report.return_value = []
+    m.list_reports.return_value = []
+    m.list_comments_inbox.return_value = {"items": [], "unread": 0}
+    m.list_entities_with_usage.return_value = []
+    m.list_workspace_members.return_value = []
     # v0.10.0 — soft delete + takedown
     m.trash_report.return_value = {"id": 1, "deleted_at": "2026-06-09T22:00:00Z"}
     m.restore_report.return_value = {"id": 1, "deleted_at": None}
@@ -352,6 +358,12 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "entities_list": {"q": "HFP"},
     "widget_relations_list": {},
     "widget_ref_categories_list": {},
+    # v0.12.0 — high-value read surface
+    "composites_by_report": {"report_id": 1},
+    "reports_list": {},
+    "comments_inbox_list": {},
+    "entities_usage_list": {},
+    "workspace_members_list": {"workspace_slug": "dx"},
     # v0.11.0 — content-aware read surface
     "report_outline": {"report_id": 1},
     "page_show_content": {"report_id": 1, "page_index": 0},
