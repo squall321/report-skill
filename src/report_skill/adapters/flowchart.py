@@ -19,6 +19,11 @@ class FlowchartAdapter(WidgetAdapter):
         if isinstance(raw, dict):
             if "caption" in raw:
                 out["caption"] = truncate(str(raw["caption"]), 200)
+            # v0.9.2 — RA defcb74 caption color tokens
+            if isinstance(raw.get("caption_color"), str):
+                out["caption_color"] = raw["caption_color"]
+            if isinstance(raw.get("caption_html"), str):
+                out["caption_html"] = raw["caption_html"][:2000]
             if "orientation" in raw:
                 o = nearest_enum(raw["orientation"], _ORIENTATION)
                 if o is not None:

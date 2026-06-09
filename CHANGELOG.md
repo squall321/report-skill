@@ -1,5 +1,44 @@
 ﻿# Changelog
 
+## 0.9.2 — 2026-06-09
+
+Patch — closes the v0.9.1 coverage gap. v0.9.1 patched 24 widget adapters
+that follow the `_PASSTHROUGH` tuple pattern but missed 8 adapters with
+inline normalize() implementations: attachment, equation, flowchart,
+key_value, quadrant, raci_matrix, rich_text, video. All 8 widgets accept
+`caption_color` + `caption_html` per RA defcb74; v0.9.2 wires them through.
+
+Fixed (high) — 8 remaining adapters caption_color/caption_html passthrough:
+
+- `attachment.py` normalize() dict branch — caption color tokens after caption.
+- `equation.py` normalize() dict branch — caption color tokens after caption.
+- `flowchart.py` normalize() dict branch — caption color tokens after caption.
+- `key_value.py` normalize() items-array path — caption color tokens after caption.
+- `quadrant.py` normalize() dict branch — caption color tokens after caption.
+- `raci_matrix.py` normalize() dict branch — caption color tokens after caption.
+- `video.py` normalize() dict branch — caption color tokens after caption.
+- `rich_text.py` normalize() dict branch — caption color tokens after caption_skip_autofill.
+
+Each follows the same shape:
+
+```python
+if isinstance(raw.get("caption_color"), str):
+    out["caption_color"] = raw["caption_color"]
+if isinstance(raw.get("caption_html"), str):
+    out["caption_html"] = raw["caption_html"][:2000]
+```
+
+Coverage check now passes — all 32 widget adapters that RA defcb74 added
+caption_color to are wired in report-skill.
+
+Verified:
+
+- pytest 459 passed, 5 skipped (no failures).
+- MCP `_DISPATCH` count = 76 (unchanged — patch only).
+- `grep -l caption_color src/report_skill/adapters/*.py | wc -l` → 32.
+  RA defcb74 affected 32 widgets; report-skill now covers all 32.
+- `report-skill --version` reports 0.9.2.
+
 ## 0.9.1 — 2026-06-09
 
 Patch — closes the v0.9.0 audit gap: defcb74 added `caption_color` /

@@ -62,6 +62,11 @@ class AttachmentAdapter(WidgetAdapter):
                 )
             if isinstance(raw.get("caption"), str):
                 out["caption"] = truncate(raw["caption"], 200)
+            # v0.9.2 — RA defcb74 caption color tokens
+            if isinstance(raw.get("caption_color"), str):
+                out["caption_color"] = raw["caption_color"]
+            if isinstance(raw.get("caption_html"), str):
+                out["caption_html"] = raw["caption_html"][:2000]
             if isinstance(raw.get("max_count"), int):
                 out["max_count"] = raw["max_count"]
             return out

@@ -281,6 +281,11 @@ class RichTextAdapter(WidgetAdapter):
             # caption isn't silently overwritten by the backend's autofill.
             if "caption_skip_autofill" in raw:
                 out["caption_skip_autofill"] = bool(raw["caption_skip_autofill"])
+            # v0.9.2 — RA defcb74 caption color tokens
+            if isinstance(raw.get("caption_color"), str):
+                out["caption_color"] = raw["caption_color"]
+            if isinstance(raw.get("caption_html"), str):
+                out["caption_html"] = raw["caption_html"][:2000]
             if not out:
                 import json as _json
                 out["markdown"] = _json.dumps(raw, ensure_ascii=False, indent=2)

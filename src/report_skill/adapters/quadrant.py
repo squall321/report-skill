@@ -34,6 +34,11 @@ class QuadrantAdapter(WidgetAdapter):
 
         if "caption" in raw:
             out["caption"] = truncate(str(raw["caption"]), 200)
+        # v0.9.2 — RA defcb74 caption color tokens
+        if isinstance(raw.get("caption_color"), str):
+            out["caption_color"] = raw["caption_color"]
+        if isinstance(raw.get("caption_html"), str):
+            out["caption_html"] = raw["caption_html"][:2000]
 
         # Pre-shaped passthrough
         if "plot_items" in raw and isinstance(raw["plot_items"], list):
