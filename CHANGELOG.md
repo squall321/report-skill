@@ -1,5 +1,75 @@
 ﻿# Changelog
 
+## 0.10.2 — 2026-06-10
+
+Patch — closes 6 leftover gaps the prior v0.10.0/v0.10.1 sweeps missed,
+caught by a single exhaustive 21-layer audit run.
+
+Fixed (high) — comparison adapter `note_color` / `note_html` passthrough:
+
+- `comparison.py` `_PASSTHROUGH_SIMPLE` gains `note`, `note_color`, `note_html`
+  — the v0.9.1/v0.9.2 caption-color sweep covered every adapter for caption
+  fields but missed the comparison note siblings (table + image were the only
+  ones that got note passthrough then). RA registry has long advertised them
+  so the adapter was silently dropping any color/html note the user picked.
+
+Fixed (high) — `TakedownOwnerForbiddenError` + detection + mapping:
+
+- New typed exception `TakedownOwnerForbiddenError` in `client.py`. Catches
+  RA 403 `"본인 보고서만 게시취소를 요청할 수 있습니다."` (a non-owner trying
+  to submit a takedown request on someone else's report). Surfaces
+  `{error: "takedown_owner_forbidden", reason, report_id}`.
+- Defensive import added to `mcp_server.py` and the class registered in
+  `_build_typed_error_map()` so the call_tool envelope reaches the LLM.
+- The v0.10.1 audit found 6/7 new RA error strings covered — this catches
+  the 7th, completing typed-exception coverage for the soft-delete + takedown
+  surface.
+
+Fixed (high) — CLI typed-exception handlers for the 6 v0.10.0 write commands:
+
+- `report trash` / `report restore` — catch `TrashRestoreForbiddenError`
+  before generic `ApiError` and emit `[trash_restore_forbidden]` with a
+  parenthetical reminder that only owner/sys-admin may act.
+- `report takedown-request` — catch `TakedownOwnerForbiddenError` (v0.10.2).
+- `tools takedown-approve` / `tools takedown-reject` — catch
+  `TakedownAlreadyProcessedError` (do-not-retry guidance) and
+  `TakedownManagerForbiddenError` (manager-only reminder).
+- Exit code 3 distinguishes typed-forbidden from generic HTTP error (exit 2),
+  matching the convention established for `shares` commands in v0.8.3.
+- Without this v0.10.1's typed envelopes only reached the MCP surface — CLI
+  users still saw opaque `ApiError` text.
+
+Fixed (high) — `deleted_at` surfaced on `_do_report_show`:
+
+- `mcp_server.py` `_do_report_show` summary projection now includes
+  `deleted_at` so the LLM can detect a trashed report BEFORE issuing a
+  write that would otherwise raise `TrashRestoreForbiddenError` (non-owner)
+  or fail silently because writes on a trashed report are ill-defined.
+
+Fixed (med) — SKILL.md error-code table rows for v0.10.x:
+
+- 4 new rows added to the typed-error reference table near line 879:
+  `trash_restore_forbidden`, `takedown_owner_forbidden`,
+  `takedown_manager_forbidden`, `takedown_already_processed`. Each has the
+  HTTP code, meaning, and "how the LLM should react" guidance matching the
+  rest of the table.
+
+Tests — pytest 469 → 470 (+1) plus 1 expanded:
+
+- `tests/test_authorlocked_mapping.py` gains
+  `test_build_typed_error_classifies_takedown_owner_forbidden` detection test.
+- `test_typed_error_map_includes_v010_classes` expanded to assert
+  `takedown_owner_forbidden` is also in `_TYPED_ERROR_MAP`. The parity lock
+  now covers all 4 v0.10.x typed codes — so the v0.8.1 omission pattern
+  ("client receives but MCP doesn't") cannot recur for this surface either.
+
+Verified:
+
+- pytest 470 passed, 5 skipped (no failures).
+- MCP `_DISPATCH` count = 82 (unchanged — patch only).
+- 4 typed-error map codes (trash + 3 takedown) confirmed by test.
+- `report-skill --version` reports 0.10.2.
+
 ## 0.10.1 — 2026-06-10
 
 Patch — closes the v0.10.0 audit gap: 6 new MCP tools shipped but the

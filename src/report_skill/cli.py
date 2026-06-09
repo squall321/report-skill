@@ -42,6 +42,10 @@ from report_skill.client import (
     ReportArchiveClient,
     RevisionMismatchError,
     ShareSetupForbiddenError,
+    TakedownAlreadyProcessedError,
+    TakedownManagerForbiddenError,
+    TakedownOwnerForbiddenError,
+    TrashRestoreForbiddenError,
 )
 from report_skill.config import settings
 
@@ -2307,6 +2311,10 @@ def report_trash_cmd(report_id: int = typer.Argument(..., help="report id")):
     with ReportArchiveClient() as c:
         try:
             row = c.trash_report(report_id)
+        except TrashRestoreForbiddenError as e:
+            console.print(f"[red][trash_restore_forbidden][/red] {e}  "
+                          "(only the report owner / sys admin may trash this report)")
+            raise typer.Exit(3)
         except ApiError as e:
             console.print(f"[red]trash failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -2319,6 +2327,10 @@ def report_restore_cmd(report_id: int = typer.Argument(..., help="report id")):
     with ReportArchiveClient() as c:
         try:
             row = c.restore_report(report_id)
+        except TrashRestoreForbiddenError as e:
+            console.print(f"[red][trash_restore_forbidden][/red] {e}  "
+                          "(only the report owner / sys admin may restore this report)")
+            raise typer.Exit(3)
         except ApiError as e:
             console.print(f"[red]restore failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -2343,6 +2355,10 @@ def report_takedown_request_cmd(
             row = c.request_report_takedown(
                 report_id, workspace_slug=workspace, reason=reason,
             )
+        except TakedownOwnerForbiddenError as e:
+            console.print(f"[red][takedown_owner_forbidden][/red] {e}  "
+                          "(only the report owner may submit a takedown request)")
+            raise typer.Exit(3)
         except ApiError as e:
             console.print(f"[red]takedown-request failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -2372,6 +2388,14 @@ def tools_takedown_approve(request_id: int = typer.Argument(..., help="takedown 
     with ReportArchiveClient() as c:
         try:
             row = c.approve_takedown_request(request_id)
+        except TakedownAlreadyProcessedError as e:
+            console.print(f"[red][takedown_already_processed][/red] {e}  "
+                          "(this request was already approved / rejected — do not retry)")
+            raise typer.Exit(3)
+        except TakedownManagerForbiddenError as e:
+            console.print(f"[red][takedown_manager_forbidden][/red] {e}  "
+                          "(only the target board's manager / sys admin may approve)")
+            raise typer.Exit(3)
         except ApiError as e:
             console.print(f"[red]takedown-approve failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
@@ -2388,6 +2412,14 @@ def tools_takedown_reject(
     with ReportArchiveClient() as c:
         try:
             row = c.reject_takedown_request(request_id, reason=reason)
+        except TakedownAlreadyProcessedError as e:
+            console.print(f"[red][takedown_already_processed][/red] {e}  "
+                          "(this request was already approved / rejected — do not retry)")
+            raise typer.Exit(3)
+        except TakedownManagerForbiddenError as e:
+            console.print(f"[red][takedown_manager_forbidden][/red] {e}  "
+                          "(only the target board's manager / sys admin may reject)")
+            raise typer.Exit(3)
         except ApiError as e:
             console.print(f"[red]takedown-reject failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)

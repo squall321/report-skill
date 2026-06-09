@@ -37,6 +37,7 @@ from report_skill.client import (
     ShareSetupForbiddenError,
     TakedownAlreadyProcessedError,
     TakedownManagerForbiddenError,
+    TakedownOwnerForbiddenError,
     TrashRestoreForbiddenError,
 )
 
@@ -453,15 +454,33 @@ def test_build_typed_error_classifies_takedown_already_processed() -> None:
     assert err.code == "takedown_already_processed"
 
 
+def test_build_typed_error_classifies_takedown_owner_forbidden() -> None:
+    """v0.10.2 — 403 + Korean takedown-owner gate → TakedownOwnerForbiddenError."""
+    msg = "본인 보고서만 게시취소를 요청할 수 있습니다."
+    body = {"success": False, "message": msg, "errors": None}
+    err = ReportArchiveClient._build_typed_error(
+        status_code=403, message=msg,
+        path="/reports/9/takedown-requests", body=body,
+    )
+    assert isinstance(err, TakedownOwnerForbiddenError), (
+        f"takedown owner gate must map to TakedownOwnerForbiddenError; "
+        f"got {type(err).__name__ if err else 'None'}"
+    )
+    assert err.code == "takedown_owner_forbidden"
+    assert err.report_id == 9  # extracted from path
+
+
 def test_typed_error_map_includes_v010_classes(monkeypatch) -> None:
-    """v0.10.1 — _TYPED_ERROR_MAP must include the 3 new soft-delete + takedown
-    subclasses so the LLM receives structured envelopes instead of opaque ApiError."""
+    """v0.10.1 + v0.10.2 — _TYPED_ERROR_MAP must include the 4 new soft-delete +
+    takedown subclasses so the LLM receives structured envelopes instead of
+    opaque ApiError."""
     table = mcp_server._build_typed_error_map()
     codes = [code for (_cls, code, _) in table]
     for expected in (
         "trash_restore_forbidden",
         "takedown_manager_forbidden",
         "takedown_already_processed",
+        "takedown_owner_forbidden",
     ):
         assert expected in codes, (
             f"{expected} missing from _TYPED_ERROR_MAP: {codes}"

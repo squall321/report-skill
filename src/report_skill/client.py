@@ -213,6 +213,21 @@ class TakedownManagerForbiddenError(ApiError):
         self.code = "takedown_manager_forbidden"
 
 
+class TakedownOwnerForbiddenError(ApiError):
+    """Raised when a non-owner tries to submit a takedown request on a report
+    they do not own (403). RA v0.10.0 / 3e92860.
+
+    Backend message: "본인 보고서만 게시취소를 요청할 수 있습니다.".
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 report_id: Optional[int] = None, status_code: int = 403):
+        super().__init__(message or "takedown_owner_forbidden",
+                         status_code=status_code, payload=payload)
+        self.code = "takedown_owner_forbidden"
+        self.report_id = report_id
+
+
 class TakedownAlreadyProcessedError(ApiError):
     """Raised when trying to approve/reject a takedown request that already
     settled (already approved / rejected / withdrawn). RA v0.10.0 / 3e92860.
@@ -1354,6 +1369,12 @@ class ReportArchiveClient:
                     or message.startswith("이 게시판의 게시취소 요청을 처리할 권한")):
                 return TakedownManagerForbiddenError(
                     message, payload=body, status_code=403
+                )
+            if message.startswith("본인 보고서만 게시취소"):
+                return TakedownOwnerForbiddenError(
+                    message, payload=body,
+                    report_id=cls._extract_report_id(path),
+                    status_code=403,
                 )
             if (message.startswith("이 보고서를 삭제할 권한")
                     or message.startswith("이 보고서를 복구할 권한")):

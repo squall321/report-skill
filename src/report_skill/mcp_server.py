@@ -104,11 +104,13 @@ try:
     from report_skill.client import (
         TakedownAlreadyProcessedError,
         TakedownManagerForbiddenError,
+        TakedownOwnerForbiddenError,
         TrashRestoreForbiddenError,
     )
 except ImportError:  # pragma: no cover
     TakedownAlreadyProcessedError = None  # type: ignore[assignment,misc]
     TakedownManagerForbiddenError = None  # type: ignore[assignment,misc]
+    TakedownOwnerForbiddenError = None  # type: ignore[assignment,misc]
     TrashRestoreForbiddenError = None  # type: ignore[assignment,misc]
 
 SERVER_NAME = "report-skill"
@@ -1273,6 +1275,11 @@ def _do_report_show(args: dict) -> Any:
         "revision": report.get("revision"),
         "report_date": report.get("report_date"),
         "closed_at": report.get("closed_at"),
+        # v0.10.2 — RA dc8bd45 soft-delete. Surface deleted_at so the LLM
+        # can detect a trashed report before issuing a write that would
+        # otherwise return TrashRestoreForbiddenError (non-owner) or fail
+        # silently because writes on a trashed report are ill-defined.
+        "deleted_at": report.get("deleted_at"),
         "tags": report.get("tags"),
         "page_count": len(report.get("pages") or []),
         # v0.5.1 — surface author-lock so callers can decide whether a
@@ -2772,6 +2779,7 @@ def _build_typed_error_map() -> list[tuple[type, str, bool]]:
         (TrashRestoreForbiddenError, "trash_restore_forbidden", True),
         (TakedownManagerForbiddenError, "takedown_manager_forbidden", False),
         (TakedownAlreadyProcessedError, "takedown_already_processed", False),
+        (TakedownOwnerForbiddenError, "takedown_owner_forbidden", True),
         # 409 — reports lock + revision (errors[0].code)
         (LockHeldByOtherError, "lock_held_by_other", True),
         (LockNotHeldError, "lock_not_held", True),
