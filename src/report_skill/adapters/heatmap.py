@@ -11,6 +11,8 @@ from report_skill.repair import coerce_number, truncate
 _PASSTHROUGH = (
     "caption", "caption_skip_autofill", "colorscale", "reverse_scale",
     "z_min", "z_max", "x_axis_title", "y_axis_title", "show_values",
+    # v0.9.1 — RA defcb74 caption color tokens
+    "caption_color", "caption_html",
 )
 
 

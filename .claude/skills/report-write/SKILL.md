@@ -936,7 +936,11 @@ Widget relations:
 
 ReportArchive widget surface gained 3 cross-cutting capabilities:
 
-**Cell color tokens — table / comparison (RA c2d9663).** Both `table` and `comparison` widget `content` now accepts an optional `cell_styles` object: a side-table keyed by `"rowKey::columnKey"` (table) / `"rowKey::caseKey"` (comparison), each entry `{bg?, fg?}` referencing a color-token enum. Cell data itself is untouched. Adapters pass `cell_styles` through unchanged; the server validates per `_CELL_STYLES_SCHEMA` so unknown keys are rejected. Example: `{"cells": [...], "cell_styles": {"r0::c1": {"bg": "amber-50", "fg": "ink-700"}}}`.
+**Cell color tokens — table / comparison (RA c2d9663).** Both `table` and `comparison` widget `content` now accepts an optional `cell_styles` object: a side-table keyed by `"rowKey::columnKey"` (table) / `"rowKey::caseKey"` (comparison), each entry `{bg?, fg?}` referencing a color-token enum. Cell data itself is untouched. Adapters pass `cell_styles` through unchanged; the server validates per `_CELL_STYLES_SCHEMA` so unknown keys are rejected. Example: `{"rows": [...], "cell_styles": {"r0::c1": {"bg": "amber", "fg": "ink"}}}`.
+
+**Color-token enum (RA c2d9663 + defcb74).** Valid tokens (use these *exactly*; server rejects unknown values): `ink`, `gray`, `slate`, `red`, `orange`, `amber`, `yellow`, `lime`, `green`, `teal`, `cyan`, `sky`, `blue`, `indigo`, `violet`, `purple`, `pink`, `rose` (18 tokens, dark-mode adaptive). The same enum drives `cell_styles.{bg,fg}` (table/comparison), `caption_color`, `note_color`, and the `color` mark inside `rich_text` body content. No shading suffixes (`amber-50`, `ink-700`) — base tokens only.
+
+**Caption + note color (RA defcb74).** Almost every widget's `content` now accepts `caption_color` (color-token enum above) and `caption_html` (HTML string, ≤2000 chars). `table` and `image` also accept `note_color` + `note_html` (≤4000 chars). Adapter passthrough is wired across all 24 affected widgets — round-trip safe. Use `caption_html` instead of plain `caption` when you need inline color spans inside the caption.
 
 **#widget cross-references in rich_text (RA 074233d).** The body now lets writers reference other blocks with `#` — "그림 3", "표 2" — numbered live at render time per category, not stored. New tool:
 
@@ -995,9 +999,9 @@ Service-account quirk: `report-skill` typically authenticates as a service accou
 
 ---
 
-## MCP tool inventory (v0.8.x)
+## MCP tool inventory (v0.9.x)
 
-The MCP server now exposes **75 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the v0.5.0 / v0.6.0 / v0.7.0 inventory sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
+The MCP server now exposes **76 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the v0.5.0 / v0.6.0 / v0.7.0 inventory sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
 
 ```powershell
 report-skill-mcp --help   # or:

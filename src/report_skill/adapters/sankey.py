@@ -13,6 +13,8 @@ from report_skill.repair import coerce_number, truncate
 _PASSTHROUGH = (
     "caption", "caption_skip_autofill", "arrangement", "node_pad",
     "node_thickness", "unit",
+    # v0.9.1 — RA defcb74 caption color tokens
+    "caption_color", "caption_html",
 )
 
 

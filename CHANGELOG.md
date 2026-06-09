@@ -1,5 +1,55 @@
 ﻿# Changelog
 
+## 0.9.1 — 2026-06-09
+
+Patch — closes the v0.9.0 audit gap: defcb74 added `caption_color` /
+`caption_html` (and `note_color` / `note_html` on `table` + `image`) to nearly
+every widget content schema, but v0.9.0 only wired `cell_styles` on table /
+comparison and left these new caption / note color fields silently dropped
+across 24 widget adapters. Also corrects 3 SKILL.md inaccuracies the audit
+caught.
+
+Fixed (high) — caption / note color tokens reach the server:
+
+- 24 adapter `_PASSTHROUGH` tuples gained `caption_color` + `caption_html`:
+  box, bulleted_list, cad_3d, chart, comparison, contour, density, heatmap,
+  html_embed, image, milestone, mind_map, network, packing, pie,
+  progress_bar, radar, sankey, scatter, scatter3d, table, treemap, tree,
+  waffle.
+- `table` + `image` adapters additionally gained `note_color` + `note_html`
+  (the only two widgets whose registry content also supports note color
+  tokens).
+- Round-trip safe: any caption / note color the user picks in the UI now
+  survives a revise round-trip instead of being silently stripped on the
+  next normalize.
+
+Fixed (med) — SKILL.md inaccuracies:
+
+- `cell_styles` example payload was `{"cells": [...]}` (wrong shape — table /
+  comparison content uses `"rows"`, not `"cells"`). Corrected to `{"rows":
+  [...], "cell_styles": {"r0::c1": {"bg": "amber", "fg": "ink"}}}`.
+- Tool inventory header was still `MCP tool inventory (v0.8.x)` with
+  `75 tools` after v0.9.0 shipped at 76. Updated to `(v0.9.x)` and 76.
+- New section under the v0.9.0 widget styling note: the full 18 color-token
+  enum (`ink / gray / slate / red / orange / amber / yellow / lime / green /
+  teal / cyan / sky / blue / indigo / violet / purple / pink / rose`) is now
+  listed verbatim with a "no shading suffixes" warning — `amber-50` /
+  `ink-700` would be rejected by the server. The same enum drives
+  `cell_styles.{bg,fg}`, `caption_color`, `note_color`, and the rich_text
+  body's `color` mark.
+- New paragraph explaining `caption_color` + `caption_html` are now widely
+  available across the 24 affected widgets and that adapter passthrough is
+  wired end-to-end.
+
+Verified:
+
+- pytest 459 passed, 5 skipped (no failures).
+- MCP `_DISPATCH` count = 76 (unchanged — patch only, no new tools).
+- All 24 adapter `_PASSTHROUGH` tuples include `caption_color` +
+  `caption_html`; table + image include `note_color` + `note_html`.
+- `report-skill --version` reports 0.9.1.
+- Standalone install migrated to 0.9.1; stale 0.9.0 dist-info removed.
+
 ## 0.9.0 — 2026-06-09
 
 Minor — covers 4 newly landed ReportArchive features on the widget surface:

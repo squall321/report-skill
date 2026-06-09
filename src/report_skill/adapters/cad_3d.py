@@ -14,6 +14,8 @@ from report_skill.repair import truncate
 _PASSTHROUGH = (
     "caption_skip_autofill",
     "annotations",
+    # v0.9.1 — RA defcb74 caption color tokens
+    "caption_color", "caption_html",
 )
 
 

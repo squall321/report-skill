@@ -10,6 +10,8 @@ _PASSTHROUGH = (
     "caption", "caption_skip_autofill", "unit", "x_axis_title", "y_axis_title",
     "bandwidth_mode", "bandwidth", "samples", "x_min", "x_max",
     "fill", "show_dots", "dot_opacity",
+    # v0.9.1 — RA defcb74 caption color tokens
+    "caption_color", "caption_html",
 )
 
 

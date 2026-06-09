@@ -7,7 +7,9 @@ from report_skill.adapters.base import NormalizeError, WidgetAdapter
 from report_skill.repair import coerce_iso_date, nearest_enum, truncate
 
 _STATUS_ENUM = ["pending", "done", "delayed"]
-_PASSTHROUGH = ("caption", "start_date", "end_date", "annotations")
+_PASSTHROUGH = ("caption", "start_date", "end_date", "annotations",
+                # v0.9.1 — RA defcb74 caption color tokens
+                "caption_color", "caption_html")
 
 
 class MilestoneAdapter(WidgetAdapter):

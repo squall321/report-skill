@@ -14,6 +14,8 @@ _PASSTHROUGH = (
     "caption", "caption_skip_autofill", "directed", "layout", "node_shape",
     "show_labels", "show_edge_labels", "color_by_group", "node_size_by_value",
     "node_size_min", "node_size_max", "link_distance", "charge_strength",
+    # v0.9.1 — RA defcb74 caption color tokens
+    "caption_color", "caption_html",
 )
 _NODE_KEYS = ("id", "label", "group", "value", "color", "x", "y", "fixed")
 _EDGE_KEYS = ("source", "target", "weight", "label", "directed", "color")

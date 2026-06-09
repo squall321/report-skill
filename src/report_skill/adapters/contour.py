@@ -10,6 +10,8 @@ _PASSTHROUGH = (
     "caption", "caption_skip_autofill", "colorscale", "reverse_scale",
     "z_min", "z_max", "x_axis_title", "y_axis_title",
     "ncontours", "contours_coloring", "show_lines", "show_labels", "connect_gaps",
+    # v0.9.1 — RA defcb74 caption color tokens
+    "caption_color", "caption_html",
 )
 
 

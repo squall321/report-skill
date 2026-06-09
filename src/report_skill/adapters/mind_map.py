@@ -13,6 +13,8 @@ from report_skill.repair import truncate
 _PASSTHROUGH = (
     "caption", "caption_skip_autofill", "layout", "branch_style",
     "color_by_group", "show_root_emphasis",
+    # v0.9.1 — RA defcb74 caption color tokens
+    "caption_color", "caption_html",
 )
 _ROW_KEYS = ("label", "parent", "color")
 

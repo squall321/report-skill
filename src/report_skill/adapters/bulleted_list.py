@@ -5,7 +5,9 @@ from typing import Any
 from report_skill.adapters.base import NormalizeError, WidgetAdapter
 from report_skill.repair import strip_bullet
 
-_PASSTHROUGH = ("caption", "caption_skip_autofill")
+_PASSTHROUGH = ("caption", "caption_skip_autofill",
+                # v0.9.1 — RA defcb74 caption color tokens
+                "caption_color", "caption_html")
 
 
 class BulletedListAdapter(WidgetAdapter):

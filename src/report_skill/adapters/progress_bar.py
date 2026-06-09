@@ -10,6 +10,8 @@ _STATUS = {"pending", "in_progress", "done", "blocked"}
 
 _PASSTHROUGH = (
     "caption", "caption_skip_autofill", "default_max", "unit",
+    # v0.9.1 — RA defcb74 caption color tokens
+    "caption_color", "caption_html",
 )
 
 

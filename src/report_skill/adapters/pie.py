@@ -21,6 +21,8 @@ _PASSTHROUGH = (
     "text_position",
     "sort",
     "show_legend",
+    # v0.9.1 — RA defcb74 caption color tokens
+    "caption_color", "caption_html",
 )
 
 

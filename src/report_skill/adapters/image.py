@@ -19,6 +19,8 @@ _PASSTHROUGH = (
     "aspect_ratio",
     "max_count",
     "annotations",
+    # v0.9.1 — RA defcb74 caption + note color tokens
+    "caption_color", "caption_html", "note_color", "note_html",
 )
 
 

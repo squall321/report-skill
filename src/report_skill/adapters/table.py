@@ -131,6 +131,8 @@ _PASSTHROUGH = (
     # _CELL_STYLES_SCHEMA so unknown keys are rejected; we pass through dict
     # untouched and let the server reject anything malformed.
     "cell_styles",
+    # v0.9.1 — RA defcb74 caption + note color tokens
+    "caption_color", "caption_html", "note_color", "note_html",
 )
 
 

@@ -36,6 +36,8 @@ _PASSTHROUGH_SIMPLE = (
     # v0.9.0 — RA c2d9663 — per-cell color tokens. Side-table keyed by
     # "rowKey::caseKey" with {bg?, fg?} token enum.
     "cell_styles",
+    # v0.9.1 — RA defcb74 caption color tokens
+    "caption_color", "caption_html",
 )
 
 

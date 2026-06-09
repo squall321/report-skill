@@ -16,6 +16,8 @@ _PASSTHROUGH = (
     "x_axis_title", "y_axis_title",
     "x_min", "x_max", "y_min", "y_max",
     "annotations",
+    # v0.9.1 — RA defcb74 caption color tokens
+    "caption_color", "caption_html",
 )
 
 

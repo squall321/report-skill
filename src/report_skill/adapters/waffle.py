@@ -10,6 +10,8 @@ _PASSTHROUGH = (
     "caption", "caption_skip_autofill", "unit",
     "cols", "grid_rows", "shape", "fill_direction",
     "show_legend", "show_value_per_cell",
+    # v0.9.1 — RA defcb74 caption color tokens
+    "caption_color", "caption_html",
 )
 
 
