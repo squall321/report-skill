@@ -1,5 +1,87 @@
 ﻿# Changelog
 
+## 0.10.0 — 2026-06-09
+
+Minor — covers RA's 3-stage report-deletion redesign + takedown-request queue
++ per-char rich markup on heading / table / comparison cells. 6 new MCP tools
+(_DISPATCH 76 → 82), 3 adapter passthrough additions, fully backward-compatible.
+
+Added — 6 new MCP tools (and matching CLI commands):
+
+Soft delete (RA dc8bd45 + ff64778) — replaces ad-hoc DELETE:
+
+- `report_trash` — POST /api/reports/{id}/trash. Move to trash (soft delete).
+  Blocked while the report is mounted to any board; ask the user to unmount
+  or file a takedown request first.
+- `report_restore` — POST /api/reports/{id}/restore. Recover from trash.
+
+Takedown requests (RA 3e92860) — non-owner-mediated unmount queue:
+
+- `report_takedown_request` — POST /api/reports/{id}/takedown-requests.
+  Owner asks the board manager to unmount the report from a specific board
+  (workspace_slug + optional reason).
+- `takedowns_list` — GET /api/takedown-requests. Manager / sys-admin view.
+  Filter by workspace_slug + status (pending | approved | rejected).
+- `takedown_approve` — POST /api/takedown-requests/{id}/approve. Unmounts
+  and closes the request.
+- `takedown_reject` — POST /api/takedown-requests/{id}/reject. Leaves the
+  mount in place; reason surfaces to the requester.
+
+Added — adapter passthrough for new content fields:
+
+- `heading.py` `_PASSTHROUGH` gains `text_html` (RA a97d5b5). Plain `text`
+  is kept as the TOC/export title; `text_html` carries per-char color and
+  format (same sanitized HTML grammar as caption_html).
+- `table.py` `_PASSTHROUGH` gains `cell_html` (RA 7976ff7). Side-table
+  keyed by `"rowKey::columnKey"` (same key shape as cell_styles); values =
+  sanitized HTML per cell.
+- `comparison.py` `_PASSTHROUGH_SIMPLE` gains `cell_html` (RA d62af9d). Same
+  shape, keyed by `"rowKey::caseKey"`.
+
+Added — client wrappers (6 new sync methods, all with module-level INFO
+logging at write entry):
+
+- `client.trash_report(report_id)` / `restore_report(report_id)`.
+- `client.request_report_takedown(report_id, *, workspace_slug, reason=None)`.
+- `client.list_takedown_requests(*, workspace_slug=None, status=None)`.
+- `client.approve_takedown_request(request_id)`.
+- `client.reject_takedown_request(request_id, *, reason=None)`.
+
+CLI:
+
+- `report trash <id>` / `report restore <id>` / `report takedown-request <id>
+  --workspace SLUG [--reason TXT]`.
+- `tools takedowns-list [--workspace SLUG] [--status STATUS]`.
+- `tools takedown-approve <request-id>` / `tools takedown-reject <request-id>
+  [--reason TXT]`.
+
+Skipped — RA d7cdd4d (password recovery) covered in v0.9.0; RA bd7c418 is
+frontend-only DOCX export styling; RA workspace-navigation polish (6ecf4ee
+etc.) is pure frontend UX.
+
+SKILL.md:
+
+- New "v0.10.0 — soft delete + takedown queue + per-cell rich markup" section
+  documents the 6 new tools, the mount-blocked semantics on `report_trash`,
+  the takedown request → approve/reject lifecycle, and the heading
+  `text_html` + table/comparison `cell_html` passthrough.
+- Tool inventory header bumped to "MCP tool inventory (v0.10.x)" + 82 tools.
+
+Tests — pytest 459 → 465 (+6):
+
+- `tests/test_dispatch_parametrized.py` `_ARGS_BY_TOOL` gains 6 entries
+  + fake-client mock returns for the 6 new methods.
+- `tests/test_mcp_roundtrip.py::test_dispatch_count_is_82` +
+  `tests/test_widget_relations.py::test_dispatch_count_is_82` — renamed and
+  bumped 76 → 82 to lock the new surface size.
+
+Verified:
+
+- pytest 465 passed, 5 skipped (no failures).
+- MCP `_DISPATCH` count = 82.
+- All 6 new client methods importable.
+- `report-skill --version` reports 0.10.0.
+
 ## 0.9.2 — 2026-06-09
 
 Patch — closes the v0.9.1 coverage gap. v0.9.1 patched 24 widget adapters

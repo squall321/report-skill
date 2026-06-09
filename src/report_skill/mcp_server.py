@@ -754,6 +754,70 @@ TOOLS: list[Tool] = [
         ["report_id"],
     ),
 
+    # ---- v0.10.0 — soft delete (RA dc8bd45 + ff64778) ------------------- #
+    _tool(
+        "report_trash",
+        "Move a report to the trash (soft delete). POST /api/reports/{id}/trash. "
+        "Blocked while the report is mounted to any board — unmount first or "
+        "use a takedown request. Recoverable via report_restore.",
+        {"report_id": {"type": "integer"}},
+        ["report_id"],
+    ),
+    _tool(
+        "report_restore",
+        "Restore a report from the trash. POST /api/reports/{id}/restore. "
+        "Returns the report with deleted_at cleared.",
+        {"report_id": {"type": "integer"}},
+        ["report_id"],
+    ),
+
+    # ---- v0.10.0 — takedown requests (RA 3e92860) ----------------------- #
+    _tool(
+        "report_takedown_request",
+        "Submit a takedown request: ask the board manager to unmount this "
+        "report from the named workspace board. POST /api/reports/{id}/takedown-requests. "
+        "Use this when the report owner cannot unmount directly (manager edit-policy). "
+        "Reason is optional but recommended.",
+        {
+            "report_id": {"type": "integer"},
+            "workspace_slug": {"type": "string",
+                                "description": "target board slug to take down from"},
+            "reason": {"type": "string"},
+        },
+        ["report_id", "workspace_slug"],
+    ),
+    _tool(
+        "takedowns_list",
+        "List takedown requests (manager / sys admin view). GET /api/takedown-requests. "
+        "Filter by workspace_slug and/or status (pending|approved|rejected).",
+        {
+            "workspace_slug": {"type": "string"},
+            "status": {"type": "string",
+                        "enum": ["pending", "approved", "rejected"]},
+        },
+        [],
+    ),
+    _tool(
+        "takedown_approve",
+        "Approve a takedown request (manager / sys admin only). "
+        "POST /api/takedown-requests/{request_id}/approve. Unmounts the report "
+        "from the board and closes the request.",
+        {"request_id": {"type": "integer"}},
+        ["request_id"],
+    ),
+    _tool(
+        "takedown_reject",
+        "Reject a takedown request (manager / sys admin only). "
+        "POST /api/takedown-requests/{request_id}/reject. Leaves the report "
+        "mounted; surfaces the rejection back to the requester. Reason "
+        "optional but recommended.",
+        {
+            "request_id": {"type": "integer"},
+            "reason": {"type": "string"},
+        },
+        ["request_id"],
+    ),
+
     # ---- v0.5.0 — folders + mount config -------------------------------- #
     _tool(
         "folders_list",
@@ -2008,6 +2072,55 @@ def _do_widget_ref_categories_list(_args: dict) -> Any:
         return c.list_ref_categories()
 
 
+# ---- v0.10.0 — soft delete + takedown dispatchers --------------------- #
+def _do_report_trash(args: dict) -> Any:
+    rid = _int_arg(args, "report_id")
+    logger.info("report_trash id=%s", rid)
+    with ReportArchiveClient() as c:
+        return c.trash_report(rid)
+
+
+def _do_report_restore(args: dict) -> Any:
+    rid = _int_arg(args, "report_id")
+    logger.info("report_restore id=%s", rid)
+    with ReportArchiveClient() as c:
+        return c.restore_report(rid)
+
+
+def _do_report_takedown_request(args: dict) -> Any:
+    rid = _int_arg(args, "report_id")
+    slug = str(args["workspace_slug"])
+    logger.info("report_takedown_request id=%s slug=%s", rid, slug)
+    with ReportArchiveClient() as c:
+        return c.request_report_takedown(
+            rid, workspace_slug=slug, reason=args.get("reason"),
+        )
+
+
+def _do_takedowns_list(args: dict) -> Any:
+    with ReportArchiveClient() as c:
+        return c.list_takedown_requests(
+            workspace_slug=args.get("workspace_slug"),
+            status=args.get("status"),
+        )
+
+
+def _do_takedown_approve(args: dict) -> Any:
+    request_id = _int_arg(args, "request_id")
+    logger.info("takedown_approve id=%s", request_id)
+    with ReportArchiveClient() as c:
+        return c.approve_takedown_request(request_id)
+
+
+def _do_takedown_reject(args: dict) -> Any:
+    request_id = _int_arg(args, "request_id")
+    logger.info("takedown_reject id=%s", request_id)
+    with ReportArchiveClient() as c:
+        return c.reject_takedown_request(
+            request_id, reason=args.get("reason"),
+        )
+
+
 # ---- v0.8.0 grants dispatchers --------------------------------------- #
 def _do_content_shares_list(args: dict) -> Any:
     ct = str(args["content_type"])
@@ -2549,6 +2662,13 @@ _DISPATCH = {
     "widget_relations_list": _do_widget_relations_list,
     # v0.9.0 — RA 074233d
     "widget_ref_categories_list": _do_widget_ref_categories_list,
+    # v0.10.0 — RA dc8bd45 + ff64778 (soft delete) + 3e92860 (takedown queue)
+    "report_trash": _do_report_trash,
+    "report_restore": _do_report_restore,
+    "report_takedown_request": _do_report_takedown_request,
+    "takedowns_list": _do_takedowns_list,
+    "takedown_approve": _do_takedown_approve,
+    "takedown_reject": _do_takedown_reject,
     # v0.8.0 unified grants / sharing
     "content_shares_list": _do_content_shares_list,
     "content_share_add": _do_content_share_add,

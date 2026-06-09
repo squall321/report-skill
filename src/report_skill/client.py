@@ -492,6 +492,88 @@ class ReportArchiveClient:
             return list(body.get("items") or [])
         return list(body or []) if isinstance(body, list) else []
 
+    # ---- soft delete (v0.10.0 — RA dc8bd45 + ff64778) ----------------- #
+
+    def trash_report(self, report_id: int) -> dict:
+        """POST /reports/{report_id}/trash — move to trash (soft delete).
+
+        Returns the report with deleted_at set. Blocked while the report is
+        mounted to any board (RA ff64778 게시 중 차단 가드); restore from
+        trash via restore_report. Permanent purge happens only on a manual
+        admin action — the trash is recoverable.
+        """
+        logger.info("trash_report id=%s", report_id)
+        return self.post(f"/reports/{report_id}/trash", json={})
+
+    def restore_report(self, report_id: int) -> dict:
+        """POST /reports/{report_id}/restore — recover from trash."""
+        logger.info("restore_report id=%s", report_id)
+        return self.post(f"/reports/{report_id}/restore", json={})
+
+    # ---- takedown requests (v0.10.0 — RA 3e92860) --------------------- #
+    # Non-managers (the report owner) cannot unmount directly once a board
+    # manager has accepted the mount; they raise a takedown request instead.
+    # The board manager (or sys admin) approves or rejects it.
+
+    def request_report_takedown(
+        self,
+        report_id: int,
+        *,
+        workspace_slug: str,
+        reason: Optional[str] = None,
+    ) -> dict:
+        """POST /reports/{report_id}/takedown-requests — submit takedown request."""
+        logger.info(
+            "request_report_takedown id=%s slug=%s",
+            report_id, workspace_slug,
+        )
+        body: dict[str, Any] = {"workspace_slug": workspace_slug}
+        if reason is not None:
+            body["reason"] = reason
+        return self.post(
+            f"/reports/{report_id}/takedown-requests", json=body
+        )
+
+    def list_takedown_requests(
+        self,
+        *,
+        workspace_slug: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> list[dict]:
+        """GET /takedown-requests — manager / sys admin view of the queue."""
+        params: dict[str, Any] = {}
+        if workspace_slug is not None:
+            params["workspace_slug"] = workspace_slug
+        if status is not None:
+            params["status"] = status
+        body = self.get("/takedown-requests", params=params or None)
+        if isinstance(body, list):
+            return body
+        if isinstance(body, dict):
+            return list(body.get("items", body) or [])
+        return []
+
+    def approve_takedown_request(self, request_id: int) -> dict:
+        """POST /takedown-requests/{request_id}/approve — manager only.
+        Unmounts the report from the board and closes the request."""
+        logger.info("approve_takedown_request id=%s", request_id)
+        return self.post(
+            f"/takedown-requests/{request_id}/approve", json={}
+        )
+
+    def reject_takedown_request(
+        self, request_id: int, *, reason: Optional[str] = None
+    ) -> dict:
+        """POST /takedown-requests/{request_id}/reject — manager only.
+        Leaves the report mounted; surfaces the rejection back to the requester."""
+        logger.info("reject_takedown_request id=%s", request_id)
+        body: dict[str, Any] = {}
+        if reason is not None:
+            body["reason"] = reason
+        return self.post(
+            f"/takedown-requests/{request_id}/reject", json=body
+        )
+
     def publish_report(self, report_id: int) -> dict:
         """POST /reports/{report_id}/publish — flip phase to finalized.
 

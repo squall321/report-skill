@@ -999,9 +999,35 @@ Service-account quirk: `report-skill` typically authenticates as a service accou
 
 ---
 
-## MCP tool inventory (v0.9.x)
+## v0.10.0 — soft delete + takedown queue + per-cell rich markup
 
-The MCP server now exposes **76 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the v0.5.0 / v0.6.0 / v0.7.0 inventory sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
+ReportArchive shipped a 3-stage report-deletion redesign and a takedown-request queue so non-managers can ask a board manager to unmount a report they own. `report-skill` exposes the full surface as 6 new MCP tools (`_DISPATCH` 76 → 82).
+
+**Soft delete (RA dc8bd45 + ff64778).** `DELETE /api/reports/{id}` is no longer the right way to delete a report. Use:
+
+- `report_trash` — `POST /api/reports/{id}/trash`. Move to trash (soft delete). Blocked while the report is mounted to any board; surface the error and ask the user to unmount (or submit a takedown request) first.
+- `report_restore` — `POST /api/reports/{id}/restore`. Recover from trash. Returns the report with `deleted_at` cleared.
+
+**Takedown requests (RA 3e92860).** When a board's mount edit-policy puts the manager (not the owner) in control of unmounting, the owner can no longer pull their own report off that board. The takedown queue is the recovery path:
+
+- `report_takedown_request` — `POST /api/reports/{id}/takedown-requests`. Owner submits a request naming the board (`workspace_slug`) and optionally a `reason`.
+- `takedowns_list` — `GET /api/takedown-requests`. Manager / sys-admin view. Filter by `workspace_slug` + `status` (`pending` | `approved` | `rejected`).
+- `takedown_approve` — `POST /api/takedown-requests/{id}/approve`. Unmounts the report from the board and closes the request.
+- `takedown_reject` — `POST /api/takedown-requests/{id}/reject`. Leaves the mount in place; the `reason` surfaces back to the requester.
+
+**Per-cell + per-char rich markup (RA a97d5b5 / 7976ff7 / d62af9d).** Three text-bearing widgets gained a sibling rich-markup field that complements the plain text:
+
+- `heading.text_html` — plain `text` is kept as the TOC/export title; `text_html` carries per-char color + format (same sanitized HTML grammar as caption_html). Adapter pass-through wired.
+- `table.cell_html` — side-table keyed by `"rowKey::columnKey"` (same key as `cell_styles`), values = sanitized HTML per cell. Lets the LLM author rich content like "**critical** path" inside a single cell without losing it on the next revise.
+- `comparison.cell_html` — same idea, keyed by `"rowKey::caseKey"`.
+
+All three pass through the adapter unchanged; the server validates via `_CELL_HTML_SCHEMA`.
+
+---
+
+## MCP tool inventory (v0.10.x)
+
+The MCP server now exposes **82 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the v0.5.0 / v0.6.0 / v0.7.0 inventory sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
 
 ```powershell
 report-skill-mcp --help   # or:

@@ -31,7 +31,7 @@ LLM은 `SKILL.md`에서 "무엇을 할 수 있고 언제 어떤 순서로 호출
         │  (LLM이 SKILL.md를 본 뒤 도구 선택)
         │
 src/report_skill/
-├── mcp_server.py        MCP stdio 서버 + _DISPATCH 66 tools
+├── mcp_server.py        MCP stdio 서버 + _DISPATCH 76 tools (v0.9.x)
 ├── cli.py               Typer sub-apps (report / tools / mounts / composites / templates …)
 ├── client.py            httpx 동기 래퍼 — REST 호출 1:1
 │

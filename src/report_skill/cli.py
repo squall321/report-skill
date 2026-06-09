@@ -2300,6 +2300,100 @@ def tools_widget_relations_list():
         console.print_json(json.dumps(c.list_widget_relations(), ensure_ascii=False))
 
 
+@report_app.command("trash")
+def report_trash_cmd(report_id: int = typer.Argument(..., help="report id")):
+    """POST /reports/{id}/trash — move report to the trash (soft delete).
+    Blocked while the report is mounted to any board (v0.10.0+, RA ff64778)."""
+    with ReportArchiveClient() as c:
+        try:
+            row = c.trash_report(report_id)
+        except ApiError as e:
+            console.print(f"[red]trash failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@report_app.command("restore")
+def report_restore_cmd(report_id: int = typer.Argument(..., help="report id")):
+    """POST /reports/{id}/restore — recover a report from the trash."""
+    with ReportArchiveClient() as c:
+        try:
+            row = c.restore_report(report_id)
+        except ApiError as e:
+            console.print(f"[red]restore failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@report_app.command("takedown-request")
+def report_takedown_request_cmd(
+    report_id: int = typer.Argument(..., help="report id"),
+    workspace: str = typer.Option(..., "--workspace", "--workspace-slug",
+                                   help="target board slug to take down from"),
+    reason: Optional[str] = typer.Option(None, "--reason",
+                                          help="why the takedown is requested"),
+):
+    """POST /reports/{id}/takedown-requests — ask the board manager to unmount.
+
+    Use this when the owner cannot unmount directly (manager edit-policy).
+    The board manager (or sys admin) then approves or rejects via the
+    takedowns sub-app."""
+    with ReportArchiveClient() as c:
+        try:
+            row = c.request_report_takedown(
+                report_id, workspace_slug=workspace, reason=reason,
+            )
+        except ApiError as e:
+            console.print(f"[red]takedown-request failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@tools_app.command("takedowns-list")
+def tools_takedowns_list(
+    workspace: Optional[str] = typer.Option(None, "--workspace", "--workspace-slug",
+                                             help="filter by board slug"),
+    status: Optional[str] = typer.Option(None, "--status",
+                                          help="pending | approved | rejected"),
+):
+    """GET /takedown-requests — manager / sys admin view of the queue."""
+    with ReportArchiveClient() as c:
+        try:
+            rows = c.list_takedown_requests(workspace_slug=workspace, status=status)
+        except ApiError as e:
+            console.print(f"[red]takedowns-list failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@tools_app.command("takedown-approve")
+def tools_takedown_approve(request_id: int = typer.Argument(..., help="takedown request id")):
+    """POST /takedown-requests/{id}/approve — unmount and close the request."""
+    with ReportArchiveClient() as c:
+        try:
+            row = c.approve_takedown_request(request_id)
+        except ApiError as e:
+            console.print(f"[red]takedown-approve failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@tools_app.command("takedown-reject")
+def tools_takedown_reject(
+    request_id: int = typer.Argument(..., help="takedown request id"),
+    reason: Optional[str] = typer.Option(None, "--reason",
+                                          help="explanation surfaced to the requester"),
+):
+    """POST /takedown-requests/{id}/reject — leave the report mounted."""
+    with ReportArchiveClient() as c:
+        try:
+            row = c.reject_takedown_request(request_id, reason=reason)
+        except ApiError as e:
+            console.print(f"[red]takedown-reject failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
 @tools_app.command("widget-ref-categories-list")
 def tools_widget_ref_categories_list():
     """List #widget cross-reference categories (그림 / 표 / 비교표 / 수식 / 목록 ...).

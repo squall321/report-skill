@@ -11,6 +11,9 @@ from report_skill.repair import truncate
 # heading schema (additionalProperties=False) and therefore omitted.
 _PASSTHROUGH = (
     "text_style", "margin_bottom_px",
+    # v0.10.0 — RA a97d5b5 heading per-char rich color/format. Plain `text`
+    # is kept as the TOC/export title; `text_html` carries the styled markup.
+    "text_html",
 )
 
 

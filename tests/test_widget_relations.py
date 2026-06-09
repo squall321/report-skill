@@ -71,16 +71,16 @@ def test_widget_relations_list_dispatch(monkeypatch) -> None:
 # 2) Cardinality invariant — pins the total tool count so adding a tool
 #    requires a deliberate test bump.
 # --------------------------------------------------------------------------- #
-def test_dispatch_count_is_76() -> None:
-    """v0.9.0 surface: 76 MCP tools.
+def test_dispatch_count_is_82() -> None:
+    """v0.10.0 surface: 82 MCP tools.
 
     When you add a tool to `_DISPATCH`, bump this number (and add the
     matching `_ARGS_BY_TOOL` entry in test_dispatch_parametrized.py).
     Pinning the count prevents silent surface growth — every new tool
     should be a deliberate, reviewed addition with schema + test
     coverage attached."""
-    assert len(_DISPATCH) == 76, (
-        f"expected 76 MCP tools in _DISPATCH, got {len(_DISPATCH)}. "
+    assert len(_DISPATCH) == 82, (
+        f"expected 82 MCP tools in _DISPATCH, got {len(_DISPATCH)}. "
         "Bump this assertion and update test_dispatch_parametrized.py's "
         "_ARGS_BY_TOOL when adding a tool."
     )

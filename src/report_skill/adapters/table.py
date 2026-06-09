@@ -133,6 +133,10 @@ _PASSTHROUGH = (
     "cell_styles",
     # v0.9.1 — RA defcb74 caption + note color tokens
     "caption_color", "caption_html", "note_color", "note_html",
+    # v0.10.0 — RA 7976ff7 per-cell rich markup. Side-table keyed by
+    # "rowKey::columnKey" (same as cell_styles), values = sanitized HTML.
+    # Plain `rows` is kept; `cell_html` carries the rich per-char markup.
+    "cell_html",
 )
 
 

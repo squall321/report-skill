@@ -221,6 +221,13 @@ def _build_fake_client() -> MagicMock:
     m.fetch_entities.return_value = []
     m.list_widget_relations.return_value = []
     m.list_ref_categories.return_value = []
+    # v0.10.0 — soft delete + takedown
+    m.trash_report.return_value = {"id": 1, "deleted_at": "2026-06-09T22:00:00Z"}
+    m.restore_report.return_value = {"id": 1, "deleted_at": None}
+    m.request_report_takedown.return_value = {"id": 1, "status": "pending"}
+    m.list_takedown_requests.return_value = []
+    m.approve_takedown_request.return_value = {"id": 1, "status": "approved"}
+    m.reject_takedown_request.return_value = {"id": 1, "status": "rejected"}
     # v0.8.0 — unified grants / sharing
     m.list_content_shares.return_value = []
     m.list_folder_shares.return_value = []
@@ -330,6 +337,13 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "entities_list": {"q": "HFP"},
     "widget_relations_list": {},
     "widget_ref_categories_list": {},
+    # v0.10.0 — soft delete + takedown
+    "report_trash": {"report_id": 1},
+    "report_restore": {"report_id": 1},
+    "report_takedown_request": {"report_id": 1, "workspace_slug": "dx"},
+    "takedowns_list": {},
+    "takedown_approve": {"request_id": 1},
+    "takedown_reject": {"request_id": 1},
 
     # ---- v0.5.0 ----
     "report_copy": {"report_id": 1, "title": "copy"},

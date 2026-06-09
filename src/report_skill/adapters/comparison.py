@@ -38,6 +38,9 @@ _PASSTHROUGH_SIMPLE = (
     "cell_styles",
     # v0.9.1 — RA defcb74 caption color tokens
     "caption_color", "caption_html",
+    # v0.10.0 — RA d62af9d per-cell rich markup. Side-table keyed by
+    # "rowKey::caseKey" (same as cell_styles), values = sanitized HTML.
+    "cell_html",
 )
 
 
