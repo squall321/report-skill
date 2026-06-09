@@ -2437,6 +2437,60 @@ def tools_widget_ref_categories_list():
         console.print_json(json.dumps(c.list_ref_categories(), ensure_ascii=False))
 
 
+# v0.11.0 — content-aware read commands
+@report_app.command("outline")
+def report_outline_cmd(report_id: int = typer.Argument(..., help="report id")):
+    """Tree outline of a report — every page + block id + widget type + short
+    preview. NO content bodies. Use this first to navigate before fetching
+    specific blocks."""
+    from report_skill.mcp_server import _do_report_outline
+    console.print_json(json.dumps(
+        _do_report_outline({"report_id": report_id}), ensure_ascii=False))
+
+
+@report_app.command("page-show")
+def report_page_show_cmd(
+    report_id: int = typer.Argument(..., help="report id"),
+    page_index: int = typer.Argument(..., help="0-based page index"),
+    full: bool = typer.Option(False, "--full",
+                              help="dump raw content (no truncation; may be large)"),
+):
+    """Dump one page completely — every block on the page with current content."""
+    from report_skill.mcp_server import _do_page_show_content
+    console.print_json(json.dumps(_do_page_show_content({
+        "report_id": report_id, "page_index": page_index, "truncate": not full,
+    }), ensure_ascii=False))
+
+
+@report_app.command("block-show")
+def report_block_show_cmd(
+    report_id: int = typer.Argument(..., help="report id"),
+    page_index: int = typer.Argument(..., help="0-based page index"),
+    block_id: str = typer.Argument(..., help="block id (e.g. 'risks_table')"),
+):
+    """Pin-point fetch of one block — content + widget type + props + schema."""
+    from report_skill.mcp_server import _do_block_show
+    console.print_json(json.dumps(_do_block_show({
+        "report_id": report_id, "page_index": page_index, "block_id": block_id,
+    }), ensure_ascii=False))
+
+
+@report_app.command("block-preview")
+def report_block_preview_cmd(
+    report_id: int = typer.Argument(..., help="report id"),
+    page_index: int = typer.Argument(..., help="0-based page index"),
+    block_id: str = typer.Argument(..., help="block id"),
+):
+    """Markdown / plain-text preview of a block for visual inspection."""
+    from report_skill.mcp_server import _do_block_preview
+    result = _do_block_preview({
+        "report_id": report_id, "page_index": page_index, "block_id": block_id,
+    })
+    console.print(f"[bold]block_id:[/bold] {result['block_id']}  "
+                  f"[bold]widget:[/bold] {result['widget_type']}\n")
+    console.print(result["preview_markdown"])
+
+
 # --------------------------------------------------------------------------- #
 # v0.5.0 — composites sub-app: accept / reject / withdraw
 # v0.5.2 — composites get

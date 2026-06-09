@@ -69,7 +69,12 @@ def _install_stubs(monkeypatch) -> None:
                             "pages": [{
                                 "template_id": "weekly-dev",
                                 "template_version": 1,
-                                "content": {},
+                                # v0.11.0 content-aware tools (block_show /
+                                # block_preview) need at least one block
+                                # with the args-dict block_id; otherwise the
+                                # dispatcher raises KeyError. _ARGS_BY_TOOL
+                                # uses "summary" as the canonical block id.
+                                "content": {"summary": "Sample summary text."},
                                 "extra_blocks": [],
                             }],
                         })
@@ -244,9 +249,19 @@ def _build_fake_client() -> MagicMock:
     m.upload_file.return_value = {"file_id": "f_abc", "filename": "x.png",
                                    "mime_type": "image/png", "size": 1}
     # `c.get(...)` is called by a few dispatchers (examples_mine_from_report,
-    # report_import json branch); return a minimal report shape.
-    m.get.return_value = {"id": 1, "title": "t", "pages": [],
-                          "phase": "drafting", "revision": 1}
+    # report_import json branch, v0.11.0 content-aware read surface); return
+    # a minimal report shape with one page + one content block so report_outline
+    # / page_show_content / block_show / block_preview can dispatch without
+    # IndexError.
+    m.get.return_value = {
+        "id": 1, "title": "t", "phase": "drafting", "revision": 1,
+        "pages": [{
+            "template_id": "weekly-dev", "template_version": 1,
+            "name": "Page 0",
+            "content": {"summary": "Sample summary text."},
+            "extra_blocks": [],
+        }],
+    }
     return m
 
 
@@ -337,6 +352,11 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "entities_list": {"q": "HFP"},
     "widget_relations_list": {},
     "widget_ref_categories_list": {},
+    # v0.11.0 — content-aware read surface
+    "report_outline": {"report_id": 1},
+    "page_show_content": {"report_id": 1, "page_index": 0},
+    "block_show": {"report_id": 1, "page_index": 0, "block_id": "summary"},
+    "block_preview": {"report_id": 1, "page_index": 0, "block_id": "summary"},
     # v0.10.0 — soft delete + takedown
     "report_trash": {"report_id": 1},
     "report_restore": {"report_id": 1},

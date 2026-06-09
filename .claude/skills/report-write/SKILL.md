@@ -1029,9 +1029,32 @@ All three pass through the adapter unchanged; the server validates via `_CELL_HT
 
 ---
 
-## MCP tool inventory (v0.10.x)
+## v0.11.0 — content-aware read surface (read existing content before patching)
 
-The MCP server now exposes **82 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the v0.5.0 / v0.6.0 / v0.7.0 inventory sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
+Through v0.10.x, `report_show` was a structure-only projection: page count, block ids, widget types, but NEVER the actual content body. That made content-aware edits painful — the LLM had to author patches blind ("change row 3 of the risks table") without seeing the current state. v0.11.0 fixes this with 4 new read tools the LLM should call BEFORE issuing `report_update` / `report_revise`.
+
+| Tool | Use when | Returns |
+|---|---|---|
+| `report_outline` | "what's in this report?" | every page + block id + widget type + 1-line title preview (NO bodies) |
+| `page_show_content` | "show me page N as-is" | every block on the page with current content (truncate=true caps each body at ~1000 chars) |
+| `block_show` | "show me the `risks_table` block" | raw content + widget type + props + schema summary for one block |
+| `block_preview` | "what does this block look like rendered?" | markdown / plain-text preview (table → markdown grid, rich_text → bulleted lines, etc.) |
+
+Typical edit flow (Claude Desktop / Cursor as the driving LLM):
+
+1. `report_outline(report_id)` — get the tree, identify the target page + block.
+2. `page_show_content(report_id, page_index)` — read all blocks on the page, OR
+3. `block_show(report_id, page_index, block_id)` — pin-point fetch just one block.
+4. (Optional) `block_preview(...)` to confirm visual intent.
+5. Author the patch with full context → `report_update` (specific blocks) or `report_revise` (LLM-driven rewrite via internal provider).
+
+These are READ-ONLY — none of the 4 mutate state. They safely precede any write.
+
+---
+
+## MCP tool inventory (v0.11.x)
+
+The MCP server now exposes **86 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the v0.5.0 / v0.6.0 / v0.7.0 inventory sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
 
 ```powershell
 report-skill-mcp --help   # or:

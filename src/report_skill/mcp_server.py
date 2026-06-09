@@ -609,6 +609,60 @@ TOOLS: list[Tool] = [
         {},
     ),
 
+    # ---- v0.11.0 — content-aware read surface --------------------------- #
+    # The Claude Desktop / Cursor LLM driving this skill needs to SEE current
+    # content (not just block ids) before patching. report_show gives a tree
+    # outline only; these 4 tools fill the gap.
+    _tool(
+        "report_outline",
+        "Full structural outline of a report — every page + every block with "
+        "id, widget type, and a short title-only preview. NO block content "
+        "bodies. Use this first to navigate before fetching specific blocks. "
+        "Projection of GET /api/reports/{id}.",
+        {"report_id": {"type": "integer"}},
+        ["report_id"],
+    ),
+    _tool(
+        "page_show_content",
+        "Dump one page completely — every block on the page with its "
+        "current content (rows / text / files / etc.) + props. Use this to "
+        "read a page before issuing a patch. Truncate=true caps each block "
+        "body to ~1000 chars for navigation; false returns raw content "
+        "(may be large).",
+        {
+            "report_id": {"type": "integer"},
+            "page_index": {"type": "integer", "minimum": 0},
+            "truncate": {"type": "boolean", "default": True},
+        },
+        ["report_id", "page_index"],
+    ),
+    _tool(
+        "block_show",
+        "Pin-point fetch of one block's content + widget type + props + "
+        "size limits — exactly what the LLM needs to author an accurate "
+        "patch. Returns raw content (no truncation). block_id is the key "
+        "shown in report_outline / page_show_content / report_show.",
+        {
+            "report_id": {"type": "integer"},
+            "page_index": {"type": "integer", "minimum": 0},
+            "block_id": {"type": "string"},
+        },
+        ["report_id", "page_index", "block_id"],
+    ),
+    _tool(
+        "block_preview",
+        "Human-readable preview of a block — markdown / plain text rendering "
+        "of the current content for visual inspection. Useful for rich_text "
+        "bodies, tables (markdown grid), comparisons, headings. Does NOT "
+        "modify anything. For machine-readable content use block_show.",
+        {
+            "report_id": {"type": "integer"},
+            "page_index": {"type": "integer", "minimum": 0},
+            "block_id": {"type": "string"},
+        },
+        ["report_id", "page_index", "block_id"],
+    ),
+
     # ---- v0.8.0 — unified grants / sharing ------------------------------ #
     # Three resource taxonomies — content (reports + composites), folders,
     # board (workspace slug). principal_type: workspace | workspace_manager
@@ -2092,6 +2146,314 @@ def _do_widget_ref_categories_list(_args: dict) -> Any:
         return c.list_ref_categories()
 
 
+# ---- v0.11.0 — content-aware read surface ---------------------------- #
+
+def _block_title_preview(content: Any, wtype: str, max_chars: int = 80) -> str:
+    """Extract a short, title-only preview from a block's content. NO body
+    dump — just enough text for the LLM to recognize the block."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        s = content.strip().splitlines()[0] if content.strip() else ""
+        return s[:max_chars]
+    if isinstance(content, dict):
+        for k in ("title", "name", "caption", "text", "label"):
+            v = content.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()[:max_chars]
+        if wtype == "rich_text":
+            items = content.get("items") or []
+            if items and isinstance(items[0], dict):
+                v = items[0].get("text") or items[0].get("markdown") or ""
+                if isinstance(v, str):
+                    return v.strip().splitlines()[0][:max_chars] if v.strip() else ""
+        if wtype in ("table", "comparison"):
+            rows = content.get("rows") or []
+            if rows and isinstance(rows[0], dict):
+                first_val = next((str(v) for v in rows[0].values()
+                                  if isinstance(v, (str, int, float)) and str(v).strip()), "")
+                return first_val[:max_chars]
+    if isinstance(content, list) and content:
+        first = content[0]
+        if isinstance(first, str):
+            return first.strip()[:max_chars]
+    return ""
+
+
+def _do_report_outline(args: dict) -> Any:
+    """Full structural tree: pages + blocks with title-only previews."""
+    rid = _int_arg(args, "report_id")
+    with ReportArchiveClient() as c:
+        report = report_ops.fetch_report(c, rid)
+        template_cache: dict[tuple[str, int], dict] = {}
+        pages_out = []
+        for idx, p in enumerate(report.get("pages") or []):
+            tpl_id = p.get("template_id")
+            tpl_ver = p.get("template_version")
+            tpl = None
+            if tpl_id and tpl_ver is not None:
+                key = (tpl_id, int(tpl_ver))
+                if key not in template_cache:
+                    try:
+                        template_cache[key] = c.fetch_template(tpl_id, tpl_ver)
+                    except Exception:  # pragma: no cover — best-effort
+                        template_cache[key] = {}
+                tpl = template_cache[key]
+            tpl_by_id: dict = {}
+            if isinstance(tpl, dict):
+                for b in (tpl.get("schema") or {}).get("blocks") or []:
+                    if isinstance(b, dict) and b.get("id"):
+                        tpl_by_id[b["id"]] = b
+            content = p.get("content") or {}
+            blocks = []
+            for bid in sorted(content.keys()):
+                bdef = tpl_by_id.get(bid, {})
+                blocks.append({
+                    "block_id": bid,
+                    "widget_type": bdef.get("type"),
+                    "label": bdef.get("label") or bdef.get("title"),
+                    "preview": _block_title_preview(content[bid], bdef.get("type") or ""),
+                })
+            extras = []
+            for eb in (p.get("extra_blocks") or []):
+                if isinstance(eb, dict):
+                    extras.append({
+                        "block_id": eb.get("id"),
+                        "widget_type": eb.get("type"),
+                        "preview": _block_title_preview(eb.get("content"), eb.get("type") or ""),
+                    })
+            pages_out.append({
+                "page_index": idx,
+                "name": p.get("name"),
+                "template_id": tpl_id,
+                "template_version": tpl_ver,
+                "blocks": blocks,
+                "extra_blocks": extras,
+            })
+        return {
+            "report_id": report.get("id"),
+            "title": report.get("title"),
+            "page_count": len(pages_out),
+            "pages": pages_out,
+        }
+
+
+def _truncate_block_content(content: Any, max_chars: int = 1000) -> tuple[Any, bool]:
+    """Truncate a block content body for navigation views. Returns (content, was_truncated)."""
+    if isinstance(content, str):
+        if len(content) > max_chars:
+            return content[:max_chars] + "…", True
+        return content, False
+    try:
+        import json as _json
+        encoded = _json.dumps(content, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return content, False
+    if len(encoded) <= max_chars:
+        return content, False
+    truncated = encoded[:max_chars] + "…"
+    return {"_truncated": True, "preview": truncated, "_size_chars": len(encoded)}, True
+
+
+def _do_page_show_content(args: dict) -> Any:
+    """Full content dump of one page — every block's content + props."""
+    rid = _int_arg(args, "report_id")
+    page_index = _int_arg(args, "page_index")
+    truncate = bool(args.get("truncate", True))
+    with ReportArchiveClient() as c:
+        report = report_ops.fetch_report(c, rid)
+        pages = report.get("pages") or []
+        if page_index < 0 or page_index >= len(pages):
+            raise IndexError(
+                f"page_index {page_index} out of range — report has "
+                f"{len(pages)} page(s)"
+            )
+        page = pages[page_index]
+        tpl_by_id: dict = {}
+        tpl_id = page.get("template_id")
+        tpl_ver = page.get("template_version")
+        if tpl_id and tpl_ver is not None:
+            try:
+                tpl = c.fetch_template(tpl_id, tpl_ver)
+                for b in (tpl.get("schema") or {}).get("blocks") or []:
+                    if isinstance(b, dict) and b.get("id"):
+                        tpl_by_id[b["id"]] = b
+            except Exception:  # pragma: no cover — best-effort
+                pass
+        content = page.get("content") or {}
+        blocks_out = []
+        for bid, body in content.items():
+            bdef = tpl_by_id.get(bid, {})
+            entry: dict[str, Any] = {
+                "block_id": bid,
+                "widget_type": bdef.get("type"),
+                "label": bdef.get("label") or bdef.get("title"),
+            }
+            if truncate:
+                entry["content"], entry["truncated"] = _truncate_block_content(body)
+            else:
+                entry["content"] = body
+            blocks_out.append(entry)
+        extras_out = []
+        for eb in (page.get("extra_blocks") or []):
+            if isinstance(eb, dict):
+                eb_entry: dict[str, Any] = {
+                    "block_id": eb.get("id"),
+                    "widget_type": eb.get("type"),
+                    "props": eb.get("props"),
+                }
+                if truncate:
+                    eb_entry["content"], eb_entry["truncated"] = _truncate_block_content(eb.get("content"))
+                else:
+                    eb_entry["content"] = eb.get("content")
+                extras_out.append(eb_entry)
+        return {
+            "report_id": report.get("id"),
+            "page_index": page_index,
+            "page_name": page.get("name"),
+            "template_id": tpl_id,
+            "template_version": tpl_ver,
+            "blocks": blocks_out,
+            "extra_blocks": extras_out,
+            "truncated_view": truncate,
+        }
+
+
+def _do_block_show(args: dict) -> Any:
+    """Pin-point fetch — one block's full content + widget metadata."""
+    rid = _int_arg(args, "report_id")
+    page_index = _int_arg(args, "page_index")
+    block_id = str(args["block_id"])
+    with ReportArchiveClient() as c:
+        report = report_ops.fetch_report(c, rid)
+        pages = report.get("pages") or []
+        if page_index < 0 or page_index >= len(pages):
+            raise IndexError(
+                f"page_index {page_index} out of range — report has "
+                f"{len(pages)} page(s)"
+            )
+        page = pages[page_index]
+        content_map = page.get("content") or {}
+        bdef: dict = {}
+        if page.get("template_id") and page.get("template_version") is not None:
+            try:
+                tpl = c.fetch_template(page["template_id"], page["template_version"])
+                for b in (tpl.get("schema") or {}).get("blocks") or []:
+                    if isinstance(b, dict) and b.get("id") == block_id:
+                        bdef = b
+                        break
+            except Exception:  # pragma: no cover — best-effort
+                pass
+        body = content_map.get(block_id)
+        if body is None:
+            for eb in (page.get("extra_blocks") or []):
+                if isinstance(eb, dict) and eb.get("id") == block_id:
+                    return {
+                        "report_id": report.get("id"),
+                        "page_index": page_index,
+                        "block_id": block_id,
+                        "widget_type": eb.get("type"),
+                        "is_extra_block": True,
+                        "content": eb.get("content"),
+                        "props": eb.get("props"),
+                    }
+            raise KeyError(
+                f"block_id '{block_id}' not found on page {page_index} "
+                f"(known content blocks: {sorted(content_map.keys())})"
+            )
+        return {
+            "report_id": report.get("id"),
+            "page_index": page_index,
+            "block_id": block_id,
+            "widget_type": bdef.get("type"),
+            "label": bdef.get("label") or bdef.get("title"),
+            "is_extra_block": False,
+            "props": bdef.get("props"),
+            "content": body,
+            "schema_summary": {
+                "required": (bdef.get("content_schema") or {}).get("required"),
+                "max_chars": bdef.get("max_chars"),
+            },
+        }
+
+
+def _content_to_markdown_preview(content: Any, wtype: str) -> str:
+    """Render a block's content as a markdown / plain-text preview the LLM
+    can read. Best-effort per widget type."""
+    if content is None:
+        return "(empty)"
+    if isinstance(content, str):
+        return content
+    if wtype == "rich_text" and isinstance(content, dict):
+        items = content.get("items") or []
+        lines = []
+        for it in items:
+            if isinstance(it, str):
+                lines.append(it)
+            elif isinstance(it, dict):
+                depth = int(it.get("depth", 0))
+                indent = "  " * max(depth, 0)
+                text = it.get("text") or it.get("markdown") or ""
+                if it.get("relation"):
+                    lines.append(f"{indent}- {text}  (relation: {it['relation']})")
+                else:
+                    lines.append(f"{indent}- {text}")
+        return "\n".join(lines) if lines else "(empty rich_text)"
+    if wtype == "heading" and isinstance(content, dict):
+        level = int(content.get("level", 1) or 1)
+        return f"{'#' * max(1, min(level, 6))} {content.get('text', '')}"
+    if wtype in ("table", "comparison") and isinstance(content, dict):
+        rows = content.get("rows") or []
+        if not rows or not isinstance(rows[0], dict):
+            return "(empty " + wtype + ")"
+        cols = list(rows[0].keys())
+        header = "| " + " | ".join(cols) + " |"
+        sep = "| " + " | ".join("---" for _ in cols) + " |"
+        body_rows = []
+        for r in rows[:20]:
+            body_rows.append("| " + " | ".join(str(r.get(c, "")) for c in cols) + " |")
+        more = f"\n…(+{len(rows) - 20} more rows)" if len(rows) > 20 else ""
+        return "\n".join([header, sep, *body_rows]) + more
+    if wtype == "bulleted_list" and isinstance(content, dict):
+        items = content.get("items") or []
+        return "\n".join(f"- {item}" for item in items) or "(empty list)"
+    if wtype == "image" and isinstance(content, dict):
+        files = content.get("files") or []
+        cap = content.get("caption") or ""
+        n = len(files)
+        return f"[image x{n}] caption: {cap}" if cap else f"[image x{n}]"
+    if wtype == "milestone" and isinstance(content, dict):
+        items = content.get("items") or []
+        return "\n".join(f"- {it.get('date', '?')}: {it.get('label', '')}"
+                         for it in items if isinstance(it, dict)) or "(no milestones)"
+    if wtype == "equation" and isinstance(content, dict):
+        return f"$$ {content.get('latex', '')} $$"
+    if isinstance(content, dict):
+        for k in ("text", "label", "title", "caption"):
+            v = content.get(k)
+            if isinstance(v, str) and v.strip():
+                return v
+    try:
+        import json as _json
+        return _json.dumps(content, ensure_ascii=False, indent=2)[:2000]
+    except (TypeError, ValueError):
+        return str(content)[:2000]
+
+
+def _do_block_preview(args: dict) -> Any:
+    """Human-readable markdown / plain-text rendering of a block."""
+    block_info = _do_block_show(args)
+    wtype = block_info.get("widget_type") or ""
+    preview = _content_to_markdown_preview(block_info.get("content"), wtype)
+    return {
+        "report_id": block_info["report_id"],
+        "page_index": block_info["page_index"],
+        "block_id": block_info["block_id"],
+        "widget_type": wtype,
+        "preview_markdown": preview,
+    }
+
+
 # ---- v0.10.0 — soft delete + takedown dispatchers --------------------- #
 def _do_report_trash(args: dict) -> Any:
     rid = _int_arg(args, "report_id")
@@ -2682,6 +3044,11 @@ _DISPATCH = {
     "widget_relations_list": _do_widget_relations_list,
     # v0.9.0 — RA 074233d
     "widget_ref_categories_list": _do_widget_ref_categories_list,
+    # v0.11.0 — content-aware read surface
+    "report_outline": _do_report_outline,
+    "page_show_content": _do_page_show_content,
+    "block_show": _do_block_show,
+    "block_preview": _do_block_preview,
     # v0.10.0 — RA dc8bd45 + ff64778 (soft delete) + 3e92860 (takedown queue)
     "report_trash": _do_report_trash,
     "report_restore": _do_report_restore,

@@ -1,5 +1,78 @@
 ﻿# Changelog
 
+## 0.11.0 — 2026-06-10
+
+Minor — adds 4 content-aware read tools so the driving LLM (Claude Desktop /
+Cursor) can SEE existing content before authoring patches. Through v0.10.x
+`report_show` returned page count + block ids only — never the actual content
+body. The LLM was effectively patching blind. This release closes that gap.
+MCP `_DISPATCH` grows 82 → 86. Backward-compatible: existing tools unchanged.
+
+Added — 4 new MCP tools + matching CLI commands:
+
+- `report_outline` — structural tree of a report: every page + block id +
+  widget type + title-only preview. NO content bodies. Use this first to
+  navigate before fetching specific blocks. CLI: `report outline <id>`.
+- `page_show_content` — dump one page completely with every block's current
+  content + props. `truncate=true` (default) caps each block body at ~1000
+  chars for navigation; `false` returns raw content. CLI:
+  `report page-show <id> <page-index> [--full]`.
+- `block_show` — pin-point fetch of one block: raw content + widget type +
+  props + schema summary (required fields, max_chars). Exactly what the LLM
+  needs to author an accurate patch. Handles both content blocks and extras.
+  CLI: `report block-show <id> <page-index> <block-id>`.
+- `block_preview` — human-readable markdown / plain-text rendering of a
+  block: table → markdown grid, rich_text → bulleted lines, heading →
+  `# title`, milestone → bulleted timeline, equation → `$$ latex $$`, etc.
+  Useful for visual inspection. CLI: `report block-preview <id> <page-index>
+  <block-id>`.
+
+All 4 are READ-ONLY — none mutate state. They safely precede any write.
+
+Typical edit flow with these tools:
+
+1. `report_outline(report_id)` — identify target page + block.
+2. `page_show_content` or `block_show` — read current content.
+3. Optional `block_preview` to confirm visual intent.
+4. `report_update` (specific blocks) or `report_revise` (LLM-rewrite).
+
+Implementation details:
+
+- All 4 dispatchers reuse `report_ops.fetch_report` + `client.fetch_template`
+  so the existing typed-exception family (AuthorLocked, TrashRestoreForbidden,
+  OutOfWorkspaceScope, etc.) flows naturally without per-tool plumbing.
+- Templates are cached per `(template_id, template_version)` within
+  `report_outline` so a 20-page report with the same template across pages
+  only fetches the template once.
+- `block_preview` is best-effort per widget type — unknown widget types fall
+  back to JSON dump (capped at 2000 chars).
+
+SKILL.md:
+
+- New "v0.11.0 — content-aware read surface" section documents the 4 tools
+  with a side-by-side "use when / returns" table and the recommended edit
+  flow.
+- Tool inventory header bumped to "(v0.11.x)" + 86 tools.
+
+Tests — pytest 470 → 474 (+4):
+
+- `tests/test_dispatch_parametrized.py` `_ARGS_BY_TOOL` gains 4 entries
+  (block_id = "summary" canonical). `_install_stubs` `fetch_report` stub
+  now includes `content: {"summary": "Sample summary text."}` so the new
+  block-aware dispatchers reach their return statement without raising
+  KeyError on the smoke harness.
+- `tests/test_mcp_roundtrip.py::test_dispatch_count_is_86` +
+  `tests/test_widget_relations.py::test_dispatch_count_is_86` — renamed
+  and bumped 82 → 86 to lock the new surface size.
+
+Verified:
+
+- pytest 474 passed, 5 skipped (no failures).
+- MCP `_DISPATCH` count = 86.
+- All 4 new tools registered + dispatch through fake client without
+  raising.
+- `report-skill --version` reports 0.11.0.
+
 ## 0.10.2 — 2026-06-10
 
 Patch — closes 6 leftover gaps the prior v0.10.0/v0.10.1 sweeps missed,
