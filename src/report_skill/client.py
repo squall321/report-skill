@@ -181,6 +181,54 @@ class BoardShareForbiddenError(ApiError):
         self.code = "board_share_forbidden"
 
 
+class TrashRestoreForbiddenError(ApiError):
+    """Raised when the caller is not the owner / sys admin and tries to trash or
+    restore a report (403). RA v0.10.0 / dc8bd45.
+
+    Backend messages: "이 보고서를 삭제할 권한이 없습니다 (소유자만 가능)." /
+    "이 보고서를 복구할 권한이 없습니다 (소유자만 가능).".
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 report_id: Optional[int] = None, status_code: int = 403):
+        super().__init__(message or "trash_restore_forbidden",
+                         status_code=status_code, payload=payload)
+        self.code = "trash_restore_forbidden"
+        self.report_id = report_id
+
+
+class TakedownManagerForbiddenError(ApiError):
+    """Raised when the caller is not the target board's manager / sys admin and
+    tries to act on the takedown queue (403). RA v0.10.0 / 3e92860.
+
+    Backend messages cover both variants:
+      - "이 게시판에서 게시취소할 권한이 없습니다 (게시판 매니저만 가능 — ..."
+      - "이 게시판의 게시취소 요청을 처리할 권한이 없습니다 (게시판 매니저만 가능)."
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 status_code: int = 403):
+        super().__init__(message or "takedown_manager_forbidden",
+                         status_code=status_code, payload=payload)
+        self.code = "takedown_manager_forbidden"
+
+
+class TakedownAlreadyProcessedError(ApiError):
+    """Raised when trying to approve/reject a takedown request that already
+    settled (already approved / rejected / withdrawn). RA v0.10.0 / 3e92860.
+
+    Backend message: "이미 처리된 요청입니다." (MountForbiddenError envelope).
+    HTTP code is 403 in this RA build but caller should NOT retry — the
+    request is closed.
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 status_code: int = 403):
+        super().__init__(message or "takedown_already_processed",
+                         status_code=status_code, payload=payload)
+        self.code = "takedown_already_processed"
+
+
 # v0.6.0 — sentinel for update_composite tri-state semantics on nullable
 # scalar fields (period_date): default = omit key from body
 # (server leaves alone); explicit None = send {"key": null} so server
@@ -1293,6 +1341,26 @@ class ReportArchiveClient:
             if message.startswith("게시판 공유는"):
                 return BoardShareForbiddenError(
                     message, payload=body, status_code=403
+                )
+            # v0.10.1 — RA trash/restore + takedown queue 403/409 family.
+            # Order: more specific takedown-related strings first, then the
+            # owner-only trash/restore variants. All keep ApiError as parent
+            # so existing `except ApiError` paths continue to catch them.
+            if message.startswith("이미 처리된 요청"):
+                return TakedownAlreadyProcessedError(
+                    message, payload=body, status_code=403
+                )
+            if (message.startswith("이 게시판에서 게시취소할 권한")
+                    or message.startswith("이 게시판의 게시취소 요청을 처리할 권한")):
+                return TakedownManagerForbiddenError(
+                    message, payload=body, status_code=403
+                )
+            if (message.startswith("이 보고서를 삭제할 권한")
+                    or message.startswith("이 보고서를 복구할 권한")):
+                return TrashRestoreForbiddenError(
+                    message, payload=body,
+                    report_id=cls._extract_report_id(path),
+                    status_code=403,
                 )
             return None
 

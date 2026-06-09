@@ -35,6 +35,9 @@ from report_skill.client import (
     ReportArchiveClient,
     RevisionMismatchError,
     ShareSetupForbiddenError,
+    TakedownAlreadyProcessedError,
+    TakedownManagerForbiddenError,
+    TrashRestoreForbiddenError,
 )
 
 
@@ -397,6 +400,72 @@ def test_build_typed_error_classifies_board_share_forbidden() -> None:
         f"got {type(err).__name__ if err else 'None'}"
     )
     assert err.code == "board_share_forbidden"
+
+
+def test_build_typed_error_classifies_trash_restore_forbidden() -> None:
+    """v0.10.1 — 403 + Korean trash/restore owner gate → TrashRestoreForbiddenError."""
+    for msg in (
+        "이 보고서를 삭제할 권한이 없습니다 (소유자만 가능).",
+        "이 보고서를 복구할 권한이 없습니다 (소유자만 가능).",
+    ):
+        body = {"success": False, "message": msg, "errors": None}
+        err = ReportArchiveClient._build_typed_error(
+            status_code=403, message=msg, path="/reports/7/trash", body=body,
+        )
+        assert isinstance(err, TrashRestoreForbiddenError), (
+            f"trash/restore owner gate must map to TrashRestoreForbiddenError; "
+            f"got {type(err).__name__ if err else 'None'} for: {msg}"
+        )
+        assert err.code == "trash_restore_forbidden"
+        assert err.report_id == 7  # extracted from path
+
+
+def test_build_typed_error_classifies_takedown_manager_forbidden() -> None:
+    """v0.10.1 — 403 + Korean takedown-manager gate → TakedownManagerForbiddenError."""
+    for msg in (
+        "이 게시판에서 게시취소할 권한이 없습니다 (게시판 매니저만 가능 — 작성자 본인).",
+        "이 게시판의 게시취소 요청을 처리할 권한이 없습니다 (게시판 매니저만 가능).",
+    ):
+        body = {"success": False, "message": msg, "errors": None}
+        err = ReportArchiveClient._build_typed_error(
+            status_code=403, message=msg, path="/takedown-requests/3/approve",
+            body=body,
+        )
+        assert isinstance(err, TakedownManagerForbiddenError), (
+            f"takedown manager gate must map to TakedownManagerForbiddenError; "
+            f"got {type(err).__name__ if err else 'None'} for: {msg}"
+        )
+        assert err.code == "takedown_manager_forbidden"
+
+
+def test_build_typed_error_classifies_takedown_already_processed() -> None:
+    """v0.10.1 — 403 + 'already processed' → TakedownAlreadyProcessedError."""
+    msg = "이미 처리된 요청입니다."
+    body = {"success": False, "message": msg, "errors": None}
+    err = ReportArchiveClient._build_typed_error(
+        status_code=403, message=msg,
+        path="/takedown-requests/3/approve", body=body,
+    )
+    assert isinstance(err, TakedownAlreadyProcessedError), (
+        f"already-processed must map to TakedownAlreadyProcessedError; "
+        f"got {type(err).__name__ if err else 'None'}"
+    )
+    assert err.code == "takedown_already_processed"
+
+
+def test_typed_error_map_includes_v010_classes(monkeypatch) -> None:
+    """v0.10.1 — _TYPED_ERROR_MAP must include the 3 new soft-delete + takedown
+    subclasses so the LLM receives structured envelopes instead of opaque ApiError."""
+    table = mcp_server._build_typed_error_map()
+    codes = [code for (_cls, code, _) in table]
+    for expected in (
+        "trash_restore_forbidden",
+        "takedown_manager_forbidden",
+        "takedown_already_processed",
+    ):
+        assert expected in codes, (
+            f"{expected} missing from _TYPED_ERROR_MAP: {codes}"
+        )
 
 
 def test_typed_error_map_includes_grants_classes(monkeypatch) -> None:

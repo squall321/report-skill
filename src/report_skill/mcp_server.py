@@ -98,6 +98,19 @@ except ImportError:  # pragma: no cover
     BoardShareForbiddenError = None  # type: ignore[assignment,misc]
     ShareSetupForbiddenError = None  # type: ignore[assignment,misc]
 
+# v0.10.1 — trash/restore + takedown queue 403 typed exceptions
+# (RA dc8bd45 + 3e92860). Imported defensively.
+try:
+    from report_skill.client import (
+        TakedownAlreadyProcessedError,
+        TakedownManagerForbiddenError,
+        TrashRestoreForbiddenError,
+    )
+except ImportError:  # pragma: no cover
+    TakedownAlreadyProcessedError = None  # type: ignore[assignment,misc]
+    TakedownManagerForbiddenError = None  # type: ignore[assignment,misc]
+    TrashRestoreForbiddenError = None  # type: ignore[assignment,misc]
+
 SERVER_NAME = "report-skill"
 
 # v0.5.1 — 13 optional fields shared by report_create / report_update.
@@ -2755,6 +2768,10 @@ def _build_typed_error_map() -> list[tuple[type, str, bool]]:
         # 403 — grants (v0.8.0/v0.8.1)
         (ShareSetupForbiddenError, "share_setup_forbidden", False),
         (BoardShareForbiddenError, "board_share_forbidden", False),
+        # 403 — trash/restore + takedown queue (v0.10.1 — RA dc8bd45 + 3e92860)
+        (TrashRestoreForbiddenError, "trash_restore_forbidden", True),
+        (TakedownManagerForbiddenError, "takedown_manager_forbidden", False),
+        (TakedownAlreadyProcessedError, "takedown_already_processed", False),
         # 409 — reports lock + revision (errors[0].code)
         (LockHeldByOtherError, "lock_held_by_other", True),
         (LockNotHeldError, "lock_not_held", True),

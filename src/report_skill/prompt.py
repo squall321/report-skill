@@ -87,6 +87,10 @@ _WIDGET_INPUT_HINTS: dict[str, str] = {
         "renderer prepends `※` automatically — do NOT include it yourself.\n"
         "  - `column_widths`: {column_key: px_int} per-column width hints (40-1200).\n"
         "  - `table_width_px`: total table width in pixels (int, 120-4000).\n"
+        "  - `cell_styles` / `cell_html` (v0.9.0+ / v0.10.0): side-tables keyed "
+        "by `\"rowKey::columnKey\"`; cell_styles values = {bg, fg} color tokens, "
+        "cell_html values = sanitized HTML for per-char color / format. Plain "
+        "`rows` are kept; cell_html is read-mode preferred when present.\n"
         "  - `merges`: list of `{r, c, rs, cs}` cell-span objects "
         "(row/col index plus row-span/col-span).\n"
         "  - `columns`: list of column descriptors `{key, label, type, meta}` "
@@ -105,6 +109,9 @@ _WIDGET_INPUT_HINTS: dict[str, str] = {
         "  - `column_widths` / `table_width_px` / `merges`: same shape as table.\n"
         "  - `row_label_width`: pixel width of the left label column (int, 60-1200).\n"
         "  - `cases`: list of `{key, label}` defining the comparison columns.\n"
+        "  - `cell_styles` / `cell_html` (v0.9.0+ / v0.10.0): side-tables keyed "
+        "by `\"rowKey::caseKey\"`; cell_styles values = {bg, fg} color tokens, "
+        "cell_html values = sanitized HTML for per-char color / format.\n"
         "  - `horizontal_scroll`: bool toggling horizontal overflow scroll.\n"
         "  - `max_cases`: int (2-30) capping how many cases render.\n"
         "  - `image_max_height_px`: int (80-600) clamp on image-row height."
@@ -138,9 +145,12 @@ _WIDGET_INPUT_HINTS: dict[str, str] = {
         "`show_value_per_cell` are independent booleans."
     ),
     "heading": (
-        "Simple heading block. Required: `text` (1-200 chars). Optional: "
-        "`level` (1|2|3), `text_style` object (color/weight/etc), "
-        "`margin_bottom_px` (int 0-200). There is NO `tag` field."
+        "Simple heading block. Required: `text` (1-200 chars, plain text — "
+        "used as TOC / export title). Optional: `level` (1|2|3), `text_style` "
+        "object (color/weight/etc), `margin_bottom_px` (int 0-200), "
+        "`text_html` (v0.10.0 — sanitized HTML for per-char color / format "
+        "ON TOP of the plain `text`; both fields are kept in sync). "
+        "There is NO `tag` field."
     ),
     "progress_bar": (
         "Multi-row progress widget. Top-level: `default_max` (number > 0), "

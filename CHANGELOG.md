@@ -1,5 +1,66 @@
 ﻿# Changelog
 
+## 0.10.1 — 2026-06-10
+
+Patch — closes the v0.10.0 audit gap: 6 new MCP tools shipped but the
+matching 5 new RA 403/409 Korean error strings were not detected by
+`_build_typed_error`, so the LLM saw opaque ApiError envelopes whenever
+a write was forbidden. Also closes 3 prompt-builder / docs drift items.
+
+Fixed (high) — 3 new typed exceptions reach the LLM end-to-end:
+
+- `TrashRestoreForbiddenError` (403) — catches `"이 보고서를 삭제할 권한이 없습니다 (소유자만 가능)."`
+  + `"이 보고서를 복구할 권한이 없습니다 (소유자만 가능)."`. Surfaces
+  `{error: "trash_restore_forbidden", reason: ..., report_id: N}`. Hits
+  non-owner `report_trash` / `report_restore` calls.
+- `TakedownManagerForbiddenError` (403) — catches both variants of
+  `"이 게시판...게시취소...권한이 없습니다 (게시판 매니저만 가능...)."`.
+  Surfaces `{error: "takedown_manager_forbidden", reason: ...}`. Hits
+  non-manager `takedown_approve` / `takedown_reject` calls (RA 3e92860).
+- `TakedownAlreadyProcessedError` (403, RA `MountForbiddenError` envelope)
+  — catches `"이미 처리된 요청입니다."`. Surfaces
+  `{error: "takedown_already_processed", ...}` so the LLM knows the
+  request is closed and does NOT retry.
+
+All 3 subclasses are registered in `mcp_server._build_typed_error_map()`
+so `call_tool` produces structured envelopes (same pattern as the v0.8.2
+fix for the grants typed exceptions). Both client.py and mcp_server.py
+imports are defensive — older client.py keeps loading.
+
+Fixed (med) — prompt builder hint coverage for new v0.9.0/v0.10.0 fields:
+
+- `prompt.py` `_WIDGET_INPUT_HINTS["heading"]` — documents `text_html`
+  (v0.10.0 — sanitized HTML for per-char color/format on top of plain
+  `text`, both kept in sync).
+- `prompt.py` `_WIDGET_INPUT_HINTS["table"]` — documents `cell_styles` +
+  `cell_html` side-tables keyed by `"rowKey::columnKey"`.
+- `prompt.py` `_WIDGET_INPUT_HINTS["comparison"]` — same for
+  `"rowKey::caseKey"`.
+
+Without these hints v0.10.0's passthrough was effectively invisible — the
+adapter would forward the fields but the LLM never knew to author them.
+
+Fixed (low) — docs drift:
+
+- `docs/BUILDING.md` architecture diagram updated from `_DISPATCH 76 tools (v0.9.x)`
+  to `_DISPATCH 82 tools (v0.10.x)`.
+
+Tests — pytest 465 → 469 (+4):
+
+- `tests/test_authorlocked_mapping.py` gains 3 detection tests
+  (`test_build_typed_error_classifies_trash_restore_forbidden` /
+  `_takedown_manager_forbidden` / `_takedown_already_processed`) plus a
+  parity lock `test_typed_error_map_includes_v010_classes` so the v0.8.1
+  omission pattern cannot recur for these 3 codes.
+
+Verified:
+
+- pytest 469 passed, 5 skipped (no failures).
+- MCP `_DISPATCH` count = 82 (unchanged — patch only).
+- All 3 new typed exceptions importable + registered in
+  `_TYPED_ERROR_MAP` (asserted by new test).
+- `report-skill --version` reports 0.10.1.
+
 ## 0.10.0 — 2026-06-09
 
 Minor — covers RA's 3-stage report-deletion redesign + takedown-request queue
