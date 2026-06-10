@@ -1,5 +1,49 @@
 ﻿# Changelog
 
+## 0.13.1 — 2026-06-10
+
+Patch — first LIVE run of the v0.13.0 E2E suite against the real backend
+caught one genuine API-contract drift; this release fixes it and freshens
+the bundled snapshot. The backend was restarted (uvicorn :3000) and DB
+migrations p28–p31 applied (password reset / soft delete / takedown queue /
+composite snapshot-detach) — the backend code had outpaced the DB schema,
+so every login 500'd until the upgrade.
+
+Fixed — trash/restore API contract drift (caught by e2e, impossible to
+catch with fake clients):
+
+- RA's POST /reports/{id}/trash and /restore return `data=None`
+  (`success_response(data=None)`) — NOT the report record. client.py's
+  docstrings claimed "returns the report with deleted_at set" and the MCP
+  dispatchers passed the raw None straight to the LLM.
+- `_do_report_trash` / `_do_report_restore` now re-fetch after the write
+  and return verified state: `{report_id, trashed/restored, deleted_at}`
+  plus a recovery note. The LLM gets ground truth instead of `null`.
+- client.py docstrings corrected — including the stale "blocked while
+  mounted" claim (trash succeeds while mounted; only permanent delete is
+  blocked with 409 report_still_mounted).
+- The 2 affected e2e tests now assert state via re-fetch.
+
+Changed — bundled snapshot regenerated (33 widgets, 8 templates,
+fetched 2026-06-10):
+
+- `widgets.snapshot.json` now includes caption_color / caption_html /
+  note_color / note_html / cell_styles / cell_html / text_html /
+  ref_categories — everything RA shipped since the stale 2026-06-01 dump.
+  The LLM prompt builder finally advertises the fields the adapters have
+  been passing through since v0.9.x.
+- Structural parity lock (d) — adapter `_PASSTHROUGH` ⊆ snapshot — promoted
+  from XFAIL to a HARD lock (it XPASSed on the fresh snapshot).
+
+Verified (live backend):
+
+- E2E: 11 passed, 1 skipped (dry_run — LLM provider not configured).
+  Mount/unmount, purge-blocked-while-mounted (409 typed), trash-while-
+  mounted, Korean 403 detection, Korean payload round-trip, stale-revision
+  recovery — all validated against the real API for the first time.
+- Unit: 484 passed, 5 skipped, 12 deselected.
+- `report-skill --version` reports 0.13.1.
+
 ## 0.13.0 — 2026-06-10
 
 Minor — robustness release. A 6-lens audit of the publishing surface (verdict:

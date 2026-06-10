@@ -2651,14 +2651,31 @@ def _do_report_trash(args: dict) -> Any:
     rid = _int_arg(args, "report_id")
     logger.info("report_trash id=%s", rid)
     with ReportArchiveClient() as c:
-        return c.trash_report(rid)
+        c.trash_report(rid)
+        # RA returns data=None on trash (verified live by the e2e suite) —
+        # re-fetch so the LLM gets confirmed state instead of null.
+        report = report_ops.fetch_report(c, rid)
+    return {
+        "report_id": rid,
+        "trashed": bool(report.get("deleted_at")),
+        "deleted_at": report.get("deleted_at"),
+        "note": "soft-deleted — recover via report_restore; board copies "
+                "stay mounted (게시분 보존)",
+    }
 
 
 def _do_report_restore(args: dict) -> Any:
     rid = _int_arg(args, "report_id")
     logger.info("report_restore id=%s", rid)
     with ReportArchiveClient() as c:
-        return c.restore_report(rid)
+        c.restore_report(rid)
+        # RA returns data=None on restore — re-fetch for confirmed state.
+        report = report_ops.fetch_report(c, rid)
+    return {
+        "report_id": rid,
+        "restored": report.get("deleted_at") is None,
+        "deleted_at": report.get("deleted_at"),
+    }
 
 
 def _do_report_takedown_request(args: dict) -> Any:

@@ -783,19 +783,24 @@ class ReportArchiveClient:
             return list(body.get("items", body) or [])
         return []
 
-    def trash_report(self, report_id: int) -> dict:
+    def trash_report(self, report_id: int) -> None:
         """POST /reports/{report_id}/trash — move to trash (soft delete).
 
-        Returns the report with deleted_at set. Blocked while the report is
-        mounted to any board (RA ff64778 게시 중 차단 가드); restore from
-        trash via restore_report. Permanent purge happens only on a manual
-        admin action — the trash is recoverable.
+        Returns None — RA responds `success_response(data=None)` (verified
+        live by the e2e suite); re-fetch the report if you need deleted_at.
+        Trash SUCCEEDS even while mounted (board copies are preserved —
+        게시분 보존); only permanent delete is blocked while mounted
+        (409 report_still_mounted). Recoverable via restore_report.
         """
         logger.info("trash_report id=%s", report_id)
         return self.post(f"/reports/{report_id}/trash", json={})
 
-    def restore_report(self, report_id: int) -> dict:
-        """POST /reports/{report_id}/restore — recover from trash."""
+    def restore_report(self, report_id: int) -> None:
+        """POST /reports/{report_id}/restore — recover from trash.
+
+        Returns None (RA responds data=None — verified live); re-fetch the
+        report if you need to confirm deleted_at was cleared.
+        """
         logger.info("restore_report id=%s", report_id)
         return self.post(f"/reports/{report_id}/restore", json={})
 

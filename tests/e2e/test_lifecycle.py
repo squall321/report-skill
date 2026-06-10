@@ -361,14 +361,19 @@ def test_e2e_trash_succeeds_while_mounted(ra_client, e2e_report):
     if not _mount_or_validate_403(ra_client, rid, slug):
         return
     try:
-        trashed = ra_client.trash_report(rid)
-        assert trashed.get("deleted_at"), (
+        # RA trash/restore return data=None (verified live) — re-fetch for
+        # the state assertion. The first run of this suite caught exactly
+        # this contract drift in client.py's docstring.
+        ra_client.trash_report(rid)
+        after_trash = report_ops.fetch_report(ra_client, rid)
+        assert after_trash.get("deleted_at"), (
             "trash while mounted should succeed with deleted_at set "
-            f"(board copies preserved per RA design) — got {trashed!r}"
+            f"(board copies preserved per RA design) — got {after_trash.get('deleted_at')!r}"
         )
-        restored = ra_client.restore_report(rid)
-        assert not restored.get("deleted_at"), (
-            f"restore did not clear deleted_at: {restored!r}"
+        ra_client.restore_report(rid)
+        after_restore = report_ops.fetch_report(ra_client, rid)
+        assert not after_restore.get("deleted_at"), (
+            f"restore did not clear deleted_at: {after_restore.get('deleted_at')!r}"
         )
     finally:
         try:
@@ -387,11 +392,16 @@ def test_e2e_trash_succeeds_while_mounted(ra_client, e2e_report):
 @pytest.mark.e2e
 def test_e2e_trash_restore(ra_client, e2e_report):
     rid = e2e_report["id"]
-    trashed = ra_client.trash_report(rid)
-    assert trashed.get("deleted_at"), f"trash did not set deleted_at: {trashed!r}"
-    restored = ra_client.restore_report(rid)
-    assert not restored.get("deleted_at"), (
-        f"restore did not clear deleted_at: {restored!r}"
+    # trash/restore return data=None — assert state via re-fetch.
+    ra_client.trash_report(rid)
+    after_trash = report_ops.fetch_report(ra_client, rid)
+    assert after_trash.get("deleted_at"), (
+        f"trash did not set deleted_at: {after_trash.get('deleted_at')!r}"
+    )
+    ra_client.restore_report(rid)
+    after_restore = report_ops.fetch_report(ra_client, rid)
+    assert not after_restore.get("deleted_at"), (
+        f"restore did not clear deleted_at: {after_restore.get('deleted_at')!r}"
     )
 
 

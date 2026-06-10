@@ -13,7 +13,8 @@ Locks:
   (b) every ApiError subclass is handled (or explicitly exempted) in cli*.py
   (c) every ReportArchiveClient write method logs (logger.info/debug)
   (d) every adapter passthrough key exists in the bundled widget snapshot
-      (xfail until the stale snapshot is regenerated)
+      (hard lock since v0.13.1 — snapshot regenerated 2026-06-10; keep it
+      fresh via scripts/refresh_bundled_data.py before each release)
 """
 from __future__ import annotations
 
@@ -249,11 +250,6 @@ def _all_property_names(schema) -> set[str]:
     return out
 
 
-@pytest.mark.xfail(
-    reason="bundled snapshot stale — regenerate via catalog_sync against a "
-           "live backend, then drop this xfail",
-    strict=False,
-)
 def test_adapter_passthrough_known_to_snapshot():
     from report_skill.adapters import ADAPTERS
 
