@@ -35,8 +35,10 @@ from report_skill.client import (
     ApiError,
     AuthorLockedError,
     BoardShareForbiddenError,
+    CompositeRevisionConflict,
     FinalizedReadOnlyError,
     LockHeldByOtherError,
+    LockNotHeldError,
     NoEditPermissionError,
     OutOfWorkspaceScopeError,
     ReportArchiveClient,
@@ -58,6 +60,10 @@ from report_skill.config import settings
 # --------------------------------------------------------------------------- #
 _TYPED_LOCK_ERRORS = (
     LockHeldByOtherError,
+    # v0.13.0 — sibling of lock_held_by_other (409 code=lock_not_held): the
+    # caller's edit lock expired/was never taken. Surfaced on every report
+    # write path, same handling as the rest of the lock family.
+    LockNotHeldError,
     RevisionMismatchError,
     FinalizedReadOnlyError,
     NoEditPermissionError,
@@ -2772,6 +2778,11 @@ def composites_update(
             console.print(f"[red][author_locked][/red] reason: {e.reason}  "
                           f"report_id={e.report_id}")
             raise typer.Exit(4)
+        except CompositeRevisionConflict as e:
+            console.print(f"[red][composite_revision_mismatch][/red] {e} "
+                          "(re-fetch via `composites get` and retry with the "
+                          "new expected_revision)")
+            raise typer.Exit(3)
         except _TYPED_LOCK_ERRORS as e:
             console.print(f"[red][{type(e).__name__}][/red] {e}")
             raise typer.Exit(4)
@@ -2831,6 +2842,11 @@ def composites_items_set(
             console.print(f"[red][author_locked][/red] reason: {e.reason}  "
                           f"report_id={e.report_id}")
             raise typer.Exit(4)
+        except CompositeRevisionConflict as e:
+            console.print(f"[red][composite_revision_mismatch][/red] {e} "
+                          "(re-fetch via `composites get` and retry with the "
+                          "new expected_revision)")
+            raise typer.Exit(3)
         except _TYPED_LOCK_ERRORS as e:
             console.print(f"[red][{type(e).__name__}][/red] {e}")
             raise typer.Exit(4)

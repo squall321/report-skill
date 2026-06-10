@@ -387,10 +387,23 @@ def test_composite_delete_dispatch(monkeypatch):
     client_mock.delete_composite.return_value = None
     _install_fake_client(monkeypatch, client_mock)
 
-    out = _DISPATCH["composite_delete"]({"composite_id": 10})
+    # v0.13.0 — composite_delete gained a confirm gate (hard delete is
+    # irreversible, published composites included).
+    out = _DISPATCH["composite_delete"]({"composite_id": 10, "confirm": True})
 
     client_mock.delete_composite.assert_called_once_with(10)
     assert out == {"deleted": True, "id": 10}
+
+
+def test_composite_delete_requires_confirm(monkeypatch):
+    """v0.13.0 — calling without confirm=true must raise, not delete."""
+    client_mock = MagicMock()
+    _install_fake_client(monkeypatch, client_mock)
+
+    import pytest as _pytest
+    with _pytest.raises(ValueError, match="confirm"):
+        _DISPATCH["composite_delete"]({"composite_id": 10})
+    client_mock.delete_composite.assert_not_called()
 
 
 def test_composite_publish_dispatch(monkeypatch):

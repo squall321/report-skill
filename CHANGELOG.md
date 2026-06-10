@@ -1,5 +1,126 @@
 ﻿# Changelog
 
+## 0.13.0 — 2026-06-10
+
+Minor — robustness release. A 6-lens audit of the publishing surface (verdict:
+patchy) drove session resilience, write-tool safety gates, 5 new typed error
+codes, executable recovery flows in SKILL.md, 4 generic structural parity
+locks, and a gated live-backend E2E suite. _DISPATCH stays 91 — no new tools,
+deeper safety on the existing ones.
+
+Session resilience (client.py):
+
+- Module-level JWT cache (11h TTL vs RA's 12h token life) — every
+  `with ReportArchiveClient()` block reuses one token instead of paying a
+  ~250ms bcrypt login per MCP tool call. A 30-call publish flow saves ~7s.
+- 401 → one-shot re-login + retry in `_request` (loop-guarded; skips the
+  login request itself). Required pairing with the cache: a stale cached
+  token now heals transparently.
+- New typed infra errors: `NetworkUnreachableError` ("network_unreachable",
+  retryable) for httpx connect/timeout failures and `AuthUnavailableError`
+  ("auth_unavailable", retryable) when login itself can't reach the backend.
+  The LLM can now distinguish "backend down — retry later" from a code bug
+  (previously both surfaced as `{"error":"internal"}`).
+- GET-only network retry (2 attempts, 0.5s/1.0s backoff). Writes get NO
+  network retry — avoids duplicate creates on lost responses.
+- logger.info backfilled on 24 write methods (v0.7.1 discipline,
+  retro-applied — was missing on create_report, publish_report, all
+  composite writes, etc.).
+
+New typed error codes (client detection + `_TYPED_ERROR_MAP` + SKILL.md table):
+
+- `mount_forbidden` (403) — unmount / takedown processing without board-
+  manager rights. Guidance: owners use `report_takedown_request` instead.
+- `mount_target_invalid` (400) — bad slug / non-org workspace / folder
+  mismatch (first 400-family typed code).
+- `report_still_mounted` (409) — permanent delete attempted while mounted;
+  carries report_id; links to Recovery flow #5.
+
+Write-tool safety:
+
+- `composite_delete` + `preset_delete` now REQUIRE confirm=true (hard
+  deletes — published composites included, no trash exists for either).
+- `report_milestone_remove` now REQUIRES label — date-only matching used to
+  bulk-remove every milestone on the same date.
+- `report_delete` description: "PERMANENT purge — prefer report_trash".
+- `report_unmount` warns that folder/edit-policy/note are discarded;
+  `takedown_approve` says check `takedowns_list` first;
+  `notifications_mark_all_read` steers to per-id.
+
+Mount / publish UX guards (mcp_server dispatchers):
+
+- workspace_slugs passed as a bare string no longer char-splits ("dx" →
+  ["d","x"]) — wrapped into a single-element list.
+- folder_id + multiple boards pre-rejected (backend validates the same
+  folder against every board → guaranteed late failure).
+- Trashed-report guard: mounting or publishing a `deleted_at` report is
+  rejected client-side with "restore first via report_restore".
+- Mount failures now state the batch is atomic (zero mounts created).
+- Re-mount of an already-mounted board now points to
+  `report_mount_set_folder` / `report_mount_set_edit_policy` (re-mounting
+  never updates them).
+- `report_publish` response includes `mounted_board_count`; 0 adds a
+  warning that notifications reached nobody.
+- view_url no longer hardcodes localhost:3001 — derived from
+  `report_api_base_url` via `_frontend_base()` (11 sites).
+
+SKILL.md — recovery flows + 2 backend-truth corrections:
+
+- New "Recovery flows (worked scenarios)" section: #1 revision_mismatch
+  (re-fetch → rebase → retry → report_activities), #2 composite_revision_
+  mismatch, #3 lock_held_by_other (report_lock_status → wait, never force),
+  #4 finalized_readonly (unpublish → edit → republish), #5 report_still_
+  mounted (trash needs NO unmount; purge needs unmount-or-takedown per
+  board). Error-table cells link to flows.
+- CORRECTION: Flow G — unmount is board-manager-only (RA mounts/services
+  417-421); owners must use the takedown queue. Previous text sent owners
+  into guaranteed 403s.
+- CORRECTION: v0.10.0 section claimed "mounted blocks trash" — actually
+  trash succeeds while mounted (board copies preserved); only permanent
+  delete is blocked (409 report_still_mounted).
+- Network resilience note (POST timeout → check existence via
+  reports_search before re-creating) + trashed-report guard note +
+  catalog_sync MCP tool name alongside the CLI wording.
+
+Structural parity locks (tests/test_structural_parity.py — NEW, generic,
+reflection/AST-based; replaces per-incident hardcoded lists):
+
+- (a) every ApiError subclass (19 today) must be in `_TYPED_ERROR_MAP` —
+  the "client has it, MCP map forgot it" incident class (v0.8.1, v0.10.1)
+  is now structurally impossible.
+- (b) every typed exception must be handled in cli*.py except clauses (AST
+  scan) or carry a justified exemption. Fixed today: LockNotHeldError +
+  CompositeRevisionConflict handlers added to cli.py.
+- (c) every client write method must call logger.info (AST scan; baseline
+  empty after the 24-method backfill).
+- (d) every adapter _PASSTHROUGH key must exist in the bundled snapshot's
+  content_schema — currently XFAIL (snapshot fetched 2026-06-01 predates
+  caption_color etc.); regenerate via catalog_sync against a live backend,
+  then drop the xfail. The corruption is now visible instead of silent.
+
+E2E suite (tests/e2e/ — NEW, gated):
+
+- pytest marker `e2e` + `addopts -m 'not e2e'` (default runs untouched);
+  requires RS_E2E=1 AND a reachable backend (login health probe) or
+  everything skips. Self-cleaning fixture: unmount → trash → purge.
+- 12 lifecycle cases: stdio handshake/tool count, create, read round-trip,
+  snapshot drift, stale-revision recovery, Korean-403 detection,
+  mount/list/unmount, purge-blocked-while-mounted (409), trash-succeeds-
+  while-mounted, trash/restore, Korean payload round-trip, dry-run
+  no-side-effect. Mount-mutating cases accept the typed 403 as a pass
+  (validates detection wiring when the service account isn't a manager).
+- tests/_verify_path_b_mcp.py deleted (absorbed; it polluted real data
+  with no cleanup).
+
+Verified:
+
+- pytest 483 passed, 5 skipped, 12 deselected (e2e), 1 xfailed (snapshot
+  stale — intentional marker).
+- `_DISPATCH` = 91 (unchanged); typed map = 20 codes.
+- Live validation while the backend was down: the new
+  `AuthUnavailableError` fired exactly as designed on the login probe.
+- `report-skill --version` reports 0.13.0.
+
 ## 0.12.0 — 2026-06-10
 
 Minor — first release driven by structural-improvement analysis instead of

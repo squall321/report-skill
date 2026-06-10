@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "report-skill"
-version = "0.12.0"
+version = "0.13.0"
 description = "External skill layer that turns Claude-organized content into ReportArchive reports using its widget/template system."
 requires-python = ">=3.11"
 dependencies = [
@@ -35,6 +35,15 @@ where = ["src"]
 # operate with just a server URL — no `catalog sync` / `templates sync`
 # round-trip required for the first POST.
 "report_skill" = ["data/*.json", "data/templates/*.json"]
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: live-backend smoke tests (need RS_E2E=1 + running ReportArchive)",
+]
+# Default runs deselect the live-backend suite. To run it you must override
+# the marker expression explicitly (the LAST -m on the command line wins):
+#   RS_E2E=1 pytest tests/e2e -m e2e
+addopts = "-m 'not e2e'"
 
 [tool.pyright]
 # Make pyright/Pylance pick up the local venv instead of system Python — fixes

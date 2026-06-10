@@ -7,6 +7,7 @@ standard `{success, data, message, errors}` envelope.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Optional
 
 import httpx
@@ -14,6 +15,19 @@ import httpx
 from report_skill.config import settings
 
 logger = logging.getLogger(__name__)
+
+# ---- module-level token cache (v0.13.0) ----------------------------------- #
+# Keyed by base_url+email so every `with ReportArchiveClient()` block in the
+# process reuses one JWT instead of paying the ~250ms bcrypt login per MCP
+# tool call. RA access tokens last 12h (backend config); 11h TTL keeps a
+# conservative margin. A token that goes stale early is healed by the
+# 401 re-login path in _request().
+_TOKEN_TTL_SECONDS = 11 * 60 * 60
+_TOKEN_CACHE: dict[str, Any] = {}
+
+
+def _token_cache_key() -> str:
+    return f"{settings.report_api_base_url}|{settings.report_api_email}"
 
 
 class ApiError(RuntimeError):
@@ -38,6 +52,44 @@ class AuthorLockedError(ApiError):
         )
         self.reason = reason
         self.report_id = report_id
+
+
+# ---- network / availability typed errors (v0.13.0) ------------------------ #
+# Both subclass ApiError so existing `except ApiError` paths keep working.
+# `retryable = True` signals the MCP layer that this is an environment
+# problem (server down / unreachable), not a code bug.
+
+
+class NetworkUnreachableError(ApiError):
+    """Raised when the RA backend cannot be reached (connect error / timeout).
+
+    This is NOT a code bug — the LLM should tell the user the server looks
+    down and may retry later. `status_code` is 0 because no HTTP response
+    was received.
+    """
+
+    def __init__(self, message: str = "", *, status_code: int = 0,
+                 payload: Any = None):
+        super().__init__(message or "network_unreachable",
+                         status_code=status_code, payload=payload)
+        self.code = "network_unreachable"
+        self.retryable = True
+
+
+class AuthUnavailableError(ApiError):
+    """Raised when login itself fails due to network (backend down during auth).
+
+    Same semantics as NetworkUnreachableError — the server looks down and the
+    user may retry later; this is not a credentials problem (bad credentials
+    surface as a regular 401 ApiError instead).
+    """
+
+    def __init__(self, message: str = "", *, status_code: int = 0,
+                 payload: Any = None):
+        super().__init__(message or "auth_unavailable",
+                         status_code=status_code, payload=payload)
+        self.code = "auth_unavailable"
+        self.retryable = True
 
 
 # ---- 409 typed subclasses ------------------------------------------------ #
@@ -244,6 +296,45 @@ class TakedownAlreadyProcessedError(ApiError):
         self.code = "takedown_already_processed"
 
 
+# ---- mounts typed errors (v0.13.0) ---------------------------------------- #
+# RA emits a stable `errors[0].code` for mount operations — matched in
+# _build_typed_error the same way the 409 envelope codes are.
+
+
+class MountForbiddenError(ApiError):
+    """Raised when unmount / takedown-processing is attempted without
+    board-manager rights (403, code=mount_forbidden)."""
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 status_code: int = 403):
+        super().__init__(message or "mount_forbidden",
+                         status_code=status_code, payload=payload)
+        self.code = "mount_forbidden"
+
+
+class MountTargetInvalidError(ApiError):
+    """Raised when the mount target board / folder is invalid
+    (400, code=mount_target_invalid)."""
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 status_code: int = 400):
+        super().__init__(message or "mount_target_invalid",
+                         status_code=status_code, payload=payload)
+        self.code = "mount_target_invalid"
+
+
+class ReportStillMountedError(ApiError):
+    """Raised when an operation requires the report to be unmounted first
+    (409, code=report_still_mounted) — e.g. trashing a mounted report."""
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 report_id: Optional[int] = None, status_code: int = 409):
+        super().__init__(message or "report_still_mounted",
+                         status_code=status_code, payload=payload)
+        self.code = "report_still_mounted"
+        self.report_id = report_id
+
+
 # v0.6.0 — sentinel for update_composite tri-state semantics on nullable
 # scalar fields (period_date): default = omit key from body
 # (server leaves alone); explicit None = send {"key": null} so server
@@ -276,13 +367,35 @@ class ReportArchiveClient:
     # ---- auth ---------------------------------------------------------- #
 
     def login(self) -> dict:
-        """Authenticate the service account. Idempotent (re-logging overwrites)."""
-        env = self._post("/auth/login", json={
-            "email": settings.report_api_email,
-            "password": settings.report_api_password,
-        }, _no_auth=True)
+        """Authenticate the service account. Idempotent (re-logging overwrites).
+
+        Reuses the module-level cached token (per base_url+email) when it is
+        younger than `_TOKEN_TTL_SECONDS`, so repeated short-lived client
+        instances skip the ~250ms bcrypt round-trip per MCP tool call.
+        Raises AuthUnavailableError when the backend cannot be reached.
+        """
+        key = _token_cache_key()
+        cached = _TOKEN_CACHE.get(key)
+        if cached and (time.time() - cached["obtained_at"]) < _TOKEN_TTL_SECONDS:
+            self._token = cached["token"]
+            self._user_id = cached["user_id"]
+            logger.debug("login cache hit user_id=%s", self._user_id)
+            return {"access_token": self._token, "user_id": self._user_id,
+                    "cached": True}
+        try:
+            env = self._post("/auth/login", json={
+                "email": settings.report_api_email,
+                "password": settings.report_api_password,
+            }, _no_auth=True)
+        except (httpx.RequestError, NetworkUnreachableError) as exc:
+            raise AuthUnavailableError(str(exc), status_code=0) from exc
         self._token = env["access_token"]
         self._user_id = env["user_id"]
+        _TOKEN_CACHE[key] = {
+            "token": self._token,
+            "user_id": self._user_id,
+            "obtained_at": time.time(),
+        }
         logger.info("login OK user_id=%s", self._user_id)
         return env
 
@@ -350,6 +463,7 @@ class ReportArchiveClient:
 
     def create_report(self, payload: dict) -> dict:
         """POST /reports — returns the created Report record."""
+        logger.info("create_report title=%s", (payload or {}).get("title"))
         return self.post("/reports", json=payload)
 
     # ---- mention-resolver wrappers ------------------------------------- #
@@ -455,6 +569,7 @@ class ReportArchiveClient:
         header path as every other request. `mime_type` is auto-detected from
         the extension when omitted.
         """
+        logger.info("upload_file path=%s mime=%s", path, mime_type)
         from pathlib import Path as _Path
         import mimetypes as _mime
 
@@ -515,6 +630,7 @@ class ReportArchiveClient:
         `mode` is 'content' (blocks only) or 'full' (blocks + settings).
         The copy lands in the caller's personal workspace.
         """
+        logger.info("copy_report id=%s mode=%s title=%s", report_id, mode, title)
         body: dict[str, Any] = {"title": title, "mode": mode}
         if folder_id is not None:
             body["folder_id"] = int(folder_id)
@@ -535,6 +651,8 @@ class ReportArchiveClient:
         cap 200 chars). `direction` is 'outgoing' (default — report_id → to_report_id)
         or 'incoming' (server swaps from/to so the link points the other way).
         """
+        logger.info("add_report_link id=%s to=%s kind=%s direction=%s",
+                    report_id, to_report_id, kind, direction)
         if direction not in ("outgoing", "incoming"):
             raise ValueError(
                 f"direction must be 'outgoing' or 'incoming', got {direction!r}"
@@ -750,6 +868,7 @@ class ReportArchiveClient:
 
         Owner-only; idempotent. Fans out activity + notifications.
         """
+        logger.info("publish_report id=%s", report_id)
         return self.post(f"/reports/{report_id}/publish", json={})
 
     def unpublish_report(self, report_id: int) -> dict:
@@ -757,6 +876,7 @@ class ReportArchiveClient:
 
         Owner-only; no-op if not currently finalized.
         """
+        logger.info("unpublish_report id=%s", report_id)
         return self.post(f"/reports/{report_id}/unpublish", json={})
 
     def fetch_report_lock_status(self, report_id: int) -> dict:
@@ -899,6 +1019,8 @@ class ReportArchiveClient:
         """PUT /mounts/{report_id}/{workspace_slug}/folder — move a mount
         into a folder. Pass `folder_id=None` to clear (uncategorized).
         """
+        logger.info("set_mount_folder id=%s slug=%s folder_id=%s",
+                    report_id, workspace_slug, folder_id)
         body: dict[str, Any] = {"folder_id": folder_id}
         return self._request(
             "PUT", f"/mounts/{report_id}/{workspace_slug}/folder", json=body
@@ -916,6 +1038,8 @@ class ReportArchiveClient:
         'coauthor', 'manager' (RA p27 — 작성자+게시판 매니저, auto-syncs a
         workspace_manager grant).
         """
+        logger.info("set_mount_edit_policy id=%s slug=%s policy=%s",
+                    report_id, workspace_slug, edit_policy)
         body = {"edit_policy": edit_policy}
         return self._request(
             "PUT", f"/mounts/{report_id}/{workspace_slug}/edit-policy", json=body
@@ -934,6 +1058,8 @@ class ReportArchiveClient:
         Pass `owner_workspace_slugs=None` (or []) for 전사(global) scope.
         Manager-only; does not bump template version.
         """
+        logger.info("set_template_scope id=%s scopes=%s",
+                    template_id, owner_workspace_slugs)
         body: dict[str, Any] = {"owner_workspace_slugs": owner_workspace_slugs}
         return self._request("PATCH", f"/templates/{template_id}/scope", json=body)
 
@@ -965,6 +1091,7 @@ class ReportArchiveClient:
         `description=None` keeps the existing server default (empty string);
         pass any string to override.
         """
+        logger.info("create_preset source_report_id=%s name=%s", report_id, name)
         body: dict[str, Any] = {
             "source_report_id": int(report_id),
             "name": name,
@@ -984,6 +1111,8 @@ class ReportArchiveClient:
         """POST /presets/{preset_id}/new-report — instantiate a new report
         from a preset. `title` defaults to the preset name server-side.
         """
+        logger.info("new_report_from_preset preset_id=%s title=%s",
+                    preset_id, title)
         body: dict[str, Any] = {}
         if title is not None:
             body["title"] = title
@@ -995,6 +1124,7 @@ class ReportArchiveClient:
         """DELETE /presets/{preset_id} — only the preset author (or system
         admin) may delete.
         """
+        logger.info("delete_preset id=%s", preset_id)
         self._request("DELETE", f"/presets/{preset_id}")
 
     # ---- composites ---------------------------------------------------- #
@@ -1032,6 +1162,8 @@ class ReportArchiveClient:
         ids per row. Defaults to empty so the caller can do an
         edit-after-create flow.
         """
+        logger.info("create_composite title=%s kind=%s slug=%s",
+                    title, kind, workspace_slug)
         body: dict[str, Any] = {
             "title": title,
             "kind": kind,
@@ -1072,6 +1204,8 @@ class ReportArchiveClient:
         `expected_revision` enables optimistic concurrency. Backend returns
         409 (CompositeRevisionConflict) on mismatch.
         """
+        logger.info("update_composite id=%s expected_revision=%s",
+                    composite_id, expected_revision)
         body: dict[str, Any] = {}
         if title is not None:
             body["title"] = title
@@ -1093,17 +1227,20 @@ class ReportArchiveClient:
 
     def delete_composite(self, composite_id) -> None:
         """DELETE /composites/{id} — owner / sys admin only."""
+        logger.info("delete_composite id=%s", composite_id)
         self._request("DELETE", f"/composites/{composite_id}")
 
     def publish_composite(self, composite_id) -> dict:
         """POST /composites/{id}/publish — owner-only. Stamps
         `published_at`; for recurring composites freezes every item's
         content into `snapshot_content`. Idempotent."""
+        logger.info("publish_composite id=%s", composite_id)
         return self.post(f"/composites/{composite_id}/publish", json={})
 
     def unpublish_composite(self, composite_id) -> dict:
         """POST /composites/{id}/unpublish — owner-only. Clears
         `published_at` and per-item snapshots. Idempotent."""
+        logger.info("unpublish_composite id=%s", composite_id)
         return self.post(f"/composites/{composite_id}/unpublish", json={})
 
     def update_composite_summary(
@@ -1117,6 +1254,8 @@ class ReportArchiveClient:
         (other fields are left untouched). Pass `expected_revision` for
         optimistic-concurrency control (409 on mismatch).
         """
+        logger.info("update_composite_summary id=%s expected_revision=%s",
+                    composite_id, expected_revision)
         body: dict[str, Any] = {"summary_widgets": list(summary_widgets)}
         if expected_revision is not None:
             body["expected_revision"] = int(expected_revision)
@@ -1164,6 +1303,8 @@ class ReportArchiveClient:
         report be added to a composite. Server stores empty note when
         omitted.
         """
+        logger.info("submit_to_composite id=%s report_id=%s",
+                    composite_id, report_id)
         body: dict[str, Any] = {"ref_report_id": int(report_id)}
         if note is not None:
             body["note"] = note
@@ -1173,6 +1314,8 @@ class ReportArchiveClient:
         """POST /composites/{composite_id}/requests/{request_id}/accept —
         composite owner / sys admin only.
         """
+        logger.info("accept_composite_request composite=%s request=%s",
+                    composite_id, request_id)
         return self.post(
             f"/composites/{composite_id}/requests/{request_id}/accept", json={}
         )
@@ -1188,6 +1331,8 @@ class ReportArchiveClient:
         composite owner / sys admin only. `reason` is accepted for
         forward-compat but currently ignored server-side.
         """
+        logger.info("reject_composite_request composite=%s request=%s",
+                    composite_id, request_id)
         body: dict[str, Any] = {}
         if reason is not None:
             body["reason"] = reason
@@ -1199,6 +1344,8 @@ class ReportArchiveClient:
         """POST /composites/{composite_id}/requests/{request_id}/withdraw —
         requester self / composite owner / sys admin only.
         """
+        logger.info("withdraw_composite_request composite=%s request=%s",
+                    composite_id, request_id)
         return self.post(
             f"/composites/{composite_id}/requests/{request_id}/withdraw", json={}
         )
@@ -1266,6 +1413,7 @@ class ReportArchiveClient:
     def mark_notification_read(self, notification_id) -> dict:
         """PATCH /notifications/{id}/read — mark a single notification read.
         Idempotent."""
+        logger.info("mark_notification_read id=%s", notification_id)
         return self._request("PATCH",
                              f"/notifications/{notification_id}/read",
                              json={})
@@ -1273,6 +1421,7 @@ class ReportArchiveClient:
     def mark_all_notifications_read(self) -> int:
         """POST /notifications/mark-all-read — returns the number of rows
         flipped from unread to read."""
+        logger.info("mark_all_notifications_read")
         body = self.post("/notifications/mark-all-read", json={})
         if isinstance(body, dict):
             return int(body.get("count", 0) or 0)
@@ -1297,6 +1446,7 @@ class ReportArchiveClient:
         params: Optional[dict] = None,
         json: Optional[dict] = None,
         _no_auth: bool = False,
+        _retried_auth: bool = False,
     ) -> Any:
         if not _no_auth:
             self.ensure_logged_in()
@@ -1305,7 +1455,34 @@ class ReportArchiveClient:
         if self._token and not _no_auth:
             headers["Authorization"] = f"Bearer {self._token}"
 
-        resp = self._http.request(method, path, params=params, json=json, headers=headers)
+        # Network send. GET only gets up to 2 retries with a short backoff —
+        # non-GET methods get NO network retry (avoid duplicate writes).
+        max_attempts = 3 if method == "GET" else 1
+        backoffs = (0.5, 1.0)
+        for attempt in range(max_attempts):
+            try:
+                resp = self._http.request(method, path, params=params, json=json, headers=headers)
+                break
+            except httpx.RequestError as exc:
+                if attempt + 1 < max_attempts:
+                    logger.debug(
+                        "network error on %s %s (attempt %s/%s): %s — retrying",
+                        method, path, attempt + 1, max_attempts, exc,
+                    )
+                    time.sleep(backoffs[attempt])
+                    continue
+                raise NetworkUnreachableError(str(exc), status_code=0) from exc
+
+        # 401 → clear the cached token, re-login once, replay the request.
+        # Never for the login call itself (_no_auth), and the _retried_auth
+        # flag guarantees at most one retry (no loop).
+        if resp.status_code == 401 and not _no_auth and not _retried_auth:
+            logger.info("401 on %s %s — re-login and retry once", method, path)
+            _TOKEN_CACHE.pop(_token_cache_key(), None)
+            self._token = None
+            self.login()
+            return self._request(method, path, params=params, json=json,
+                                 _no_auth=_no_auth, _retried_auth=True)
 
         try:
             body = resp.json()
@@ -1397,8 +1574,9 @@ class ReportArchiveClient:
         """Map a (status, message, payload) tuple to the correct typed subclass.
 
         Returns None when no typed mapping applies — caller falls back to generic
-        ApiError. Order matters: 409 envelope codes first (stable signals), then
-        409 composite-path heuristic, then 403 Korean / ASCII substrings.
+        ApiError. Order matters: envelope codes first (stable signals — 409,
+        400, 403), then 409 composite-path heuristic, then 403 Korean / ASCII
+        substrings.
         """
         # ---- 409: prefer payload.errors[0].code (stable backend code) ---- #
         if status_code == 409:
@@ -1426,6 +1604,12 @@ class ReportArchiveClient:
                     composite_id=cls._extract_composite_id(path),
                     status_code=409,
                 )
+            if code == "report_still_mounted":
+                return ReportStillMountedError(
+                    message, payload=body,
+                    report_id=cls._extract_report_id(path),
+                    status_code=409,
+                )
             # Composite revision conflict via FastAPI default {detail:str}
             # (no errors[] envelope). Detect by path.
             if path.startswith("/composites/") or "/composites/" in path:
@@ -1436,8 +1620,30 @@ class ReportArchiveClient:
                 )
             return None
 
-        # ---- 403: Korean / ASCII substring detection --------------------- #
+        # ---- 400: envelope-code detection (v0.13.0 mounts) ---------------- #
+        if status_code == 400:
+            code = ""
+            if isinstance(body, dict):
+                errs = body.get("errors") or []
+                if errs and isinstance(errs[0], dict):
+                    code = str(errs[0].get("code") or "")
+            if code == "mount_target_invalid":
+                return MountTargetInvalidError(
+                    message, payload=body, status_code=400
+                )
+            return None
+
+        # ---- 403: envelope code first (stable), then Korean / ASCII ------- #
         if status_code == 403:
+            code = ""
+            if isinstance(body, dict):
+                errs = body.get("errors") or []
+                if errs and isinstance(errs[0], dict):
+                    code = str(errs[0].get("code") or "")
+            if code == "mount_forbidden":
+                return MountForbiddenError(
+                    message, payload=body, status_code=403
+                )
             if "작성자가 수정 잠금" in message:
                 return cls._build_author_locked_error(message, path)
             if message.startswith("발행된 보고서"):

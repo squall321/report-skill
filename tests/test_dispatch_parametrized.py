@@ -330,6 +330,8 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "report_milestone_remove": {
         "report_id": 1,
         "date": "2026-06-06",
+        # v0.13.0 — label is schema-required (date-only match bulk-removes).
+        "label": "kickoff",
         "block_id": "milestones",
     },
     "file_upload": {"path": "fake/path.bin"},
@@ -395,7 +397,8 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "presets_list": {},
     "preset_create": {"report_id": 1, "name": "p"},
     "report_new_from_preset": {"preset_id": 5},
-    "preset_delete": {"preset_id": 5},
+    # v0.13.0 — confirm gate (mirrors report_delete).
+    "preset_delete": {"preset_id": 5, "confirm": True},
 
     # ---- composites ----
     "composite_get": {"composite_id": 10},
@@ -411,7 +414,8 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "composite_create": {"title": "May agenda", "kind": "recurring"},
     "composite_update": {"composite_id": 10, "title": "renamed"},
     "composite_items_set": {"composite_id": 10, "items": []},
-    "composite_delete": {"composite_id": 10},
+    # v0.13.0 — confirm gate (mirrors report_delete).
+    "composite_delete": {"composite_id": 10, "confirm": True},
     "composite_publish": {"composite_id": 10},
     "composite_unpublish": {"composite_id": 10},
 

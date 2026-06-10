@@ -113,7 +113,37 @@ except ImportError:  # pragma: no cover
     TakedownOwnerForbiddenError = None  # type: ignore[assignment,misc]
     TrashRestoreForbiddenError = None  # type: ignore[assignment,misc]
 
+# v0.13.0 — mount + transport/auth typed exceptions. Imported defensively so
+# the MCP server keeps loading against an older client.py.
+try:
+    from report_skill.client import (
+        AuthUnavailableError,
+        MountForbiddenError,
+        MountTargetInvalidError,
+        NetworkUnreachableError,
+        ReportStillMountedError,
+    )
+except ImportError:  # pragma: no cover
+    AuthUnavailableError = None  # type: ignore[assignment,misc]
+    MountForbiddenError = None  # type: ignore[assignment,misc]
+    MountTargetInvalidError = None  # type: ignore[assignment,misc]
+    NetworkUnreachableError = None  # type: ignore[assignment,misc]
+    ReportStillMountedError = None  # type: ignore[assignment,misc]
+
 SERVER_NAME = "report-skill"
+
+
+def _frontend_base() -> str:
+    """v0.13.0 — derive the frontend origin from settings instead of a
+    hardcoded localhost:3001. The API base usually ends in "/api"
+    (e.g. http://host:3000/api) and the frontend lives at the same origin
+    without that suffix; fall back to the API base itself otherwise."""
+    from report_skill.config import settings
+
+    base = str(settings.report_api_base_url).rstrip("/")
+    if base.endswith("/api"):
+        return base[: -len("/api")]
+    return base
 
 # v0.5.1 — 13 optional fields shared by report_create / report_update.
 # Three related-info + ten page-level. Pass-through to builder / report_ops
@@ -375,7 +405,10 @@ TOOLS: list[Tool] = [
     ),
     _tool(
         "report_delete",
-        "DELETE a report. Requires confirm=true to actually delete.",
+        "PERMANENT purge — prefer report_trash (recoverable) unless the user "
+        "explicitly wants irreversible deletion. DELETE a report. Requires "
+        "confirm=true to actually delete. Fails with 409 report_still_mounted "
+        "while the report is mounted to any board — see SKILL.md recovery flow.",
         {
             "report_id": {"type": "integer"},
             "confirm": {"type": "boolean", "description": "must be true; safety guard"},
@@ -386,7 +419,8 @@ TOOLS: list[Tool] = [
         "report_mount",
         "Publish (mount) a report to one or more org board workspaces. New reports "
         "live in the author's personal workspace by default; mounting is the deliberate "
-        "publish step. Idempotent — already-mounted boards are silently skipped.",
+        "publish step. Idempotent — already-mounted boards are silently skipped. "
+        "On any failure the whole batch rolls back atomically — zero mounts are created.",
         {
             "report_id": {"type": "integer"},
             "workspace_slugs": {"type": "array", "items": {"type": "string"},
@@ -401,7 +435,8 @@ TOOLS: list[Tool] = [
     ),
     _tool(
         "report_unmount",
-        "Remove a report's mount from one workspace board.",
+        "Remove a report's mount from one workspace board. Unmounting discards "
+        "that mount's folder_id / edit_policy / note — re-mounting later starts fresh.",
         {
             "report_id": {"type": "integer"},
             "workspace_slug": {"type": "string"},
@@ -430,7 +465,8 @@ TOOLS: list[Tool] = [
     ),
     _tool(
         "report_milestone_remove",
-        "Remove milestone events by matching (date, label?).",
+        "Remove milestone events by matching (date, label). label is required "
+        "to avoid bulk-removing every milestone on the same date.",
         {
             "report_id": {"type": "integer"},
             "date": {"type": "string"},
@@ -438,7 +474,7 @@ TOOLS: list[Tool] = [
             "block_id": {"type": "string"},
             "page_index": {"type": "integer", "default": 0},
         },
-        ["report_id", "date"],
+        ["report_id", "date", "label"],
     ),
     _tool(
         "file_upload",
@@ -935,7 +971,8 @@ TOOLS: list[Tool] = [
         "takedown_approve",
         "Approve a takedown request (manager / sys admin only). "
         "POST /api/takedown-requests/{request_id}/approve. Unmounts the report "
-        "from the board and closes the request.",
+        "from the board and closes the request. Check the request first via "
+        "takedowns_list before approving.",
         {"request_id": {"type": "integer"}},
         ["request_id"],
     ),
@@ -1049,9 +1086,14 @@ TOOLS: list[Tool] = [
     ),
     _tool(
         "preset_delete",
-        "Delete a preset. DELETE /api/presets/{id}. Creator-only (or system admin).",
-        {"preset_id": {"type": "integer"}},
-        ["preset_id"],
+        "Delete a preset. DELETE /api/presets/{id}. Creator-only (or system admin). "
+        "IRREVERSIBLE — shared presets disappear for every user. "
+        "Requires confirm=true to actually delete.",
+        {
+            "preset_id": {"type": "integer"},
+            "confirm": {"type": "boolean", "description": "must be true; safety guard"},
+        },
+        ["preset_id", "confirm"],
     ),
 
     # ---- v0.5.0 — composites -------------------------------------------- #
@@ -1203,9 +1245,14 @@ TOOLS: list[Tool] = [
     ),
     _tool(
         "composite_delete",
-        "Delete a composite. DELETE /api/composites/{id}. Owner / sys admin only.",
-        {"composite_id": {"type": "integer"}},
-        ["composite_id"],
+        "Delete a composite. DELETE /api/composites/{id}. Owner / sys admin only. "
+        "IRREVERSIBLE hard delete — published composites included. There is no "
+        "trash for composites. Requires confirm=true to actually delete.",
+        {
+            "composite_id": {"type": "integer"},
+            "confirm": {"type": "boolean", "description": "must be true; safety guard"},
+        },
+        ["composite_id", "confirm"],
     ),
     _tool(
         "composite_publish",
@@ -1272,7 +1319,8 @@ TOOLS: list[Tool] = [
     _tool(
         "notifications_mark_all_read",
         "Mark every unread notification as read. POST "
-        "/api/notifications/mark-all-read. Returns the number of rows flipped.",
+        "/api/notifications/mark-all-read. Returns the number of rows flipped. "
+        "Prefer notification_mark_read per-id; this flips EVERY unread row.",
         {},
         [],
     ),
@@ -1584,7 +1632,7 @@ def _do_report_create(args: dict) -> Any:
     out = {
         "id": created.get("id"), "title": created.get("title"),
         "revision": created.get("revision"),
-        "view_url": f"http://localhost:3001/reports/{created.get('id')}",
+        "view_url": f"{_frontend_base()}/reports/{created.get('id')}",
         "blocks": [{"id": b.block_id, "status": b.status} for b in result.blocks],
     }
     if mount_results is not None:
@@ -1650,7 +1698,7 @@ def _do_report_update(args: dict) -> Any:
             **extra_kwargs,
         )
     return {"id": updated.get("id"), "revision": updated.get("revision"),
-            "view_url": f"http://localhost:3001/reports/{updated.get('id')}",
+            "view_url": f"{_frontend_base()}/reports/{updated.get('id')}",
             "blocks": [{"id": b.block_id, "status": b.status} for b in result.blocks]}
 
 
@@ -1663,7 +1711,7 @@ def _do_report_append(args: dict) -> Any:
             max_retries=int(args.get("max_retries", 3)),
         )
     return {"id": updated.get("id"), "revision": updated.get("revision"),
-            "view_url": f"http://localhost:3001/reports/{updated.get('id')}"}
+            "view_url": f"{_frontend_base()}/reports/{updated.get('id')}"}
 
 
 def _do_report_add_page(args: dict) -> Any:
@@ -1694,7 +1742,7 @@ def _do_report_add_page(args: dict) -> Any:
             blocks_order=args.get("blocks_order"),
         )
     return {"id": updated.get("id"), "pages": len(updated.get("pages") or []),
-            "view_url": f"http://localhost:3001/reports/{updated.get('id')}"}
+            "view_url": f"{_frontend_base()}/reports/{updated.get('id')}"}
 
 
 def _do_report_delete(args: dict) -> Any:
@@ -1710,20 +1758,51 @@ def _do_report_mount(args: dict) -> Any:
     logger.info("report_mount id=%s workspaces=%s",
                 args.get("report_id"), args.get("workspace_slugs"))
     rid = _int_arg(args, "report_id")
+    # v0.13.0 — a bare string slug would char-split via list(); wrap it instead.
+    slugs_raw = args["workspace_slugs"]
+    slugs = [slugs_raw] if isinstance(slugs_raw, str) else list(slugs_raw)
+    # v0.13.0 — folder ids are per-board; pre-reject the ambiguous combo.
+    if args.get("folder_id") is not None and len(slugs) > 1:
+        raise ValueError(
+            "folder_id can only be used with a single workspace_slug — the "
+            "same folder id cannot exist on multiple boards")
     with ReportArchiveClient() as c:
-        created = report_ops.mount_report(
-            c, rid,
-            workspace_slugs=list(args["workspace_slugs"]),
-            edit_policy=args.get("edit_policy", "default"),
-            note=args.get("note", ""),
-            folder_id=args.get("folder_id"),
-        )
-    return {
+        # v0.13.0 — trashed reports can't be mounted; fail with guidance
+        # instead of an opaque backend error.
+        report = report_ops.fetch_report(c, rid)
+        if report.get("deleted_at"):
+            raise ValueError(
+                f"report {rid} is in the trash (deleted_at set) — restore it "
+                "first via report_restore before mounting")
+        try:
+            created = report_ops.mount_report(
+                c, rid,
+                workspace_slugs=slugs,
+                edit_policy=args.get("edit_policy", "default"),
+                note=args.get("note", ""),
+                folder_id=args.get("folder_id"),
+            )
+        except ApiError as exc:
+            # v0.13.0 — the backend mount loop is all-or-nothing; surface
+            # that so callers don't probe for partial mounts. Mutating
+            # exc.args keeps the typed subclass intact for _TYPED_ERROR_MAP.
+            logger.warning("report_mount id=%s failed (batch rolled back): %s",
+                           rid, exc)
+            exc.args = (str(exc) + " (atomic: 0 mounts were created — "
+                        "the whole batch rolled back)",)
+            raise
+    out = {
         "report_id": rid,
         "new_mounts": created,
         "new_mount_count": len(created),
         "note": "Already-mounted boards are silently skipped — new_mounts may be empty.",
     }
+    if not created:
+        out["note"] += (
+            " Already mounted — to change folder/edit policy use "
+            "report_mount_set_folder / report_mount_set_edit_policy "
+            "(re-mounting does not update them).")
+    return out
 
 
 def _do_report_unmount(args: dict) -> Any:
@@ -1972,7 +2051,7 @@ def _do_report_revise(args: dict) -> Any:
         "revision": updated.get("revision"),
         "patched_blocks": list(patch.keys()),
         "results": results,
-        "view_url": f"http://localhost:3001/reports/{updated.get('id')}",
+        "view_url": f"{_frontend_base()}/reports/{updated.get('id')}",
     }
 
 
@@ -1990,7 +2069,7 @@ def _do_report_import(args: dict) -> Any:
             "id": created.get("id"),
             "title": created.get("title"),
             "revision": created.get("revision"),
-            "view_url": f"http://localhost:3001/reports/{created.get('id')}",
+            "view_url": f"{_frontend_base()}/reports/{created.get('id')}",
             "mode": "bundle",
         }
     payload = json.loads(p.read_text(encoding="utf-8"))
@@ -2000,7 +2079,7 @@ def _do_report_import(args: dict) -> Any:
         "id": created.get("id"),
         "title": created.get("title"),
         "revision": created.get("revision"),
-        "view_url": f"http://localhost:3001/reports/{created.get('id')}",
+        "view_url": f"{_frontend_base()}/reports/{created.get('id')}",
         "mode": "json",
     }
 
@@ -2711,7 +2790,7 @@ def _do_report_copy(args: dict) -> Any:
         "title": created.get("title"),
         "workspace_slug": created.get("workspace_slug"),
         "revision": created.get("revision"),
-        "view_url": f"http://localhost:3001/reports/{created.get('id')}",
+        "view_url": f"{_frontend_base()}/reports/{created.get('id')}",
     }
 
 
@@ -2745,14 +2824,35 @@ def _do_report_publish(args: dict) -> Any:
     logger.info("report_publish id=%s", args.get("report_id"))
     rid = _int_arg(args, "report_id")
     with ReportArchiveClient() as c:
+        # v0.13.0 — trashed reports can't be published; fail with guidance.
+        existing = report_ops.fetch_report(c, rid)
+        if existing.get("deleted_at"):
+            raise ValueError(
+                f"report {rid} is in the trash (deleted_at set) — restore it "
+                "first via report_restore before publishing")
         report = c.publish_report(rid)
-    return {
+        # v0.13.0 — publish fan-out only reaches mounted boards; surface the
+        # count so a zero-audience publish is obvious. Prefer mounts already
+        # present on the publish/fetch payloads; fall back to one list call.
+        mounts = report.get("mounts")
+        if not isinstance(mounts, list):
+            mounts = existing.get("mounts")
+        if not isinstance(mounts, list):
+            mounts = report_ops.list_mounts(c, rid)
+    out = {
         "id": report.get("id"),
         "title": report.get("title"),
         "phase": report.get("phase"),
         "revision": report.get("revision"),
-        "view_url": f"http://localhost:3001/reports/{report.get('id')}",
+        "view_url": f"{_frontend_base()}/reports/{report.get('id')}",
+        "mounted_board_count": len(mounts),
     }
+    if not mounts:
+        out["warning"] = (
+            "this report is not mounted to any board — publishing fired "
+            "notifications to nobody; mount it via report_mount to share "
+            "with a team")
+    return out
 
 
 def _do_report_unpublish(args: dict) -> Any:
@@ -2765,7 +2865,7 @@ def _do_report_unpublish(args: dict) -> Any:
         "title": report.get("title"),
         "phase": report.get("phase"),
         "revision": report.get("revision"),
-        "view_url": f"http://localhost:3001/reports/{report.get('id')}",
+        "view_url": f"{_frontend_base()}/reports/{report.get('id')}",
     }
 
 
@@ -2858,12 +2958,17 @@ def _do_report_new_from_preset(args: dict) -> Any:
     return {
         "id": new_id,
         "workspace_slug": result.get("workspace_slug"),
-        "view_url": f"http://localhost:3001/reports/{new_id}" if new_id is not None else None,
+        "view_url": f"{_frontend_base()}/reports/{new_id}" if new_id is not None else None,
     }
 
 
 def _do_preset_delete(args: dict) -> Any:
     logger.info("preset_delete id=%s", args.get("preset_id"))
+    # v0.13.0 — confirm gate (mirrors report_delete). Presets can be shared.
+    if args.get("confirm") is not True:
+        raise ValueError(
+            "confirm parameter must be true (boolean) to delete — preset "
+            "deletion is PERMANENT and shared presets disappear for every user")
     pid = _int_arg(args, "preset_id")
     with ReportArchiveClient() as c:
         c.delete_preset(pid)
@@ -3038,6 +3143,11 @@ def _do_composite_items_set(args: dict) -> Any:
 
 def _do_composite_delete(args: dict) -> Any:
     logger.info("composite_delete id=%s", args.get("composite_id"))
+    # v0.13.0 — confirm gate (mirrors report_delete). No trash for composites.
+    if args.get("confirm") is not True:
+        raise ValueError(
+            "confirm parameter must be true (boolean) to delete — composite "
+            "deletion is PERMANENT and includes published composites")
     cid = _int_arg(args, "composite_id")
     with ReportArchiveClient() as c:
         c.delete_composite(cid)
@@ -3272,6 +3382,12 @@ def _build_typed_error_map() -> list[tuple[type, str, bool]]:
         (RevisionMismatchError, "revision_mismatch", True),
         # 409 — composites revision (FastAPI {detail:str})
         (CompositeRevisionConflict, "composite_revision_mismatch", False),
+        # v0.13.0 — mount lifecycle + transport/auth availability
+        (MountForbiddenError, "mount_forbidden", False),
+        (MountTargetInvalidError, "mount_target_invalid", False),
+        (ReportStillMountedError, "report_still_mounted", True),
+        (NetworkUnreachableError, "network_unreachable", False),
+        (AuthUnavailableError, "auth_unavailable", False),
     ]
     return [(cls, code, has_rid) for (cls, code, has_rid) in raw if cls is not None]
 
