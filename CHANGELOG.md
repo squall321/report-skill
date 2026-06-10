@@ -1,5 +1,82 @@
 ﻿# Changelog
 
+## 0.14.0 — 2026-06-11
+
+Minor — closes the entire remaining P3/P4 backlog from the v0.11.0 cold-eye
+review: VOC error reporting, observability, LLM-context reduction (SKILL.md
+3-tier split), dry_run across content writes, and the last two LOW items.
+MCP `_DISPATCH` grows 91 → 93.
+
+Added — VOC / observability (the headline):
+
+- NEW `src/report_skill/telemetry.py` — every HTTP call (success + failure,
+  with status / duration / typed error code) and every MCP tool call is
+  appended to daily JSONL logs under `%LOCALAPPDATA%/report-skill/logs/`.
+  Secrets auto-redacted (password / token / secret / authorization patterns
+  masked); error messages truncated at 500 chars; only arg KEY names are
+  recorded, never values. Telemetry never raises — failures no-op silently.
+- NEW MCP tool `session_log` — recent skill activity with filters
+  (`n`, `errors_only`, `kind=http|tool`). The LLM can triage "what just
+  failed" without the user copy-pasting stack traces.
+- NEW MCP tool `voc_export` — one call bundles skill version, Python/OS,
+  backend URL (creds excluded), recent calls, recent errors, and an optional
+  user note into `voc-<timestamp>.md` + `.json` under
+  `%LOCALAPPDATA%/report-skill/voc/`. 사용자가 문제를 겪는 즉시 "VOC
+  내보내줘" 한 마디로 첨부 가능한 제출 파일이 만들어진다.
+- CLI mirrors: `report-skill voc export [--note ...]` + `report-skill voc
+  log [--n/--errors-only/--kind]` (rich table). The 5 highest-traffic write
+  commands (report create / update / publish / revise / append) print a
+  one-line VOC hint after a generic ApiError.
+- Hook points: `client._request` records the FINAL outcome of every HTTP
+  call (retry loops record once); `mcp_server.call_tool` records every tool
+  dispatch via try/finally so all exit paths are covered.
+
+Changed — SKILL.md 3-tier split (LLM context cost: 1,162 → 257 lines, -78%):
+
+- `SKILL.md` is now the CORE tier only: the 3 main flows (create / revise
+  with the content-aware read sequence / mount-publish with the takedown
+  branch), hard rules, a 5-code error primer, and a routing table.
+- 4 reference files the LLM Reads on demand:
+  `reference/widgets.md` (130) — per-widget shapes, mention:// spec, color
+  tokens, cell_styles/cell_html/text_html;
+  `reference/errors-recovery.md` (124) — full 20-code table + Recovery
+  flows #1–#5 + lifecycle notes;
+  `reference/tools-inventory.md` — version-by-version tool history + the
+  93-tool inventory;
+  `reference/flows-advanced.md` (433) — presets / composites / grants /
+  takedown / notifications / activities.
+- PACKAGING BUG caught in the process: `build_release.ps1` copied
+  `.claude/skills/*.md` FLAT — directory-style skills would have shipped
+  without their subfolders. Fixed to recursive copy (install.ps1 hints too).
+
+Added — dry_run across content writes:
+
+- `report_create` / `report_update` / `report_append` / `report_add_page`
+  accept `dry_run=true`: the full normalize + validate + payload-build
+  pipeline runs, then returns `{dry_run, would_send, validation}` WITHOUT
+  sending. The LLM can pre-flight a complex multi-block patch and fix
+  schema errors before touching the server.
+- `report_delete` `dry_run=true` returns an impact preview — title,
+  mounted boards, `composite_ref_count` — without deleting (and without
+  needing `confirm` in preview mode).
+- `report_revise` already had dry_run (unchanged).
+
+Fixed — last LOW backlog items:
+
+- `_ENTITY_TYPES_CACHE` now carries a 600s TTL + one forced refetch on an
+  axis-lookup miss (heals "new entity axis added after server start" in
+  long-lived MCP processes).
+- `notifications_mark_all_read` now requires `confirm=true` (flips every
+  unread row irreversibly; per-id `notification_mark_read` preferred).
+
+Verified:
+
+- Unit: 486 passed, 5 skipped, 12 deselected.
+- Live E2E (backend up): 11 passed, 1 skipped — and the telemetry log
+  captured the suite's real HTTP traffic (POST /reports 29ms, trash,
+  mounts...), proving the VOC pipeline end-to-end.
+- `_DISPATCH` = 93; structural parity locks (4) all green.
+
 ## 0.13.1 — 2026-06-10
 
 Patch — first LIVE run of the v0.13.0 E2E suite against the real backend

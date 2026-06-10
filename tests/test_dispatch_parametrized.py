@@ -424,7 +424,12 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "notifications_list": {},
     "notifications_unread_count": {},
     "notification_mark_read": {"notification_id": 5},
-    "notifications_mark_all_read": {},
+    # v0.14.0 — confirm gate (mirrors composite_delete).
+    "notifications_mark_all_read": {"confirm": True},
+
+    # ---- v0.14.0 telemetry / VOC (local-only, no ReportArchiveClient) ----
+    "session_log": {},
+    "voc_export": {},
 
     # ---- v0.8.0 unified grants ----
     "content_shares_list": {"content_type": "reports", "content_id": 1},

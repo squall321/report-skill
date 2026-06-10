@@ -125,12 +125,12 @@ New-Item -ItemType Directory -Force -Path $relDir | Out-Null
 # 5a. wheel
 Copy-Item $wheel.FullName -Destination $relDir
 
-# 5b. .claude/skills/*.md
+# 5b. .claude/skills/ (recursive — skills are directories: <name>/SKILL.md + reference/*.md)
 $skillsSrc = Join-Path $repo ".claude\skills"
 if (Test-Path $skillsSrc) {
     $skillsDst = Join-Path $relDir ".claude\skills"
     New-Item -ItemType Directory -Force -Path $skillsDst | Out-Null
-    Copy-Item (Join-Path $skillsSrc "*.md") -Destination $skillsDst
+    Copy-Item (Join-Path $skillsSrc "*") -Destination $skillsDst -Recurse -Force
 }
 
 # 5c. .env.example

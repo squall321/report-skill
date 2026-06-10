@@ -246,7 +246,7 @@ def test_add_report_link_accepts_direction(monkeypatch):
 # --------------------------------------------------------------------------- #
 # 6. _DISPATCH size — locks the surface so an accidental rename / drop fails
 # --------------------------------------------------------------------------- #
-def test_dispatch_count_is_91():
+def test_dispatch_count_is_93():
     # v0.5.0 shipped 53 tools; v0.5.1 adds `report_lock_status` → 54;
     # v0.6.0 adds 6 composites body editing + 1 activities + 4 notifications → 65;
     # v0.7.0 adds `widget_relations_list` → 66;
@@ -255,8 +255,9 @@ def test_dispatch_count_is_91():
     # v0.10.0 adds 2 soft-delete + 4 takedown-queue tools → 82;
     # v0.11.0 adds 4 content-aware read tools → 86;
     # v0.12.0 adds 5 high-value read tools (composites_by_report, reports_list,
-    # comments_inbox_list, entities_usage_list, workspace_members_list) → 91.
-    assert len(_DISPATCH) == 91, sorted(_DISPATCH)
+    # comments_inbox_list, entities_usage_list, workspace_members_list) → 91;
+    # v0.14.0 adds 2 telemetry/VOC tools (session_log, voc_export) → 93.
+    assert len(_DISPATCH) == 93, sorted(_DISPATCH)
 
 
 # --------------------------------------------------------------------------- #
@@ -522,7 +523,8 @@ def test_notifications_mark_all_read_dispatch(monkeypatch):
     client_mock.mark_all_notifications_read.return_value = 42
     _install_fake_client(monkeypatch, client_mock)
 
-    out = _DISPATCH["notifications_mark_all_read"]({})
+    # v0.14.0 — confirm gate: bulk mark-all is irreversible.
+    out = _DISPATCH["notifications_mark_all_read"]({"confirm": True})
 
     client_mock.mark_all_notifications_read.assert_called_once_with()
     assert out == {"marked_read": 42}

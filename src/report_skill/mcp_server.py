@@ -40,6 +40,7 @@ except (AttributeError, OSError):
 import asyncio
 import json
 import logging
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -315,6 +316,11 @@ TOOLS: list[Tool] = [
             "allow_failures": {"type": "boolean", "default": False},
             "mount_to": {"type": "array", "items": {"type": "string"},
                          "description": "after create, auto-mount onto these board workspace(s)"},
+            # v0.14.0 — preview mode shared by the content-write tools.
+            "dry_run": {"type": "boolean", "default": False,
+                        "description": "validate + build the payload but do NOT send — "
+                                       "returns the would-be request body + per-block "
+                                       "validation report"},
             **_REPORT_EXTRA_PROPS,
         },
         ["template_id", "blocks", "title"],
@@ -340,6 +346,11 @@ TOOLS: list[Tool] = [
             # v0.5.2 — A6: mirror report_create's failed_count gate so partial
             # patches don't silently land. Set true to PATCH anyway.
             "allow_failures": {"type": "boolean", "default": False},
+            # v0.14.0 — preview mode shared by the content-write tools.
+            "dry_run": {"type": "boolean", "default": False,
+                        "description": "validate + build the payload but do NOT send — "
+                                       "returns the would-be request body + per-block "
+                                       "validation report"},
             **_REPORT_EXTRA_PROPS,
         },
         ["report_id"],
@@ -379,6 +390,11 @@ TOOLS: list[Tool] = [
             "blocks": {"type": "object", "description": "{block_id: anything-ish to merge}"},
             "page_index": {"type": "integer", "default": 0},
             "max_retries": {"type": "integer", "default": 3},
+            # v0.14.0 — preview mode shared by the content-write tools.
+            "dry_run": {"type": "boolean", "default": False,
+                        "description": "validate + build the payload but do NOT send — "
+                                       "returns the would-be request body + per-block "
+                                       "validation report"},
         },
         ["report_id", "blocks"],
     ),
@@ -400,6 +416,11 @@ TOOLS: list[Tool] = [
             # v0.5.2 — A6: mirror report_create's failed_count gate so a page
             # with broken blocks isn't appended silently.
             "allow_failures": {"type": "boolean", "default": False},
+            # v0.14.0 — preview mode shared by the content-write tools.
+            "dry_run": {"type": "boolean", "default": False,
+                        "description": "validate + build the payload but do NOT send — "
+                                       "returns the would-be request body + per-block "
+                                       "validation report"},
         },
         ["report_id", "template_id", "blocks"],
     ),
@@ -408,12 +429,20 @@ TOOLS: list[Tool] = [
         "PERMANENT purge — prefer report_trash (recoverable) unless the user "
         "explicitly wants irreversible deletion. DELETE a report. Requires "
         "confirm=true to actually delete. Fails with 409 report_still_mounted "
-        "while the report is mounted to any board — see SKILL.md recovery flow.",
+        "while the report is mounted to any board — see SKILL.md recovery flow. "
+        "Pass dry_run=true for an impact preview (title, mounted boards, "
+        "composite refs) without deleting — confirm is not needed then.",
         {
             "report_id": {"type": "integer"},
-            "confirm": {"type": "boolean", "description": "must be true; safety guard"},
+            "confirm": {"type": "boolean",
+                        "description": "must be true to actually delete; safety guard "
+                                       "(not needed with dry_run=true)"},
+            # v0.14.0 — impact preview: what WOULD be purged.
+            "dry_run": {"type": "boolean", "default": False,
+                        "description": "fetch the report + its mounts and return an "
+                                       "impact preview without deleting"},
         },
-        ["report_id", "confirm"],
+        ["report_id"],
     ),
     _tool(
         "report_mount",
@@ -1320,8 +1349,40 @@ TOOLS: list[Tool] = [
         "notifications_mark_all_read",
         "Mark every unread notification as read. POST "
         "/api/notifications/mark-all-read. Returns the number of rows flipped. "
-        "Prefer notification_mark_read per-id; this flips EVERY unread row.",
-        {},
+        "Prefer notification_mark_read per-id; this flips EVERY unread row "
+        "and cannot be undone. Requires confirm=true.",
+        {
+            # v0.14.0 — confirm gate (mirrors composite_delete).
+            "confirm": {"type": "boolean", "description": "must be true; safety guard"},
+        },
+        ["confirm"],
+    ),
+
+    # ---- v0.14.0 — telemetry / VOC ------------------------------------- #
+    _tool(
+        "session_log",
+        "Recent skill activity — tool calls + HTTP calls with status / "
+        "duration / error codes. Use errors_only=true to triage a failure "
+        "the user just hit. Reads the local telemetry log "
+        "(%LOCALAPPDATA%/report-skill/logs).",
+        {
+            "n": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
+            "errors_only": {"type": "boolean", "default": False},
+            "kind": {"type": "string", "enum": ["http", "tool"]},
+        },
+        [],
+    ),
+    _tool(
+        "voc_export",
+        "Export a VOC bundle the user can attach to a bug report — skill "
+        "version, environment, recent calls, recent errors, optional user "
+        "note. Writes voc-<timestamp>.md + .json under "
+        "%LOCALAPPDATA%/report-skill/voc/ and returns the paths. Call this "
+        "whenever the user says something broke and wants to report it.",
+        {
+            "note": {"type": "string",
+                     "description": "사용자가 겪은 문제 설명 (그대로 번들에 포함)"},
+        },
         [],
     ),
 ]
@@ -1592,6 +1653,16 @@ def _normalize_and_upload(c: ReportArchiveClient, tpl: dict,
     )
 
 
+def _validation_summary(result) -> dict:
+    """v0.14.0 — per-block normalize report reused by the dry_run previews."""
+    return {
+        "failed": result.failed_count,
+        "blocks": [{"id": b.block_id, "type": b.widget_type,
+                    "status": b.status, "detail": b.detail}
+                   for b in result.blocks],
+    }
+
+
 def _do_report_create(args: dict) -> Any:
     logger.info("report_create title=%s", args.get("title", ""))
     snap = schemas.load()
@@ -1621,6 +1692,15 @@ def _do_report_create(args: dict) -> Any:
             extra_blocks=result.extra_blocks,
             **extra_kwargs,
         )
+        # v0.14.0 — dry_run: everything above (normalize, validate, payload
+        # build) ran for real; stop short of the POST.
+        if args.get("dry_run"):
+            return {
+                "dry_run": True,
+                "would_send": payload,
+                "validation": _validation_summary(result),
+                "note": "no request was sent",
+            }
         created = c.create_report(payload)
         # Optional auto-mount to org boards
         mount_results = None
@@ -1682,6 +1762,21 @@ def _do_report_update(args: dict) -> Any:
         new_extras = [e for e in result.extra_blocks if e.get("id") not in existing_extra_ids]
         # v0.5.1 — forward the 13 optional related-info + page-level fields.
         extra_kwargs = {k: args[k] for k in _REPORT_PASS_THROUGH if k in args}
+        # v0.14.0 — dry_run: normalize/validate ran for real; return the
+        # block patch that update_blocks WOULD ship, without PATCHing.
+        if args.get("dry_run"):
+            return {
+                "dry_run": True,
+                "would_send": {
+                    "page_index": page_index,
+                    "block_patches": result.content,
+                    "add_extra_blocks": new_extras,
+                    "blocks_order": args.get("blocks_order"),
+                    **extra_kwargs,
+                },
+                "validation": _validation_summary(result),
+                "note": "no request was sent",
+            }
         updated = report_ops.update_blocks(
             c, rid,
             page_index=page_index,
@@ -1703,11 +1798,52 @@ def _do_report_update(args: dict) -> Any:
 
 
 def _do_report_append(args: dict) -> Any:
+    rid = _int_arg(args, "report_id")
+    page_index = int(args.get("page_index", 0))
+    # v0.14.0 — dry_run: build the per-block merge patch with the SAME
+    # helpers append_to_blocks uses (fetch, type map, per-widget merge) and
+    # stop before the PATCH. The write itself lives in report_ops, so the
+    # preview re-runs the build here instead of refactoring report_ops.
+    if args.get("dry_run"):
+        with ReportArchiveClient() as c:
+            report = report_ops.fetch_report(c, rid)
+            pages = report.get("pages") or []
+            if page_index >= len(pages):
+                raise IndexError(f"page_index {page_index} out of range")
+            type_map = report_ops._index_block_types(report, page_index)
+            page = pages[page_index]
+            tpl = c.fetch_template(page["template_id"], page["template_version"])
+            tpl_blocks = (tpl.get("schema") or {}).get("blocks") or []
+            tpl_by_id = {b["id"]: b for b in tpl_blocks if isinstance(b, dict)}
+            for bid, bdef in tpl_by_id.items():
+                type_map.setdefault(bid, bdef.get("type", ""))
+            existing_content = page.get("content") or {}
+            patches: dict[str, dict] = {}
+            block_reports: list[dict] = []
+            for bid, raw in (args.get("blocks") or {}).items():
+                wtype = type_map.get(bid)
+                if not wtype:
+                    raise KeyError(f"block id '{bid}' not found on page {page_index}")
+                props = (tpl_by_id.get(bid, {}) or {}).get("props", {}) or {}
+                try:
+                    patches[bid] = report_ops._merge_one_block(
+                        wtype, existing_content.get(bid), raw, props)
+                    block_reports.append({"id": bid, "type": wtype, "status": "ok"})
+                except report_ops.NormalizeError as e:
+                    block_reports.append({"id": bid, "type": wtype,
+                                          "status": "failed", "detail": str(e)})
+        failed = sum(1 for b in block_reports if b["status"] == "failed")
+        return {
+            "dry_run": True,
+            "would_send": {"page_index": page_index, "block_patches": patches},
+            "validation": {"failed": failed, "blocks": block_reports},
+            "note": "no request was sent",
+        }
     with ReportArchiveClient() as c:
         updated = report_ops.append_to_blocks(
-            c, _int_arg(args, "report_id"),
+            c, rid,
             block_appends=args["blocks"],
-            page_index=int(args.get("page_index", 0)),
+            page_index=page_index,
             max_retries=int(args.get("max_retries", 3)),
         )
     return {"id": updated.get("id"), "revision": updated.get("revision"),
@@ -1729,6 +1865,22 @@ def _do_report_add_page(args: dict) -> Any:
                     "blocks": [{"id": b.block_id, "type": b.widget_type,
                                 "status": b.status, "detail": b.detail}
                                for b in result.blocks if b.status == "failed"]}
+        # v0.14.0 — dry_run: normalize/validate ran for real; return the
+        # page payload add_page WOULD ship, without the write.
+        if args.get("dry_run"):
+            return {
+                "dry_run": True,
+                "would_send": {
+                    "template_id": tpl["template_id"],
+                    "template_version": tpl["version"],
+                    "name": args.get("name"),
+                    "content": result.content,
+                    "extra_blocks": result.extra_blocks,
+                    "blocks_order": args.get("blocks_order"),
+                },
+                "validation": _validation_summary(result),
+                "note": "no request was sent",
+            }
         updated = report_ops.add_page(
             c, rid,
             template_id=tpl["template_id"],
@@ -1746,12 +1898,32 @@ def _do_report_add_page(args: dict) -> Any:
 
 
 def _do_report_delete(args: dict) -> Any:
-    logger.info("report_delete id=%s", args.get("report_id"))
+    logger.info("report_delete id=%s dry_run=%s",
+                args.get("report_id"), bool(args.get("dry_run")))
+    rid = _int_arg(args, "report_id")
+    # v0.14.0 — impact preview: what WOULD be purged. No confirm needed.
+    if args.get("dry_run"):
+        with ReportArchiveClient() as c:
+            report = report_ops.fetch_report(c, rid)
+            mounts = report_ops.list_mounts(c, rid)
+        slugs = [m.get("workspace_slug") or m.get("slug")
+                 for m in mounts if isinstance(m, dict)]
+        return {
+            "dry_run": True,
+            "would_delete": {
+                "report_id": rid,
+                "title": report.get("title"),
+                "deleted_at": report.get("deleted_at"),
+                "mounted_boards": slugs,
+                "composite_ref_count": report.get("composite_ref_count"),
+            },
+            "warning": "report_delete is a PERMANENT purge — prefer report_trash",
+        }
     if not args.get("confirm"):
         raise ValueError("confirm parameter must be true (boolean) to delete")
     with ReportArchiveClient() as c:
-        report_ops.delete_report(c, _int_arg(args, "report_id"))
-    return {"deleted": True, "id": _int_arg(args, "report_id")}
+        report_ops.delete_report(c, rid)
+    return {"deleted": True, "id": rid}
 
 
 def _do_report_mount(args: dict) -> Any:
@@ -2213,15 +2385,32 @@ def _do_workspaces_list(args: dict) -> Any:
     return out
 
 
-_ENTITY_TYPES_CACHE: list[dict] | None = None
+# v0.14.0 — TTL'd cache: {"data": list[dict], "fetched_at": float(monotonic)}.
+# Stale after _ENTITY_TYPES_TTL_S so axes added while the server runs show up.
+_ENTITY_TYPES_CACHE: dict | None = None
+_ENTITY_TYPES_TTL_S = 600.0
+
+
+def _entity_types_cache_fresh() -> bool:
+    return (
+        _ENTITY_TYPES_CACHE is not None
+        and (time.monotonic() - float(_ENTITY_TYPES_CACHE.get("fetched_at") or 0.0))
+        <= _ENTITY_TYPES_TTL_S
+    )
+
+
+def _fetch_entity_types_cached(*, force: bool = False) -> list[dict]:
+    """Return the raw entity-axis catalog; refetch when forced or TTL-stale."""
+    global _ENTITY_TYPES_CACHE
+    if force or not _entity_types_cache_fresh():
+        with ReportArchiveClient() as c:
+            _ENTITY_TYPES_CACHE = {"data": c.fetch_entity_types(),
+                                   "fetched_at": time.monotonic()}
+    return (_ENTITY_TYPES_CACHE or {}).get("data") or []
 
 
 def _do_entity_types_list(_args: dict) -> Any:
-    """Return the entity-axis catalog; cached after first hit."""
-    global _ENTITY_TYPES_CACHE
-    if _ENTITY_TYPES_CACHE is None:
-        with ReportArchiveClient() as c:
-            _ENTITY_TYPES_CACHE = c.fetch_entity_types()
+    """Return the entity-axis catalog; cached with a 600s TTL (v0.14.0)."""
     return [{
         "id": t.get("id"),
         "slug": t.get("slug"),
@@ -2230,7 +2419,7 @@ def _do_entity_types_list(_args: dict) -> Any:
         "multi": t.get("multi", False),
         "sort_order": t.get("sort_order", 0),
         "description": t.get("description"),
-    } for t in (_ENTITY_TYPES_CACHE or []) if isinstance(t, dict)]
+    } for t in _fetch_entity_types_cached() if isinstance(t, dict)]
 
 
 def _do_entities_list(args: dict) -> Any:
@@ -2243,8 +2432,16 @@ def _do_entities_list(args: dict) -> Any:
 
     # If axis given and no type_id, resolve via cached entity_types.
     if type_id is None and axis:
+        # v0.14.0 — on a lookup MISS served from a warm cache, force ONE
+        # refetch and retry before giving up. Heals "new entity axis added
+        # after server start" without waiting out the TTL.
+        was_fresh = _entity_types_cache_fresh()
         types = _do_entity_types_list({})
         match = next((t for t in types if t.get("slug") == axis), None)
+        if match is None and was_fresh:
+            _fetch_entity_types_cached(force=True)
+            types = _do_entity_types_list({})
+            match = next((t for t in types if t.get("slug") == axis), None)
         if match is None:
             return []
         type_id = match.get("id")
@@ -3251,10 +3448,34 @@ def _do_notification_mark_read(args: dict) -> Any:
     return {"id": nid, "marked_read": True}
 
 
-def _do_notifications_mark_all_read(_args: dict) -> Any:
+def _do_notifications_mark_all_read(args: dict) -> Any:
+    # v0.14.0 — confirm gate (mirrors composite_delete): bulk, irreversible.
+    if args.get("confirm") is not True:
+        raise ValueError(
+            "confirm parameter must be true (boolean) — this flips EVERY "
+            "unread notification and cannot be undone; prefer "
+            "notification_mark_read per-id")
     with ReportArchiveClient() as c:
         n = c.mark_all_notifications_read()
     return {"marked_read": int(n)}
+
+
+# ---- v0.14.0 — telemetry / VOC dispatchers ----------------------------- #
+
+def _do_session_log(args: dict) -> Any:
+    """Read-only view over the local telemetry log — no network."""
+    from report_skill import telemetry
+    return telemetry.recent(
+        n=max(1, min(int(args.get("n") or 50), 200)),
+        errors_only=bool(args.get("errors_only", False)),
+        kind=args.get("kind"),
+    )
+
+
+def _do_voc_export(args: dict) -> Any:
+    """Write a VOC bundle (md + json) under %LOCALAPPDATA%/report-skill/voc/."""
+    from report_skill import telemetry
+    return telemetry.export_voc(note=args.get("note"))
 
 
 _DISPATCH = {
@@ -3357,6 +3578,9 @@ _DISPATCH = {
     "notifications_unread_count": _do_notifications_unread_count,
     "notification_mark_read": _do_notification_mark_read,
     "notifications_mark_all_read": _do_notifications_mark_all_read,
+    # ---- v0.14.0 — telemetry / VOC -------------------------------------- #
+    "session_log": _do_session_log,
+    "voc_export": _do_voc_export,
 }
 
 
@@ -3469,30 +3693,60 @@ async def call_tool(name: str, arguments: dict | None) -> list[TextContent]:
         raise Exception(_err_json(
             {"error": f"unknown tool '{name}'", "available": sorted(_DISPATCH)}
         ))
+    # v0.14.0 — telemetry around the dispatch. The outcome holder is filled
+    # by EVERY exit path below (success + all five error branches); the
+    # finally block is the single recording point so no path escapes it.
+    _t0 = time.monotonic()
+    _outcome: dict = {"ok": False, "error_code": "internal", "error_message": None}
     try:
-        result = await asyncio.to_thread(fn, args)
-    except ApiError as e:
-        # v0.5.2 — A4: typed-subclass dispatch BEFORE the generic ApiError
-        # branch. Walk the (class, code, include_rid) table and emit a
-        # structured {error: <code>, reason, code, report_id} payload.
-        for cls, code, include_rid in _TYPED_ERROR_MAP:
-            if isinstance(e, cls):
-                raise Exception(_err_json(_format_typed_error(e, code, include_rid))) from e
-        # A8 — generic ApiError, promote errors[0].code to top-level.
-        raise Exception(_err_json(_api_error_payload(e))) from e
-    except (ValueError, KeyError, IndexError, FileNotFoundError) as e:
-        raise Exception(_err_json({"error": type(e).__name__, "message": str(e)})) from e
-    except RuntimeError as e:
-        # v0.5.2 — A5: classify the three RuntimeError flavours the inner
-        # dispatchers raise (SnapshotMissing, LLMError, no-LLM-provider) so
-        # the LLM sees `snapshot_missing` / `llm_error` / `no_llm_provider`
-        # instead of a useless "internal" label.
-        raise Exception(_err_json(_classify_runtime_error(e))) from e
-    except Exception as e:  # final safety net — surface the type for diagnosis
-        raise Exception(_err_json(
-            {"error": "internal", "type": type(e).__name__, "message": str(e)}
-        )) from e
-    return _text(result)
+        try:
+            result = await asyncio.to_thread(fn, args)
+            _outcome["ok"] = True
+            return _text(result)
+        except ApiError as e:
+            _outcome["error_message"] = str(e)[:500]
+            # v0.5.2 — A4: typed-subclass dispatch BEFORE the generic ApiError
+            # branch. Walk the (class, code, include_rid) table and emit a
+            # structured {error: <code>, reason, code, report_id} payload.
+            for cls, code, include_rid in _TYPED_ERROR_MAP:
+                if isinstance(e, cls):
+                    _outcome["error_code"] = code
+                    raise Exception(_err_json(_format_typed_error(e, code, include_rid))) from e
+            # A8 — generic ApiError, promote errors[0].code to top-level.
+            payload = _api_error_payload(e)
+            _outcome["error_code"] = payload.get("error_code") or payload["error"]
+            raise Exception(_err_json(payload)) from e
+        except (ValueError, KeyError, IndexError, FileNotFoundError) as e:
+            _outcome["error_code"] = type(e).__name__
+            _outcome["error_message"] = str(e)[:500]
+            raise Exception(_err_json({"error": type(e).__name__, "message": str(e)})) from e
+        except RuntimeError as e:
+            # v0.5.2 — A5: classify the three RuntimeError flavours the inner
+            # dispatchers raise (SnapshotMissing, LLMError, no-LLM-provider) so
+            # the LLM sees `snapshot_missing` / `llm_error` / `no_llm_provider`
+            # instead of a useless "internal" label.
+            payload = _classify_runtime_error(e)
+            _outcome["error_code"] = payload.get("error") or "internal"
+            _outcome["error_message"] = str(e)[:500]
+            raise Exception(_err_json(payload)) from e
+        except Exception as e:  # final safety net — surface the type for diagnosis
+            _outcome["error_code"] = "internal"
+            _outcome["error_message"] = str(e)[:500]
+            raise Exception(_err_json(
+                {"error": "internal", "type": type(e).__name__, "message": str(e)}
+            )) from e
+    finally:
+        dur_ms = (time.monotonic() - _t0) * 1000.0
+        try:  # belt-and-braces — telemetry swallows internally already
+            from report_skill import telemetry
+            telemetry.record_tool(
+                name, _outcome["ok"], dur_ms,
+                error_code=None if _outcome["ok"] else _outcome["error_code"],
+                error_message=None if _outcome["ok"] else _outcome["error_message"],
+                args_keys=sorted(args.keys()) if isinstance(args, dict) else None,
+            )
+        except Exception:  # noqa: BLE001 — telemetry must never break a call
+            pass
 
 
 def _classify_runtime_error(exc: RuntimeError) -> dict:

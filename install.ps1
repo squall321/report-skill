@@ -123,11 +123,11 @@ Write-Host "==> next steps" -ForegroundColor Cyan
 $skillsDir = Join-Path $root ".claude\skills"
 if (Test-Path $skillsDir) {
     Write-Host "    Claude Code skills shipped with this release:" -ForegroundColor DarkGray
-    Get-ChildItem $skillsDir -Filter "*.md" | ForEach-Object {
-        Write-Host "      /$($_.BaseName)" -ForegroundColor DarkGray
+    Get-ChildItem $skillsDir -Recurse -Filter "SKILL.md" | ForEach-Object {
+        Write-Host "      /$($_.Directory.Name)" -ForegroundColor DarkGray
     }
     Write-Host "    To make them available everywhere, copy to %USERPROFILE%\.claude\skills\:"
-    Write-Host "      Copy-Item .claude\skills\*.md `$env:USERPROFILE\.claude\skills\ -Force"
+    Write-Host "      Copy-Item .claude\skills\* `$env:USERPROFILE\.claude\skills\ -Recurse -Force"
     Write-Host "    Or just `cd $root` and they auto-load (project-scoped)."
 }
 Write-Host ""

@@ -87,6 +87,8 @@ notifications_app = typer.Typer(no_args_is_help=True,
                                  help="Notification inbox — react to events.")
 shares_app = typer.Typer(no_args_is_help=True,
                           help="Unified grants — share reports / composites / folders / boards.")
+voc_app = typer.Typer(no_args_is_help=True,
+                       help="VOC / telemetry — 최근 호출 이력 조회 + 버그 리포트 번들 내보내기 (v0.14.0).")
 app.add_typer(catalog_app, name="catalog")
 app.add_typer(report_app, name="report")
 app.add_typer(tier_app, name="tier")
@@ -100,8 +102,18 @@ app.add_typer(cli_examples.app, name="examples")
 app.add_typer(cli_llm.app, name="llm")
 app.add_typer(cli_files.app, name="files")
 app.add_typer(cli_templates.app, name="templates")
+app.add_typer(voc_app, name="voc")
 
 console = Console()
+
+
+def _print_voc_hint() -> None:
+    """v0.14.0 — gentle VOC nudge after a write-command API error.
+
+    Deliberately attached ONLY to the generic ApiError handlers of the five
+    highest-traffic write commands (report create / update / publish /
+    revise / append) — not carpet-bombed across every command."""
+    console.print('[dim]문제 제출: report-skill voc export --note "<상황 설명>"[/dim]')
 
 
 def _version_callback(value: bool) -> None:
@@ -490,6 +502,7 @@ def report_create(
         except ApiError as e:
             console.print(f"[red]POST /reports failed ({e.status_code}):[/red] {e}")
             console.print_json(json.dumps(e.payload, ensure_ascii=False))
+            _print_voc_hint()
             raise typer.Exit(3)
 
     rid = created.get("id") if isinstance(created, dict) else None
@@ -1143,6 +1156,7 @@ def report_update(
         except ApiError as e:
             console.print(f"[red]PATCH /reports/{report_id} failed ({e.status_code}):[/red] {e}")
             console.print_json(json.dumps(e.payload, ensure_ascii=False))
+            _print_voc_hint()
             raise typer.Exit(3)
 
     console.print(f"[green]updated[/green]  report id={updated.get('id')}  "
@@ -1403,6 +1417,7 @@ def report_revise(
             raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]PATCH /reports/{report_id} failed:[/red] {e}")
+            _print_voc_hint()
             raise typer.Exit(3)
 
     console.print(f"[green]revised[/green]  report id={updated.get('id')}  "
@@ -1453,6 +1468,7 @@ def report_append(
             raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]PATCH failed ({e.status_code}):[/red] {e}")
+            _print_voc_hint()
             raise typer.Exit(3)
 
     console.print(f"[green]appended[/green] to report {updated.get('id')}  "
@@ -2043,6 +2059,7 @@ def report_publish(
             raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]publish failed ({e.status_code}):[/red] {e}")
+            _print_voc_hint()
             raise typer.Exit(2)
     console.print(f"[green]published[/green]  report id={updated.get('id')}  "
                   f"phase={updated.get('phase')}")
@@ -3299,6 +3316,87 @@ def shares_board_remove(
             console.print(f"[red]board-remove failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
     console.print_json(json.dumps({"ok": True}, ensure_ascii=False))
+
+
+# --------------------------------------------------------------------------- #
+# voc — v0.14.0 observability surface (CLI mirror of report_skill.telemetry).
+# telemetry is imported lazily INSIDE the command bodies so a missing/broken
+# telemetry module can never take down `report-skill --help` or other commands.
+# --------------------------------------------------------------------------- #
+def _load_telemetry():
+    """Lazy import of report_skill.telemetry with a friendly failure mode."""
+    try:
+        from report_skill import telemetry
+    except ImportError as e:
+        console.print(f"[yellow]telemetry 모듈을 불러올 수 없습니다[/yellow] — {e}")
+        console.print("[dim]report-skill 을 최신 버전으로 재설치한 뒤 다시 시도해 주세요.[/dim]")
+        raise typer.Exit(1)
+    return telemetry
+
+
+def _voc_log_row(r: dict) -> tuple[str, str, str, str, str]:
+    """Defensive row formatter — tolerate telemetry record key evolution."""
+    ts = str(r.get("ts") or r.get("timestamp") or r.get("time") or "-")
+    kind = str(r.get("kind") or "-")
+    target = r.get("target") or r.get("tool") or r.get("name") or ""
+    if not target:
+        method = str(r.get("method") or "").upper()
+        path = str(r.get("path") or r.get("url") or "")
+        target = f"{method} {path}".strip() or "-"
+    err = r.get("error_code") or r.get("error")
+    if err:
+        status = f"[red]{err}[/red]"
+    elif r.get("ok") is False:
+        status = "[red]error[/red]"
+    else:
+        status = "[green]OK[/green]"
+    dur = r.get("duration_ms", r.get("elapsed_ms", r.get("ms")))
+    dur_s = f"{dur:.0f}" if isinstance(dur, (int, float)) else "-"
+    return ts, kind, str(target), status, dur_s
+
+
+@voc_app.command("export")
+def voc_export(
+    note: Optional[str] = typer.Option(
+        None, "--note",
+        help="사용자 설명 (무엇을 하다가 / 무엇이 잘못됐는지) — VOC 번들에 포함됩니다.",
+    ),
+):
+    """VOC 번들(.md + .json) 생성 — 버그 리포트에 첨부할 텔레메트리 요약."""
+    telemetry = _load_telemetry()
+    result = telemetry.export_voc(note=note)
+    summary = result.get("summary") or {}
+    console.print("[green]VOC 번들 생성 완료[/green]")
+    console.print(f"  [bold]md[/bold]   : {result.get('path')}")
+    console.print(f"  [bold]json[/bold] : {result.get('json_path')}")
+    console.print(f"  [dim]버전 {summary.get('version', '-')}  ·  "
+                  f"에러 {summary.get('error_count', 0)}건  ·  "
+                  f"호출 {summary.get('call_count', 0)}건[/dim]")
+    console.print("이 파일을 버그 리포트에 첨부해 주세요.")
+
+
+@voc_app.command("log")
+def voc_log(
+    n: int = typer.Option(50, "--n", help="최근 N건 표시"),
+    errors_only: bool = typer.Option(False, "--errors-only", help="에러 기록만 표시"),
+    kind: Optional[str] = typer.Option(None, "--kind", help="종류 필터: http | tool"),
+):
+    """최근 호출 이력(텔레메트리)을 컴팩트한 표로 표시."""
+    telemetry = _load_telemetry()
+    rows = telemetry.recent(n=n, errors_only=errors_only, kind=kind)
+    if not rows:
+        console.print("기록 없음 — 아직 호출 이력이 없습니다.")
+        return
+    table = Table(title=f"최근 호출 {len(rows)}건")
+    table.add_column("시각", style="dim", no_wrap=True)
+    table.add_column("종류", no_wrap=True)
+    table.add_column("대상", overflow="fold")
+    table.add_column("상태", no_wrap=True)
+    table.add_column("소요(ms)", justify="right", no_wrap=True)
+    for r in rows:
+        if isinstance(r, dict):
+            table.add_row(*_voc_log_row(r))
+    console.print(table)
 
 
 if __name__ == "__main__":

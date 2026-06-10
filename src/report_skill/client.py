@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 import httpx
 
+from report_skill import telemetry
 from report_skill.config import settings
 
 logger = logging.getLogger(__name__)
@@ -1453,6 +1454,25 @@ class ReportArchiveClient:
         _no_auth: bool = False,
         _retried_auth: bool = False,
     ) -> Any:
+        # ---- telemetry (v0.14.0) ---------------------------------------- #
+        # Policy: record the FINAL outcome of each logical call exactly once.
+        # - The GET network-retry loop records nothing per attempt; only the
+        #   eventual response, or the last failure (network_unreachable).
+        # - The 401 re-login replay returns the recursive _request() result
+        #   WITHOUT recording at this frame — the inner call records the
+        #   final outcome, so a re-auth'd call yields one record, not two.
+        # record_http() itself never raises (telemetry no-ops on failure),
+        # so the calls below are deliberately unguarded.
+        _t0 = time.monotonic()
+
+        def _rec(status: int, *, error_code: Optional[str] = None,
+                 error_message: Optional[str] = None) -> None:
+            telemetry.record_http(
+                method, path, status,
+                (time.monotonic() - _t0) * 1000.0,
+                error_code=error_code, error_message=error_message,
+            )
+
         if not _no_auth:
             self.ensure_logged_in()
 
@@ -1476,6 +1496,8 @@ class ReportArchiveClient:
                     )
                     time.sleep(backoffs[attempt])
                     continue
+                _rec(0, error_code="network_unreachable",
+                     error_message=str(exc))
                 raise NetworkUnreachableError(str(exc), status_code=0) from exc
 
         # 401 → clear the cached token, re-login once, replay the request.
@@ -1492,24 +1514,32 @@ class ReportArchiveClient:
         try:
             body = resp.json()
         except Exception:
+            if resp.is_error:
+                _rec(resp.status_code, error_code="http_error",
+                     error_message=f"{method} {path} returned non-JSON "
+                                   f"{resp.status_code} body")
             resp.raise_for_status()
+            _rec(resp.status_code)
             return None
 
         # Standard envelope: {success, data, message, errors}
         if isinstance(body, dict) and "success" in body:
             if body.get("success"):
+                _rec(resp.status_code)
                 return body.get("data")
             message = body.get("message") or f"{method} {path} failed"
             typed = self._build_typed_error(
                 resp.status_code, str(message), path, body
             )
-            if typed is not None:
-                raise typed
-            raise ApiError(
+            err: ApiError = typed if typed is not None else ApiError(
                 message,
                 status_code=resp.status_code,
                 payload=body,
             )
+            _rec(resp.status_code,
+                 error_code=getattr(err, "code", None) or "api_error",
+                 error_message=str(err))
+            raise err
 
         # Non-envelope endpoints (eg. health, FastAPI default {detail:str}) — just return body
         if resp.is_error:
@@ -1521,13 +1551,16 @@ class ReportArchiveClient:
             typed = self._build_typed_error(
                 resp.status_code, text_body, path, body
             )
-            if typed is not None:
-                raise typed
-            raise ApiError(
+            err = typed if typed is not None else ApiError(
                 f"{method} {path} returned {resp.status_code}",
                 status_code=resp.status_code,
                 payload=body,
             )
+            _rec(resp.status_code,
+                 error_code=getattr(err, "code", None) or "api_error",
+                 error_message=str(err))
+            raise err
+        _rec(resp.status_code)
         return body
 
     @staticmethod
