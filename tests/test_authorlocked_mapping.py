@@ -26,6 +26,7 @@ from report_skill.client import (
     ApiError,
     AuthorLockedError,
     BoardShareForbiddenError,
+    CompositePresetPermissionError,
     CompositeRevisionConflict,
     FinalizedReadOnlyError,
     LockHeldByOtherError,
@@ -498,4 +499,40 @@ def test_typed_error_map_includes_grants_classes(monkeypatch) -> None:
     )
     assert "board_share_forbidden" in codes, (
         f"board_share_forbidden missing from _TYPED_ERROR_MAP: {codes}"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# v0.15.0 — composite presets (RA c5c57ca) typed 403s
+# --------------------------------------------------------------------------- #
+def test_build_typed_error_classifies_composite_preset_forbidden() -> None:
+    """403 + Korean 양식 manage gate → CompositePresetPermissionError."""
+    for msg in (
+        "이 양식을 수정할 권한이 없습니다.",
+        "이 양식을 삭제할 권한이 없습니다.",
+    ):
+        body = {"success": False, "message": msg, "errors": None}
+        err = ReportArchiveClient._build_typed_error(
+            status_code=403, message=msg, path="/composite-presets/3", body=body,
+        )
+        assert isinstance(err, CompositePresetPermissionError), (
+            f"양식 manage gate must map to CompositePresetPermissionError; "
+            f"got {type(err).__name__ if err else 'None'} for: {msg}"
+        )
+        assert err.code == "composite_preset_forbidden"
+
+
+def test_build_typed_error_classifies_composite_scope_korean() -> None:
+    """v0.15.0 — the Korean composite writable-scope gate (shared by
+    POST /composites and POST /composite-presets/{id}/new-composite) maps to
+    the same OutOfWorkspaceScopeError as the ASCII variant."""
+    msg = "종합보고는 현재 부서 또는 하위 부서에만 작성할 수 있습니다."
+    body = {"success": False, "message": msg, "errors": None}
+    err = ReportArchiveClient._build_typed_error(
+        status_code=403, message=msg,
+        path="/composite-presets/3/new-composite", body=body,
+    )
+    assert isinstance(err, OutOfWorkspaceScopeError), (
+        f"Korean composite scope gate must map to OutOfWorkspaceScopeError; "
+        f"got {type(err).__name__ if err else 'None'}"
     )

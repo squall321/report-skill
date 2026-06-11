@@ -212,6 +212,7 @@ Page-level rendering controls (report-wide): `page_width_px` (320..3000), `page_
 report-skill report mount <report-id> -w dx                       # publish to one board
 report-skill report mount <report-id> -w dx -w qa -w dept-mx      # several boards in one call
 report-skill report mount <report-id> -w dx --edit-policy coauthor --folder-id 7 --note "MX team review"
+report-skill mounts set-note --report-id <id> --workspace dx --note "..."   # 게시 메모 변경 후속 ('' clears, v0.15.0)
 report-skill report mounts <report-id>                            # list current mounts
 report-skill report unmount <report-id> -w dx                     # board-manager-only, see below
 ```
@@ -239,7 +240,7 @@ Both publish and unpublish are idempotent — re-calling on an already-final/dra
 
 ## Error handling
 
-Errors come back as typed `{error: <code>, ...}` payloads. The full table (20+ codes) and the 5 worked recovery flows: Read `reference/errors-recovery.md`. The 5 most common:
+Errors come back as typed `{error: <code>, ...}` payloads. The full table (21 codes) and the 5 worked recovery flows: Read `reference/errors-recovery.md`. The 5 most common:
 
 - `revision_mismatch` (409) — concurrent PATCH; skill auto-retries (re-fetch + re-merge, default 3); if exhausted, re-read and re-apply your intent on top — never blind-overwrite.
 - `author_locked` (403) — human-set lock; stop, surface the `reason`, do not retry (`report_lock_status` shows holder + expiry).
@@ -253,5 +254,5 @@ Errors come back as typed `{error: <code>, ...}` payloads. The full table (20+ c
 |---|---|
 | 위젯 입력 형식이 필요할 때 (per-widget shapes, mention:// 전체 스펙, #widget refs, color tokens, cell_styles/cell_html/text_html, 파일 업로드) | `reference/widgets.md` |
 | 에러 코드 의미/복구 절차 (typed error 전체 표, Recovery flows #1–#5, lock 조회, lifecycle notes) | `reference/errors-recovery.md` |
-| 도구 전체 목록/버전별 추가분 (v0.5.0~v0.14.0, 93-tool inventory) | `reference/tools-inventory.md` |
-| 프리셋/복사/템플릿 추천/from-prompt/append/add-page/종합보고/공유(grants)/게시취소(takedown)/알림/activities | `reference/flows-advanced.md` |
+| 도구 전체 목록/버전별 추가분 (v0.5.0~v0.15.0, 100-tool inventory) | `reference/tools-inventory.md` |
+| 프리셋/복사/템플릿 추천/from-prompt/append/add-page/종합보고(+양식)/공유(grants)/게시취소(takedown)/알림/activities | `reference/flows-advanced.md` |

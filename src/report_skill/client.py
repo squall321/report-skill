@@ -336,6 +336,21 @@ class ReportStillMountedError(ApiError):
         self.report_id = report_id
 
 
+class CompositePresetPermissionError(ApiError):
+    """Raised when editing / deleting a composite preset (종합보고 양식)
+    without manage rights — creator, system admin, or manager only (403).
+
+    Backend messages: "이 양식을 수정할 권한이 없습니다." /
+    "이 양식을 삭제할 권한이 없습니다." (RA c5c57ca composite_presets module).
+    """
+
+    def __init__(self, message: str = "", *, payload: Any = None,
+                 status_code: int = 403):
+        super().__init__(message or "composite_preset_forbidden",
+                         status_code=status_code, payload=payload)
+        self.code = "composite_preset_forbidden"
+
+
 # v0.6.0 — sentinel for update_composite tri-state semantics on nullable
 # scalar fields (period_date): default = omit key from body
 # (server leaves alone); explicit None = send {"key": null} so server
@@ -628,8 +643,10 @@ class ReportArchiveClient:
     ) -> dict:
         """POST /reports/{report_id}/copy — duplicate a report.
 
-        `mode` is 'content' (blocks only) or 'full' (blocks + settings).
-        The copy lands in the caller's personal workspace.
+        `mode` is 'content' (blocks only), 'full' (blocks + settings), or
+        'summary' (v0.15.0 — RA ef4e441: blocks only, PLUS the server links
+        the new copy to the source with a kind='summary' link, direction
+        원본 → 요약본). The copy lands in the caller's personal workspace.
         """
         logger.info("copy_report id=%s mode=%s title=%s", report_id, mode, title)
         body: dict[str, Any] = {"title": title, "mode": mode}
@@ -666,6 +683,16 @@ class ReportArchiveClient:
         if label is not None:
             body["note"] = label
         return self.post(f"/reports/{report_id}/links", json=body)
+
+    def list_report_links(self, report_id) -> list[dict]:
+        """GET /reports/{report_id}/links — every link touching this report
+        (both directions). v0.15.0 — needed since copy_report(mode='summary')
+        creates system kind='summary' links that only this endpoint exposes
+        (the report detail does NOT embed links)."""
+        body = self.get(f"/reports/{report_id}/links")
+        if isinstance(body, dict) and "items" in body:
+            return list(body.get("items") or [])
+        return list(body or []) if isinstance(body, list) else []
 
     def fetch_report_types(self) -> list[dict]:
         """GET /report-types — returns the report-type catalog (items[])."""
@@ -1032,6 +1059,25 @@ class ReportArchiveClient:
             "PUT", f"/mounts/{report_id}/{workspace_slug}/folder", json=body
         )
 
+    def set_mount_note(
+        self,
+        report_id,
+        workspace_slug: str,
+        *,
+        note: str,
+    ) -> dict:
+        """PUT /mounts/{report_id}/{workspace_slug}/note — set the per-board
+        게시 메모 shown next to the mount (v0.15.0 — RA b435a0f). Server cap
+        1000 chars; empty string clears. Author / publisher / board manager.
+        Returns {report_id, workspace_slug, note}.
+        """
+        logger.info("set_mount_note id=%s slug=%s len=%s",
+                    report_id, workspace_slug, len(note or ""))
+        body = {"note": note}
+        return self._request(
+            "PUT", f"/mounts/{report_id}/{workspace_slug}/note", json=body
+        )
+
     def set_mount_edit_policy(
         self,
         report_id,
@@ -1266,6 +1312,118 @@ class ReportArchiveClient:
         if expected_revision is not None:
             body["expected_revision"] = int(expected_revision)
         return self._request("PATCH", f"/composites/{composite_id}", json=body)
+
+    # ---- v0.15.0 — composite presets / 종합보고 양식 (RA c5c57ca) -------- #
+
+    def list_composite_presets(self) -> list[dict]:
+        """GET /composite-presets — presets visible to the caller's
+        workspace tree (전사 + own tree). Each item is a summary projection:
+        {id, name, description, source_kind, owner_workspace_slugs, groups,
+        summary_widget_count, created_by_*, ...} — the heavy summary_widgets
+        blob is NOT included."""
+        body = self.get("/composite-presets")
+        if isinstance(body, dict) and "items" in body:
+            return list(body.get("items") or [])
+        return list(body or []) if isinstance(body, list) else []
+
+    def create_composite_preset(
+        self,
+        source_composite_id: int,
+        *,
+        name: str,
+        description: str = "",
+        owner_workspace_slugs: Optional[list[str]] = None,
+        groups: Optional[list[str]] = None,
+    ) -> dict:
+        """POST /composite-presets — snapshot an existing composite into a
+        reusable 양식. Caller must be able to read the source composite.
+
+        owner_workspace_slugs None/empty = 전사(global) preset.
+        groups: full ordered group skeleton (including empty groups); when
+        omitted the server derives groups from the source's saved items.
+        """
+        logger.info("create_composite_preset source=%s name=%s",
+                    source_composite_id, name)
+        body: dict[str, Any] = {
+            "source_composite_id": int(source_composite_id),
+            "name": name,
+            "description": description,
+        }
+        if owner_workspace_slugs is not None:
+            body["owner_workspace_slugs"] = list(owner_workspace_slugs)
+        if groups is not None:
+            body["groups"] = list(groups)
+        return self.post("/composite-presets", json=body)
+
+    def new_composite_from_preset(
+        self,
+        preset_id: int,
+        *,
+        workspace_slug: str,
+        title: str,
+        kind: str,
+        period_date: Optional[str] = None,
+    ) -> dict:
+        """POST /composite-presets/{id}/new-composite — create a composite
+        seeded from a preset. Same writable-scope gate as POST /composites
+        (현재 부서 + 하위 부서만; 403 → OutOfWorkspaceScopeError).
+
+        Returns {composite, seed_groups} — seed_groups is the empty-group
+        skeleton; the composite itself starts with the preset's
+        summary_widgets and no items.
+        """
+        logger.info("new_composite_from_preset id=%s slug=%s kind=%s title=%s",
+                    preset_id, workspace_slug, kind, title)
+        body: dict[str, Any] = {
+            "workspace_slug": workspace_slug,
+            "title": title,
+            "kind": kind,
+        }
+        if period_date is not None:
+            body["period_date"] = period_date
+        return self.post(f"/composite-presets/{preset_id}/new-composite",
+                         json=body)
+
+    def update_composite_preset(
+        self,
+        preset_id: int,
+        *,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        owner_workspace_slugs: Any = _UNSET_COMP,
+        groups: Optional[list[str]] = None,
+    ) -> dict:
+        """PATCH /composite-presets/{id} — edit 메타정보 + 그룹 목록.
+        Creator / sys admin / manager only (403 →
+        CompositePresetPermissionError). Summary widgets can NOT be edited
+        here — re-save from the composite editor instead.
+
+        Server uses exclude_unset, so only keys actually sent are applied:
+        owner_workspace_slugs uses the tri-state sentinel — omit = 변경 안 함,
+        explicit None = 전사(global)로 변경, list = scope to those slugs.
+        """
+        logger.info("update_composite_preset id=%s", preset_id)
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        if owner_workspace_slugs is not _UNSET_COMP:
+            body["owner_workspace_slugs"] = (
+                list(owner_workspace_slugs)
+                if owner_workspace_slugs is not None else None
+            )
+        if groups is not None:
+            body["groups"] = list(groups)
+        return self._request("PATCH", f"/composite-presets/{preset_id}",
+                             json=body)
+
+    def delete_composite_preset(self, preset_id: int) -> dict:
+        """DELETE /composite-presets/{id} — creator / sys admin / manager
+        only (403 → CompositePresetPermissionError). Returns {deleted: true}.
+        """
+        logger.info("delete_composite_preset id=%s", preset_id)
+        return self._request("DELETE", f"/composite-presets/{preset_id}")
 
     def list_submittable_composites(self, report_id) -> list[dict]:
         """GET /composites/submittable-for/{report_id} — composites the
@@ -1698,6 +1856,20 @@ class ReportArchiveClient:
                 )
             if message == "Out of workspace scope" or "Out of workspace scope" in message:
                 return OutOfWorkspaceScopeError(
+                    message, payload=body, status_code=403
+                )
+            # v0.15.0 — composites + composite-preset instantiate share the
+            # same writable-scope gate with a Korean message (RA composites
+            # routes + c5c57ca new-composite): semantically the same scope
+            # violation as the ASCII variant above.
+            if message.startswith("종합보고는 현재 부서"):
+                return OutOfWorkspaceScopeError(
+                    message, payload=body, status_code=403
+                )
+            # v0.15.0 — composite preset (종합보고 양식) manage gate
+            # (RA c5c57ca: PATCH/DELETE /composite-presets/{id}).
+            if message.startswith("이 양식을"):
+                return CompositePresetPermissionError(
                     message, payload=body, status_code=403
                 )
             # v0.8.1 — grants 403 paths from RA dbdbf99/c6308ae.

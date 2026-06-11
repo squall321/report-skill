@@ -11,6 +11,7 @@ except (AttributeError, OSError):
     pass  # not all streams support reconfigure (eg piped/redirected)
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -35,6 +36,7 @@ from report_skill.client import (
     ApiError,
     AuthorLockedError,
     BoardShareForbiddenError,
+    CompositePresetPermissionError,
     CompositeRevisionConflict,
     FinalizedReadOnlyError,
     LockHeldByOtherError,
@@ -68,7 +70,18 @@ _TYPED_LOCK_ERRORS = (
     FinalizedReadOnlyError,
     NoEditPermissionError,
     OutOfWorkspaceScopeError,
+    # v0.15.0 — composite preset (종합보고 양식) manage gate (RA c5c57ca).
+    CompositePresetPermissionError,
 )
+
+
+def _frontend_base() -> str:
+    """v0.15.0 — same REPORT_FRONTEND_URL override as mcp_server (v0.14.1):
+    the CLI's printed view links pointed at a hardcoded localhost:3001."""
+    override = os.environ.get("REPORT_FRONTEND_URL", "").strip()
+    if override:
+        return override.rstrip("/")
+    return "http://localhost:3001"
 
 app = typer.Typer(no_args_is_help=True, add_completion=False,
                   help="External skill layer over ReportArchive.")
@@ -245,7 +258,7 @@ def import_payload(
     rid = created.get("id")
     console.print(f"[green]imported[/green]  report id={rid}  "
                   f"title={created.get('title')!r}")
-    console.print(f"  view: http://localhost:3001/reports/{rid}")
+    console.print(f"  view: {_frontend_base()}/reports/{rid}")
 
 
 @catalog_app.command("list")
@@ -508,7 +521,7 @@ def report_create(
     rid = created.get("id") if isinstance(created, dict) else None
     console.print(f"\n[green]created[/green]  report id={rid}  title={created.get('title')!r}  "
                   f"pages={len(normalized_pages)}")
-    console.print(f"  view: http://localhost:3001/reports/{rid}")
+    console.print(f"  view: {_frontend_base()}/reports/{rid}")
 
     # Optional auto-mount to one or more org board workspaces.
     if mount_to and rid is not None:
@@ -828,7 +841,7 @@ def report_import(
                 raise typer.Exit(1)
         console.print(f"[green]imported[/green]  new id={created.get('id')}  "
                       f"title={created.get('title')!r}")
-        console.print(f"  view: http://localhost:3001/reports/{created.get('id')}")
+        console.print(f"  view: {_frontend_base()}/reports/{created.get('id')}")
         return
     return import_payload(payload_path)
 
@@ -1008,7 +1021,7 @@ def report_from_prompt(
 
     rid = created.get("id")
     console.print(f"[green]created[/green]  id={rid}  title={created.get('title')!r}")
-    console.print(f"  view: http://localhost:3001/reports/{rid}")
+    console.print(f"  view: {_frontend_base()}/reports/{rid}")
 
 
 # --------------------------------------------------------------------------- #
@@ -1161,7 +1174,7 @@ def report_update(
 
     console.print(f"[green]updated[/green]  report id={updated.get('id')}  "
                   f"title={updated.get('title')!r}")
-    console.print(f"  view: http://localhost:3001/reports/{updated.get('id')}")
+    console.print(f"  view: {_frontend_base()}/reports/{updated.get('id')}")
 
 
 @report_app.command("add-page")
@@ -1226,7 +1239,7 @@ def report_add_page(
     pages = updated.get("pages") or []
     console.print(f"[green]page added[/green]  report id={updated.get('id')}  "
                   f"pages now: {len(pages)}")
-    console.print(f"  view: http://localhost:3001/reports/{updated.get('id')}")
+    console.print(f"  view: {_frontend_base()}/reports/{updated.get('id')}")
 
 
 @report_app.command("revise")
@@ -1473,7 +1486,7 @@ def report_append(
 
     console.print(f"[green]appended[/green] to report {updated.get('id')}  "
                   f"revision={updated.get('revision')}")
-    console.print(f"  view: http://localhost:3001/reports/{updated.get('id')}")
+    console.print(f"  view: {_frontend_base()}/reports/{updated.get('id')}")
 
 
 @report_app.command("milestone")
@@ -1845,6 +1858,21 @@ def report_mounts(report_id: int = typer.Argument(...)):
     console.print(tbl)
 
 
+@report_app.command("links")
+def report_links(
+    report_id: int = typer.Argument(..., help="report id"),
+):
+    """GET /reports/{id}/links — every link touching this report (both
+    directions), incl. system kind='summary' links from copy --mode summary."""
+    with ReportArchiveClient() as client:
+        try:
+            rows = client.list_report_links(report_id)
+        except ApiError as e:
+            console.print(f"[red]links failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
 @report_app.command("add-link")
 def report_add_link(
     report_id: int = typer.Argument(..., help="source report id"),
@@ -2010,13 +2038,16 @@ def tier_set(level: str = typer.Argument(..., help="S / M / W")):
 def report_copy(
     report_id: int = typer.Argument(..., help="source report id to copy"),
     title: str = typer.Option(..., "--title", help="title for the new copy"),
-    mode: str = typer.Option("full", "--mode", help="content | full"),
+    mode: str = typer.Option("full", "--mode",
+                             help="content | full | summary (summary = content "
+                                  "copy + auto kind='summary' link 원본→요약본)"),
     folder_id: Optional[int] = typer.Option(None, "--folder-id",
                                             help="personal folder to drop the copy into"),
 ):
     """POST /reports/{id}/copy — duplicate a report into your personal workspace."""
-    if mode not in ("content", "full"):
-        console.print(f"[red]invalid mode '{mode}' (expected: content | full)[/red]")
+    if mode not in ("content", "full", "summary"):
+        console.print(f"[red]invalid mode '{mode}' "
+                      "(expected: content | full | summary)[/red]")
         raise typer.Exit(1)
     with ReportArchiveClient() as client:
         try:
@@ -2039,7 +2070,7 @@ def report_copy(
     rid = created.get("id") if isinstance(created, dict) else None
     console.print(f"[green]copied[/green]  new report id={rid}  "
                   f"title={created.get('title')!r}  mode={mode}")
-    console.print(f"  view: http://localhost:3001/reports/{rid}")
+    console.print(f"  view: {_frontend_base()}/reports/{rid}")
 
 
 @report_app.command("publish")
@@ -2116,7 +2147,7 @@ def report_new_from_preset(
     rid = created.get("id") if isinstance(created, dict) else None
     console.print(f"[green]created[/green]  report id={rid}  "
                   f"workspace={created.get('workspace_slug')}")
-    console.print(f"  view: http://localhost:3001/reports/{rid}")
+    console.print(f"  view: {_frontend_base()}/reports/{rid}")
 
 
 # --------------------------------------------------------------------------- #
@@ -3017,6 +3048,160 @@ def composites_withdraw(
 
 
 # --------------------------------------------------------------------------- #
+# v0.15.0 — composite presets / 종합보고 양식 (RA c5c57ca)
+# --------------------------------------------------------------------------- #
+@composites_app.command("presets-list")
+def composite_presets_list():
+    """GET /composite-presets — 양식 visible to your workspace tree."""
+    with ReportArchiveClient() as client:
+        try:
+            rows = client.list_composite_presets()
+        except ApiError as e:
+            console.print(f"[red]presets-list failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(rows, ensure_ascii=False))
+
+
+@composites_app.command("preset-create")
+def composite_preset_create(
+    source_composite_id: int = typer.Option(..., "--source-composite-id",
+                                            help="composite to snapshot into a 양식"),
+    name: str = typer.Option(..., "--name"),
+    description: str = typer.Option("", "--description"),
+    owner_workspace: Optional[list[str]] = typer.Option(
+        None, "--owner-workspace",
+        help="repeatable; workspace slugs the 양식 is scoped to (omit = 전사)"),
+    group: Optional[list[str]] = typer.Option(
+        None, "--group",
+        help="repeatable; ordered group skeleton incl. empty groups "
+             "(omit = derive from source items)"),
+):
+    """POST /composite-presets — snapshot a composite into a reusable 양식."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.create_composite_preset(
+                source_composite_id,
+                name=name,
+                description=description,
+                owner_workspace_slugs=list(owner_workspace) if owner_workspace else None,
+                groups=list(group) if group else None,
+            )
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
+        except ApiError as e:
+            console.print(f"[red]preset-create failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@composites_app.command("new-from-preset")
+def composite_new_from_preset(
+    preset_id: int = typer.Argument(..., help="composite preset (양식) id"),
+    workspace: str = typer.Option(..., "--workspace", "--workspace-slug",
+                                  help="where the new composite lives "
+                                       "(현재 부서 + 하위 부서만)"),
+    title: str = typer.Option(..., "--title"),
+    kind: str = typer.Option(..., "--kind",
+                             help="composite kind (same enum as composites create)"),
+    period_date: Optional[str] = typer.Option(None, "--period-date",
+                                              help="ISO date for recurring kinds"),
+):
+    """POST /composite-presets/{id}/new-composite — seed a composite from a 양식."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.new_composite_from_preset(
+                preset_id,
+                workspace_slug=workspace,
+                title=title,
+                kind=kind,
+                period_date=period_date,
+            )
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
+        except ApiError as e:
+            console.print(f"[red]new-from-preset failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    composite = row.get("composite") if isinstance(row, dict) else None
+    cid = composite.get("id") if isinstance(composite, dict) else None
+    console.print_json(json.dumps(row, ensure_ascii=False))
+    if cid is not None:
+        console.print(f"  view: {_frontend_base()}/composites/{cid}")
+
+
+@composites_app.command("preset-update")
+def composite_preset_update(
+    preset_id: int = typer.Argument(..., help="composite preset (양식) id"),
+    name: Optional[str] = typer.Option(None, "--name"),
+    description: Optional[str] = typer.Option(None, "--description"),
+    owner_workspace: Optional[list[str]] = typer.Option(
+        None, "--owner-workspace",
+        help="repeatable; new scope slugs (use --global for 전사)"),
+    set_global: bool = typer.Option(False, "--global",
+                                    help="change scope to 전사(global)"),
+    group: Optional[list[str]] = typer.Option(
+        None, "--group", help="repeatable; replacement group skeleton"),
+):
+    """PATCH /composite-presets/{id} — edit 양식 메타정보 + 그룹 (creator/관리자만)."""
+    kwargs: dict = {}
+    if name is not None:
+        kwargs["name"] = name
+    if description is not None:
+        kwargs["description"] = description
+    if set_global:
+        kwargs["owner_workspace_slugs"] = None
+    elif owner_workspace:
+        kwargs["owner_workspace_slugs"] = list(owner_workspace)
+    if group is not None:
+        kwargs["groups"] = list(group)
+    if not kwargs:
+        console.print("[red]nothing to update — pass --name/--description/"
+                      "--owner-workspace/--global/--group[/red]")
+        raise typer.Exit(1)
+    with ReportArchiveClient() as client:
+        try:
+            row = client.update_composite_preset(preset_id, **kwargs)
+        except CompositePresetPermissionError as e:
+            console.print(f"[red][composite_preset_forbidden][/red] {e}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
+        except ApiError as e:
+            console.print(f"[red]preset-update failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@composites_app.command("preset-delete")
+def composite_preset_delete(
+    preset_id: int = typer.Argument(..., help="composite preset (양식) id"),
+    confirm: bool = typer.Option(False, "--yes", "-y",
+                                 help="confirm destructive operation"),
+):
+    """DELETE /composite-presets/{id} — creator/관리자만. IRREVERSIBLE."""
+    if not confirm:
+        console.print("[red]Pass --yes to confirm deletion — shared 양식 "
+                      "disappear for every user[/red]")
+        raise typer.Exit(1)
+    with ReportArchiveClient() as client:
+        try:
+            client.delete_composite_preset(preset_id)
+        except CompositePresetPermissionError as e:
+            console.print(f"[red][composite_preset_forbidden][/red] {e}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
+        except ApiError as e:
+            console.print(f"[red]preset-delete failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps({"deleted": True, "id": preset_id},
+                                  ensure_ascii=False))
+
+
+# --------------------------------------------------------------------------- #
 # v0.5.0 — mounts sub-app: set-folder / set-edit-policy
 # --------------------------------------------------------------------------- #
 @mounts_app.command("set-folder")
@@ -3073,6 +3258,33 @@ def mounts_set_edit_policy(
             raise typer.Exit(4)
         except ApiError as e:
             console.print(f"[red]set-edit-policy failed ({e.status_code}):[/red] {e}")
+            raise typer.Exit(2)
+    console.print_json(json.dumps(row, ensure_ascii=False))
+
+
+@mounts_app.command("set-note")
+def mounts_set_note(
+    report_id: int = typer.Option(..., "--report-id"),
+    workspace: str = typer.Option(..., "--workspace", "--workspace-slug",
+                                  help="workspace slug of the mount"),
+    note: str = typer.Option(..., "--note",
+                             help="게시 메모 (max 1000 chars; '' clears)"),
+):
+    """PUT /mounts/{rid}/{slug}/note — per-board 게시 메모 (v0.15.0, RA b435a0f).
+
+    Author / publisher / board manager only."""
+    with ReportArchiveClient() as client:
+        try:
+            row = client.set_mount_note(report_id, workspace, note=note)
+        except AuthorLockedError as e:
+            console.print(f"[red][author_locked][/red] reason: {e.reason}  "
+                          f"report_id={e.report_id}")
+            raise typer.Exit(4)
+        except _TYPED_LOCK_ERRORS as e:
+            console.print(f"[red][{type(e).__name__}][/red] {e}")
+            raise typer.Exit(4)
+        except ApiError as e:
+            console.print(f"[red]set-note failed ({e.status_code}):[/red] {e}")
             raise typer.Exit(2)
     console.print_json(json.dumps(row, ensure_ascii=False))
 

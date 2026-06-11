@@ -137,6 +137,14 @@ _PASSTHROUGH = (
     # "rowKey::columnKey" (same as cell_styles), values = sanitized HTML.
     # Plain `rows` is kept; `cell_html` carries the rich per-char markup.
     "cell_html",
+    # v0.15.0 — RA 795c60c multi-row / merged header. Shape:
+    # {row_count: 1-8, cells: {"row::colKey": {text?, html?, bg?, fg?}},
+    #  merges: [...]}. Omitted → classic single-row header from
+    # columns[].label. Server validates strictly; pass through untouched.
+    "header",
+    # v0.15.0 — RA 8b5788f/a172fd2 read-mode default: True starts the table
+    # expanded (multiline cells unfolded) instead of compact hover mode.
+    "expanded",
 )
 
 

@@ -1,6 +1,6 @@
 # report-write reference — typed errors + recovery flows
 
-Referenced from SKILL.md. Every MCP/CLI write can return a typed `{error: <code>, ...}` payload (v0.5.2+, extended in v0.13.0). Find the code in the table, follow the matching reaction; for the 409/403 families with a numbered "Recovery flow", follow that worked scenario instead of improvising.
+Referenced from SKILL.md. Every MCP/CLI write can return a typed `{error: <code>, ...}` payload (v0.5.2+, extended in v0.13.0 / v0.15.0). Find the code in the table (21 codes), follow the matching reaction; for the 409/403 families with a numbered "Recovery flow", follow that worked scenario instead of improvising.
 
 ## report_lock_status — inspect the edit-lock holder
 
@@ -33,7 +33,7 @@ LLM behaviour:
 - Offer to call `report_lock_status` to confirm the current holder + ETA, or to wait for unlock.
 - For a different report, the lock is irrelevant — proceed normally.
 
-## Typed error codes (v0.5.2 + v0.13.0)
+## Typed error codes (v0.5.2 + v0.13.0 + v0.15.0)
 
 The MCP server maps the backend's stable error signatures to typed `{error: <code>, ...}` payloads instead of generic `"API error"`. Use the table below to decide how to react:
 
@@ -46,7 +46,8 @@ The MCP server maps the backend's stable error signatures to typed `{error: <cod
 | `composite_revision_mismatch` | 409    | composite items[] was edited concurrently                                                | re-fetch composite via `composite_get`, re-build items list, retry — see Recovery flow #2                         |
 | `finalized_readonly`          | 403    | report is `phase=finalized` — body PATCH is blocked                                      | suggest `report_unpublish` first if the user really wants to edit; otherwise stop — see Recovery flow #4          |
 | `no_edit_permission`          | 403    | actor is not the author / coauthor / board-default editor                                | stop and surface — mount edit-policy or coauthor list controls this; not retryable                                |
-| `out_of_workspace_scope`      | 403    | actor's workspace tree does not cover the target report / composite                      | stop; resource is invisible to this actor — do not retry under a different workspace slug                         |
+| `out_of_workspace_scope`      | 403    | actor's workspace tree does not cover the target report / composite (Korean note below)  | stop; resource is invisible to this actor — do not retry under a different workspace slug                         |
+| `composite_preset_forbidden`  | 403    | edit/delete on a composite preset (종합보고 양식) without manage rights (v0.15.0)              | stop and surface — `composite_preset_update` / `_delete` is creator / sys-admin / manager only; not retryable     |
 | `share_setup_forbidden`       | 403    | only the content owner / sys admin may add/remove a content-level grant (RA dbdbf99)     | stop and surface — `content_share_add` / `_remove` requires owner. service account usually cannot do this         |
 | `board_share_forbidden`       | 403    | only the board manager / sys admin may add/remove a board or folder grant (RA dbdbf99)   | stop and surface — `board_share_*` / `folder_share_*` requires manager rights on the target board                  |
 | `trash_restore_forbidden`     | 403    | only the report owner / sys admin may trash or restore a report (RA dc8bd45)             | stop and surface — non-owners cannot soft-delete; mention the actual owner if known                               |
@@ -63,6 +64,8 @@ The MCP server maps the backend's stable error signatures to typed `{error: <cod
 | `no_llm_provider`             | n/a    | no LLM provider configured for a tool that needs one                                     | tell the user to set `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / use `bridge` mode                                   |
 
 For all other ApiErrors the legacy `{error: "API error", status_code, message, payload}` shape still applies.
+
+v0.15.0 note on `out_of_workspace_scope`: besides the ASCII "Out of workspace scope" message, the same code now also matches the Korean writable-scope variant "종합보고는 현재 부서 또는 하위 부서에만 작성할 수 있습니다." raised by `composite_create` AND `composite_new_from_preset`. Same reaction — target 현재 부서 or a 하위 부서; do not retry with an unrelated workspace slug.
 
 ## Recovery flows (worked scenarios)
 
@@ -108,6 +111,8 @@ Note: composite summary widgets and mount/folder ops are NOT blocked by finalize
 2. For each: `report_unmount` if you are that board's manager; otherwise `report_takedown_request` (owner) and wait for the manager's `takedown_approve`.
 3. Once mounts are 0, re-call `report_delete` with confirm=true.
 4. BEFORE deleting, surface `composite_ref_count` from `report_show` to the user — those composite agenda items disappear with the report.
+
+One-liner (no numbered flow): `composite_preset_forbidden` — you are not the 양식's creator / sys admin / board manager; ask the creator to make the change, or re-run from a manager account. Do not retry as-is.
 
 ## Network resilience (v0.13.0)
 

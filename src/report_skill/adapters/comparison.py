@@ -44,6 +44,13 @@ _PASSTHROUGH_SIMPLE = (
     # v0.10.0 — RA d62af9d per-cell rich markup. Side-table keyed by
     # "rowKey::caseKey" (same as cell_styles), values = sanitized HTML.
     "cell_html",
+    # v0.15.0 — RA 0c4e4bc multi-row / merged header. Shape:
+    # {row_count: 1-8, cells: {"row::caseKey": {text?, html?, bg?, fg?}},
+    #  merges: [...]}. Omitted → classic single-row header from cases[].label.
+    "header",
+    # v0.15.0 — RA 8b5788f/a172fd2 read-mode default: True starts the table
+    # expanded (multiline cells unfolded) instead of compact hover mode.
+    "expanded",
 )
 
 
@@ -66,15 +73,13 @@ class ComparisonAdapter(WidgetAdapter):
                 _apply_passthrough(out, raw)
                 return out
             # dict-of-dicts form: row label → case values. Reserved keys
-            # (note / column_widths / row_label_width / table_width_px / merges
-            #  plus B13 passthrough: caption, caption_skip_autofill, cases,
-            #  horizontal_scroll, max_cases, image_max_height_px) are stripped
-            # from the row map so they aren't mistaken for rows.
+            # (the v0.5.0 layout fields, the B13 extras, and everything in
+            # _PASSTHROUGH_SIMPLE — header/expanded/cell_styles/... included)
+            # are stripped from the row map so they aren't mistaken for rows.
             _reserved = {"note", "column_widths", "row_label_width",
-                         "table_width_px", "merges",
-                         "caption", "caption_skip_autofill", "cases",
-                         "horizontal_scroll", "max_cases",
-                         "image_max_height_px"}
+                         "table_width_px", "merges", "cases",
+                         "max_cases", "image_max_height_px",
+                         *_PASSTHROUGH_SIMPLE}
             rows_in = [{"label": k, "values": v}
                        for k, v in raw.items() if k not in _reserved]
             extras = raw

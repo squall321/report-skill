@@ -1,5 +1,80 @@
 ﻿# Changelog
 
+## 0.15.0 — 2026-06-12
+
+Minor — full parity with ReportArchive v0.26.0→v0.29.0 (41 commits since
+6ecf4ee). MCP `_DISPATCH` grows 93 → 100. Gaps were located by the v0.12.0
+analyzer (`scripts/check_ra_impact.py --since-sha 6ecf4ee`) plus a 3-track
+deep audit of the flagged commits.
+
+Added — composite presets / 종합보고 양식 (RA c5c57ca, the headline):
+
+- 5 new tools + CLI mirrors over the new `/api/composite-presets` module:
+  `composite_presets_list`, `composite_preset_create` (snapshot a composite
+  into a reusable 양식), `composite_new_from_preset` (seed a new composite
+  from a 양식 — returns `{composite, seed_groups, view_url}`),
+  `composite_preset_update` (tri-state `owner_workspace_slugs`: omit = keep,
+  null = 전사, list = scope), `composite_preset_delete` (confirm gate —
+  shared 양식 disappear for everyone).
+- New typed exception `CompositePresetPermissionError`
+  (`composite_preset_forbidden`, 403 "이 양식을 수정할/삭제할 권한이
+  없습니다.") — registered in the MCP typed-error map + CLI handlers.
+- The Korean composite writable-scope gate ("종합보고는 현재 부서 또는 하위
+  부서에만 작성할 수 있습니다." — shared by `composite_create` and
+  `composite_new_from_preset`) now maps to `OutOfWorkspaceScopeError`
+  (previously fell through to generic ApiError).
+
+Added — report links + summary copies (RA ef4e441 + p32–p34):
+
+- `report_copy` mode enum gains `"summary"` — content-only copy that the
+  server auto-links to the source (`kind='summary'`, direction 원본 →
+  요약본 after p33). CLI `report copy --mode summary`.
+- NEW tool `report_links_list` (GET `/reports/{id}/links`, CLI
+  `report links <id>`) — found live: summary links are exposed ONLY by the
+  links endpoint, not the report detail, and the skill had no read wrapper
+  for it (only the POST). Without it the LLM could create 요약본 links it
+  could never see.
+
+Added — table / comparison widget schema (RA 795c60c / 0c4e4bc / 8b5788f):
+
+- `header` (multi-row / merged header: `{row_count 1–8, cells
+  {"row::colKey": {text?, html?, bg?, fg?}}, merges}`) and `expanded`
+  (read-mode 기본 펼침 bool) now pass through both adapters; bundled
+  snapshot refreshed so the structural parity lock (d) covers them.
+- comparison dict-of-dicts input: the reserved-key set is now derived from
+  `_PASSTHROUGH_SIMPLE` — fixes a latent bug where a top-level
+  `cell_styles` / `caption_color` / etc. key was ALSO turned into a bogus
+  row.
+
+Added — mounts (RA b435a0f):
+
+- `report_mount_set_note` + CLI `mounts set-note` — per-board 게시 메모
+  (PUT `/mounts/{rid}/{slug}/note`, max 1000 chars, `''` clears).
+
+Fixed:
+
+- CLI view links: 9 hardcoded `http://localhost:3001/reports/…` prints now
+  honor `REPORT_FRONTEND_URL` (completes the v0.14.1 fix at the CLI layer).
+- `composite_new_from_preset` kind description corrected to the actual
+  `CompositeKind` enum (`recurring` | `theme`).
+
+Docs: SKILL.md routing + all four `reference/` files updated (100-tool
+inventory, 21-code error table, header/expanded shapes, flow E.6 양식으로
+종합보고 시작).
+
+Deliberately NOT wrapped (documented decision): `PATCH /me/preferences`
+(per-user UI state — no LLM value); template member-CRUD permission
+widening (RA 08f42fb adds no endpoints; the skill still doesn't wrap
+template create/version/delete); link-graph scope params (visualization
+feed).
+
+Verified: 495 unit tests passed (+9), and live E2E grew 12 → 16 cases —
+the new `tests/e2e/test_v0150_surface.py` proved on a real backend: table
+`header`+`expanded` server round-trip, mount note set/clear, the full
+composite-preset lifecycle (create → list → instantiate with seed_groups →
+rename → delete), and `mode=summary` producing a visible `kind='summary'`
+link. RA DB migrated p31 → p36; backend restarted on HEAD.
+
 ## 0.14.1 — 2026-06-11
 
 Patch — dead view_url links in split dev deployments.

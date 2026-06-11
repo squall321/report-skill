@@ -1,5 +1,5 @@
 {
-  "fetched_at": "2026-06-10T09:59:39.233660+00:00",
+  "fetched_at": "2026-06-11T22:27:15.341267+00:00",
   "api_base_url": "http://localhost:3000/api",
   "schema_version": "widget-v1",
   "widgets": {
@@ -1440,12 +1440,123 @@
               "type": "string",
               "maxLength": 4000
             }
+          },
+          "header": {
+            "type": "object",
+            "properties": {
+              "row_count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+              },
+              "cells": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "html": {
+                      "type": "string",
+                      "maxLength": 4000
+                    },
+                    "bg": {
+                      "type": "string",
+                      "enum": [
+                        "ink",
+                        "gray",
+                        "slate",
+                        "red",
+                        "orange",
+                        "amber",
+                        "yellow",
+                        "lime",
+                        "green",
+                        "teal",
+                        "cyan",
+                        "sky",
+                        "blue",
+                        "indigo",
+                        "violet",
+                        "purple",
+                        "pink",
+                        "rose"
+                      ]
+                    },
+                    "fg": {
+                      "type": "string",
+                      "enum": [
+                        "ink",
+                        "gray",
+                        "slate",
+                        "red",
+                        "orange",
+                        "amber",
+                        "yellow",
+                        "lime",
+                        "green",
+                        "teal",
+                        "cyan",
+                        "sky",
+                        "blue",
+                        "indigo",
+                        "violet",
+                        "purple",
+                        "pink",
+                        "rose"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "merges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "r": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "c": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "rs": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "cs": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "r",
+                    "c",
+                    "rs",
+                    "cs"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "row_count"
+            ],
+            "additionalProperties": false
+          },
+          "expanded": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
       },
       "content_schema_error": null,
-      "hash": "2a8ea30984ba1ddd"
+      "hash": "335d7fdfc209c309"
     },
     "contour": {
       "type": "contour",
@@ -6546,12 +6657,123 @@
               "type": "string",
               "maxLength": 4000
             }
+          },
+          "header": {
+            "type": "object",
+            "properties": {
+              "row_count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+              },
+              "cells": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "html": {
+                      "type": "string",
+                      "maxLength": 4000
+                    },
+                    "bg": {
+                      "type": "string",
+                      "enum": [
+                        "ink",
+                        "gray",
+                        "slate",
+                        "red",
+                        "orange",
+                        "amber",
+                        "yellow",
+                        "lime",
+                        "green",
+                        "teal",
+                        "cyan",
+                        "sky",
+                        "blue",
+                        "indigo",
+                        "violet",
+                        "purple",
+                        "pink",
+                        "rose"
+                      ]
+                    },
+                    "fg": {
+                      "type": "string",
+                      "enum": [
+                        "ink",
+                        "gray",
+                        "slate",
+                        "red",
+                        "orange",
+                        "amber",
+                        "yellow",
+                        "lime",
+                        "green",
+                        "teal",
+                        "cyan",
+                        "sky",
+                        "blue",
+                        "indigo",
+                        "violet",
+                        "purple",
+                        "pink",
+                        "rose"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "merges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "r": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "c": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "rs": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "cs": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "r",
+                    "c",
+                    "rs",
+                    "cs"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "row_count"
+            ],
+            "additionalProperties": false
+          },
+          "expanded": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
       },
       "content_schema_error": null,
-      "hash": "57a23e12b7234fca"
+      "hash": "d60cf3c2d9517802"
     },
     "tree": {
       "type": "tree",

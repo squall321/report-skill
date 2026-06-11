@@ -212,6 +212,19 @@ def _build_fake_client() -> MagicMock:
     m.publish_composite.return_value = {"id": 10, "title": "c",
                                          "published_at": "2026-06-06T00:00:00Z",
                                          "revision": 4}
+    # v0.15.0 — composite presets (종합보고 양식) + mount note + links
+    m.list_report_links.return_value = []
+    m.list_composite_presets.return_value = []
+    m.create_composite_preset.return_value = {"id": 3, "name": "주간 양식",
+                                              "groups": []}
+    m.new_composite_from_preset.return_value = {
+        "composite": {"id": 12, "title": "6월 2주차 주간보고"},
+        "seed_groups": ["개발", "품질"],
+    }
+    m.update_composite_preset.return_value = {"id": 3, "name": "양식 이름 변경"}
+    m.delete_composite_preset.return_value = {"deleted": True}
+    m.set_mount_note.return_value = {"report_id": 1, "workspace_slug": "dx",
+                                     "note": "게시 메모"}
     m.unpublish_composite.return_value = {"id": 10, "title": "c",
                                            "published_at": None, "revision": 5}
     # ---- v0.6.0 activities + notifications ----
@@ -418,6 +431,20 @@ _ARGS_BY_TOOL: dict[str, dict[str, Any]] = {
     "composite_delete": {"composite_id": 10, "confirm": True},
     "composite_publish": {"composite_id": 10},
     "composite_unpublish": {"composite_id": 10},
+
+    # ---- v0.15.0 composite presets (종합보고 양식) + mount note + links ----
+    "report_links_list": {"report_id": 1},
+    "composite_presets_list": {},
+    "composite_preset_create": {"source_composite_id": 10, "name": "주간 양식"},
+    "composite_new_from_preset": {
+        "preset_id": 3, "workspace_slug": "dx",
+        "title": "6월 2주차 주간보고", "kind": "weekly",
+    },
+    "composite_preset_update": {"preset_id": 3, "name": "양식 이름 변경"},
+    "composite_preset_delete": {"preset_id": 3, "confirm": True},
+    "report_mount_set_note": {
+        "report_id": 1, "workspace_slug": "dx", "note": "게시 메모",
+    },
 
     # ---- v0.6.0 activities + notifications ----
     "report_activities": {"report_id": 1},

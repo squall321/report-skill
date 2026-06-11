@@ -51,6 +51,9 @@ report-skill report copy <source-report-id> --title "5월 4주차 백엔드 주�
 # content-only clone — drops tags, report_type_id, entity_ids, lifecycle, links
 report-skill report copy <source-report-id> --title "..." --mode content
 
+# summary copy — content copy + auto link kind='summary' 원본 → 요약본 (v0.15.0)
+report-skill report copy <source-report-id> --title "..." --mode summary
+
 # optionally land it in a specific personal folder
 report-skill report copy <source-report-id> --title "..." --folder-id 7
 ```
@@ -59,6 +62,7 @@ Modes:
 
 - `full` (default) — exact clone of every field the writer can set, including `collab_workspace_slugs`, `entity_ids`, `report_type_id`, lifecycle, and report-to-report links. Best when the user wants a sibling of the source.
 - `content` — copies title/pages/blocks only; drops related-info, lifecycle, and links. Best when the user wants a clean starting point with the same body structure but different metadata.
+- `summary` (v0.15.0, RA ef4e441) — same body copy as `content`, plus the server auto-creates a `kind="summary"` report-to-report link, direction 원본 → 요약본. The link kind is system-locked — never hand-create summary links via `report_add_link`. Use when the user asks for a 요약본 of an existing report ("이 보고서 요약본 만들어줘"). To verify or find an existing 요약본, call `report_links_list(report_id)` — links are NOT embedded in the report detail.
 
 The new report always lands in the author's personal workspace. Mount it (SKILL.md Flow G) to publish to a team board.
 
@@ -310,6 +314,43 @@ report-skill composites delete <composite-id> --yes
 
 The `--yes` flag is required (destructive). Owner / sys admin only.
 
+### E.6 양식(composite preset)으로 종합보고 시작 (v0.15.0)
+
+When the user says "지난달 양식으로 6월 종합 만들어줘" / "월간보고 양식으로 시작" — a saved 종합보고 양식 beats building the composite from scratch (E.1):
+
+```powershell
+# 1. list 양식 visible to your workspace tree (summary projection — no summary_widgets blob)
+report-skill composites presets-list
+
+# 2. seed a new composite from the 양식 (writable scope: 현재 부서 + 하위 부서만)
+report-skill composites new-from-preset <preset-id> \
+  --workspace dx \
+  --title "2026-06 백엔드 종합" \
+  --kind recurring \
+  --period-date 2026-06-30
+```
+
+LLM call sequence:
+
+```
+1. composite_presets_list                        → pick the 양식 (id, name, description, source_kind, groups, ...)
+2. composite_new_from_preset(preset_id=, workspace_slug=, title=, kind=, period_date=)
+                                                 → {composite, seed_groups, view_url} — summary_widgets + empty group skeleton, no items
+3. composite_items_set(...)                      → fill the agenda (E.3)
+4. (optional) composite_summary_set(...)         → adjust the seeded summary widgets
+5. composite_publish(...)                        → E.4
+```
+
+Scope gate: `composite_new_from_preset` shares `composite_create`'s writable-scope check — targeting a board outside 현재 부서 + 하위 부서 returns 403 `out_of_workspace_scope` ("종합보고는 현재 부서 또는 하위 부서에만 작성할 수 있습니다."). Do not retry with an unrelated slug.
+
+Managing 양식 (CLI: `composites preset-create / preset-update / preset-delete`):
+
+- Save: `composite_preset_create(source_composite_id, name, description?, owner_workspace_slugs?, groups?)` — snapshot an existing composite into a reusable 양식. `owner_workspace_slugs` omitted/empty = 전사(global).
+- Edit: `composite_preset_update(preset_id, name?, description?, owner_workspace_slugs?, groups?)` — creator / sys admin / manager only (403 `composite_preset_forbidden`). `owner_workspace_slugs` tri-state: omit = 변경 안 함, null = 전사로 변경 (CLI `--global`), list = scope 변경. Summary widgets canNOT be edited here — re-save the 양식 from an edited composite instead.
+- Delete: `composite_preset_delete(preset_id, confirm=true)` (CLI `--yes`) — IRREVERSIBLE; shared 양식 disappear for every user. Confirm with the user first.
+
+Don't confuse with report presets (A.0): those scaffold individual reports (`presets_list` / `report_new_from_preset`); 종합보고 양식 seed composites.
+
 ## v0.8.0 — unified grants / sharing
 
 ReportArchive's prior ad-hoc sharing surface (mount edit-policy + collab workspaces) has been unified under a single grant model. Three resource taxonomies — content, folders, boards — each expose **list / add / remove**.
@@ -344,6 +385,8 @@ Boards (workspace) — board manager / sys admin only for add/remove. Only org b
 - `board_share_remove` — `{workspace_slug, grant_id}` → DELETE.
 
 Mount edit-policy (`report_mount_set_edit_policy`) interaction: setting policy to `manager` causes the server to auto-create the matching `workspace_manager` grant on the report; switching back to `owner_only` / `default` removes it. Use `content_shares_list` to inspect the result after a policy change.
+
+Mount note (v0.15.0): `report_mount_set_note` — PUT `/api/mounts/{rid}/{slug}/note` — sets the per-board 게시 메모 shown next to the mounted report (max 1000 chars; `''` clears). Author / publisher / board manager. Sibling of `report_mount_set_folder` / `report_mount_set_edit_policy`. CLI: `report-skill mounts set-note --report-id <id> --workspace <slug> --note "..."`.
 
 Authorization rules — common 403 reasons:
 

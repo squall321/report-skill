@@ -8,7 +8,7 @@ The following 21 MCP tools were added in 0.5.0.
 
 Report-level:
 
-- `report_copy` — POST `/reports/{id}/copy`; full or content-only clone (`mode=full|content`, default `full`).
+- `report_copy` — POST `/reports/{id}/copy`; clone a report (`mode=full|content|summary`, default `full`). v0.15.0 adds `summary` (RA ef4e441): copies content AND auto-creates a `kind="summary"` report-to-report link, direction 원본 → 요약본. That link kind is system-locked — never hand-create summary links via `report_add_link`.
 - `report_add_link` — POST `/reports/{id}/links`; register a report-to-report link (`kind` default `"related"`, `direction` default `"outgoing"`). `direction="outgoing"` means "this report links TO the other" (the common case — used when the author of THIS report cites the other). `direction="incoming"` means "the other report links TO this one"; use it when the author of the OTHER report (the source) is registering an inbound reference to the current report.
 
   ```
@@ -129,9 +129,31 @@ No new endpoints — this release hardens error handling and aligns the docs wit
 - `dry_run` flag on `report_create` / `report_update` / `report_append` / `report_add_page` (validate + build the payload, nothing sent) and `report_delete` (impact preview: mounts + composite refs, nothing deleted).
 - `notifications_mark_all_read` now requires `confirm=true`.
 
-## MCP tool inventory (v0.14.x)
+## v0.15.0 — composite presets (종합보고 양식) + mount note
 
-The MCP server now exposes **93 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the version sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
+RA v0.26.0→v0.29.0 parity. 7 new MCP tools (`_DISPATCH` 93 → 100), all with CLI mirrors: `report-skill composites presets-list / preset-create / new-from-preset / preset-update / preset-delete`, `report-skill mounts set-note`, `report-skill report links`. Worked flow: `flows-advanced.md` § E.6.
+
+Report links:
+
+- `report_links_list` — GET `/api/reports/{id}/links`. Every report-to-report link touching the report (both directions). This is the ONLY place system `kind='summary'` links (created by `report_copy mode=summary`) are exposed — the report detail does NOT embed links. CLI: `report-skill report links <id>`.
+
+Composite presets (양식):
+
+- `composite_presets_list` — GET `/api/composite-presets`. 종합보고 양식 visible to the caller's workspace tree. Summary projection only (id, name, description, source_kind, owner_workspace_slugs, groups, summary_widget_count, creator — NO summary_widgets blob).
+- `composite_preset_create` — POST `/api/composite-presets`. Snapshot an existing composite into a reusable 양식 (`source_composite_id`, `name`, optional `description` / `owner_workspace_slugs` / `groups`). `owner_workspace_slugs` omitted/empty = 전사(global).
+- `composite_new_from_preset` — POST `/api/composite-presets/{id}/new-composite`. Create a composite seeded with the preset's summary_widgets + empty group skeleton (no items); returns `{composite, seed_groups, view_url}`. Required: `preset_id`, `workspace_slug`, `title`, `kind` (+ optional `period_date`). Same writable-scope gate as `composite_create` — 현재 부서 + 하위 부서만 (403 `out_of_workspace_scope`).
+- `composite_preset_update` — PATCH `/api/composite-presets/{id}`. Edit 양식 메타정보 + 그룹 — creator / sys admin / manager only (403 `composite_preset_forbidden`). `owner_workspace_slugs` tri-state: omit = 변경 안 함, null = 전사로 변경, list = scope 변경. Summary widgets canNOT be edited here — re-save the 양식 from a composite instead.
+- `composite_preset_delete` — DELETE `/api/composite-presets/{id}`. Creator / sys admin / manager only; requires `confirm=true` (CLI `--yes`). IRREVERSIBLE — shared 양식 disappear for every user.
+
+Mounts:
+
+- `report_mount_set_note` — PUT `/api/mounts/{rid}/{slug}/note`. Per-board 게시 메모 shown next to the mounted report (max 1000 chars; `''` clears). Author / publisher / board manager. Sibling of `report_mount_set_folder` / `report_mount_set_edit_policy`.
+
+Also in v0.15.0 (not new tools): `report_copy` gains `mode=summary` (see the v0.5.0 entry above); `table` / `comparison` content gains `header` + `expanded` (documented in `widgets.md`); new typed error `composite_preset_forbidden` + Korean `out_of_workspace_scope` variant (documented in `errors-recovery.md`); CLI view links honor `REPORT_FRONTEND_URL`.
+
+## MCP tool inventory (v0.15.x)
+
+The MCP server now exposes **100 tools via stdio** (`report-skill-mcp`). The full list grew from the initial 23 read/write/offline tools through the version sections above — call any of them by name from Claude Desktop / Continue / Cursor / any MCP client. The exact set is the runtime `_DISPATCH` map in `mcp_server.py`; verify locally with:
 
 ```powershell
 report-skill-mcp --help   # or:

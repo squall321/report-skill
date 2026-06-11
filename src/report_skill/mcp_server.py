@@ -131,6 +131,13 @@ except ImportError:  # pragma: no cover
     NetworkUnreachableError = None  # type: ignore[assignment,misc]
     ReportStillMountedError = None  # type: ignore[assignment,misc]
 
+# v0.15.0 — composite preset (종합보고 양식) manage 403 (RA c5c57ca).
+# Imported defensively so the server keeps loading against an older client.py.
+try:
+    from report_skill.client import CompositePresetPermissionError
+except ImportError:  # pragma: no cover
+    CompositePresetPermissionError = None  # type: ignore[assignment,misc]
+
 SERVER_NAME = "report-skill"
 
 
@@ -909,14 +916,26 @@ TOOLS: list[Tool] = [
         "report_copy",
         "Duplicate an existing report. POST /api/reports/{id}/copy. New copy "
         "lands in the caller's personal workspace. mode=content keeps just the "
-        "block content; mode=full (default) also copies tags / related-info.",
+        "block content; mode=full (default) also copies tags / related-info; "
+        "mode=summary (v0.15.0 — RA ef4e441) copies content AND auto-links the "
+        "copy to the source with a kind='summary' link (원본 → 요약본).",
         {
             "report_id": {"type": "integer"},
             "title": {"type": "string", "description": "title for the new copy"},
-            "mode": {"type": "string", "enum": ["content", "full"], "default": "full"},
+            "mode": {"type": "string", "enum": ["content", "full", "summary"],
+                     "default": "full"},
             "folder_id": {"type": "integer", "description": "optional destination folder"},
         },
         ["report_id", "title"],
+    ),
+    _tool(
+        "report_links_list",
+        "List every report-to-report link touching a report (both "
+        "directions). GET /api/reports/{id}/links. v0.15.0 — also the only "
+        "place system kind='summary' links (from report_copy mode=summary) "
+        "are exposed; the report detail does not embed links.",
+        {"report_id": {"type": "integer"}},
+        ["report_id"],
     ),
     _tool(
         "report_add_link",
@@ -1308,6 +1327,105 @@ TOOLS: list[Tool] = [
         "returns to live-fetch + editable mode. Idempotent.",
         {"composite_id": {"type": "integer"}},
         ["composite_id"],
+    ),
+
+    # ---- v0.15.0 — composite presets / 종합보고 양식 (RA c5c57ca) -------- #
+    _tool(
+        "composite_presets_list",
+        "List composite presets (종합보고 양식) visible to the caller's "
+        "workspace tree. GET /api/composite-presets. Summary projection only "
+        "(no summary_widgets blob): id, name, description, source_kind, "
+        "owner_workspace_slugs, groups, summary_widget_count, creator.",
+        {},
+        [],
+    ),
+    _tool(
+        "composite_preset_create",
+        "Snapshot an existing composite into a reusable 양식. "
+        "POST /api/composite-presets. Caller must be able to read the source "
+        "composite. owner_workspace_slugs empty/omitted = 전사(global).",
+        {
+            "source_composite_id": {"type": "integer",
+                                    "description": "composite to snapshot"},
+            "name": {"type": "string"},
+            "description": {"type": "string", "default": ""},
+            "owner_workspace_slugs": {
+                "type": "array", "items": {"type": "string"},
+                "description": "workspace slugs the preset is scoped to; omit for 전사",
+            },
+            "groups": {
+                "type": "array", "items": {"type": "string"},
+                "description": "ordered group skeleton incl. empty groups; "
+                               "omit to derive from the source's saved items",
+            },
+        },
+        ["source_composite_id", "name"],
+    ),
+    _tool(
+        "composite_new_from_preset",
+        "Create a new composite seeded from a preset (the preset's "
+        "summary_widgets + empty group skeleton, no items). "
+        "POST /api/composite-presets/{id}/new-composite. Same writable-scope "
+        "gate as composite_create: 현재 부서 + 하위 부서만 "
+        "(403 out_of_workspace_scope). Returns {composite, seed_groups}.",
+        {
+            "preset_id": {"type": "integer"},
+            "workspace_slug": {"type": "string",
+                               "description": "where the new composite lives"},
+            "title": {"type": "string"},
+            "kind": {"type": "string",
+                     "description": "CompositeKind enum value ('recurring' | "
+                                    "'theme' — same as composite_create)"},
+            "period_date": {"type": "string",
+                            "description": "optional ISO date for recurring kinds"},
+        },
+        ["preset_id", "workspace_slug", "title", "kind"],
+    ),
+    _tool(
+        "composite_preset_update",
+        "Edit a composite preset's 메타정보 + 그룹 목록. "
+        "PATCH /api/composite-presets/{id}. Creator / sys admin / manager "
+        "only (403 composite_preset_forbidden). Summary widgets canNOT be "
+        "edited here — re-save the 양식 from a composite editor instead. "
+        "Only keys you send are applied; owner_workspace_slugs null = 전사로 "
+        "변경, omitted = 변경 안 함.",
+        {
+            "preset_id": {"type": "integer"},
+            "name": {"type": "string"},
+            "description": {"type": "string"},
+            "owner_workspace_slugs": {
+                "type": ["array", "null"], "items": {"type": "string"},
+                "description": "null = 전사(global)로 변경; omit = keep current",
+            },
+            "groups": {"type": "array", "items": {"type": "string"}},
+        },
+        ["preset_id"],
+    ),
+    _tool(
+        "composite_preset_delete",
+        "Delete a composite preset. DELETE /api/composite-presets/{id}. "
+        "Creator / sys admin / manager only. IRREVERSIBLE — shared 양식 "
+        "disappears for every user. Requires confirm=true.",
+        {
+            "preset_id": {"type": "integer"},
+            "confirm": {"type": "boolean", "description": "must be true; safety guard"},
+        },
+        ["preset_id", "confirm"],
+    ),
+
+    # ---- v0.15.0 — per-board mount note (RA b435a0f) --------------------- #
+    _tool(
+        "report_mount_set_note",
+        "Set the per-board 게시 메모 shown next to a mounted report. "
+        "PUT /api/mounts/{rid}/{slug}/note. Author / publisher / board "
+        "manager. Max 1000 chars; empty string clears the note.",
+        {
+            "report_id": {"type": "integer"},
+            "workspace_slug": {"type": "string"},
+            "note": {"type": "string",
+                     "description": "memo text; '' clears (server cap 1000 chars)"},
+        },
+        ["report_id", "workspace_slug", "note"],
     ),
 
     # ---- v0.6.0 — report activities timeline --------------------------- #
@@ -3407,6 +3525,108 @@ def _do_composite_unpublish(args: dict) -> Any:
 
 
 # --------------------------------------------------------------------------- #
+# v0.15.0 — composite presets (종합보고 양식, RA c5c57ca) + mount note
+# --------------------------------------------------------------------------- #
+def _do_report_links_list(args: dict) -> Any:
+    rid = _int_arg(args, "report_id")
+    with ReportArchiveClient() as c:
+        return c.list_report_links(rid)
+
+
+def _do_composite_presets_list(args: dict) -> Any:
+    with ReportArchiveClient() as c:
+        return c.list_composite_presets()
+
+
+def _do_composite_preset_create(args: dict) -> Any:
+    logger.info("composite_preset_create source=%s name=%s",
+                args.get("source_composite_id"), args.get("name"))
+    source_id = _int_arg(args, "source_composite_id")
+    name = str(args["name"])
+    slugs = args.get("owner_workspace_slugs")
+    if slugs is not None:
+        slugs = [str(s) for s in slugs]
+    groups = args.get("groups")
+    if groups is not None:
+        groups = [str(g) for g in groups]
+    with ReportArchiveClient() as c:
+        return c.create_composite_preset(
+            source_id,
+            name=name,
+            description=str(args.get("description") or ""),
+            owner_workspace_slugs=slugs,
+            groups=groups,
+        )
+
+
+def _do_composite_new_from_preset(args: dict) -> Any:
+    logger.info("composite_new_from_preset id=%s slug=%s",
+                args.get("preset_id"), args.get("workspace_slug"))
+    pid = _int_arg(args, "preset_id")
+    with ReportArchiveClient() as c:
+        result = c.new_composite_from_preset(
+            pid,
+            workspace_slug=str(args["workspace_slug"]),
+            title=str(args["title"]),
+            kind=str(args["kind"]),
+            period_date=args.get("period_date"),
+        )
+    composite = result.get("composite") if isinstance(result, dict) else None
+    cid = composite.get("id") if isinstance(composite, dict) else None
+    return {
+        "composite": composite,
+        "seed_groups": (result or {}).get("seed_groups"),
+        "view_url": (f"{_frontend_base()}/composites/{cid}"
+                     if cid is not None else None),
+    }
+
+
+def _do_composite_preset_update(args: dict) -> Any:
+    logger.info("composite_preset_update id=%s", args.get("preset_id"))
+    pid = _int_arg(args, "preset_id")
+    kwargs: dict = {}
+    if args.get("name") is not None:
+        kwargs["name"] = str(args["name"])
+    if args.get("description") is not None:
+        kwargs["description"] = str(args["description"])
+    # Tri-state: key present (even null) → send; key absent → don't touch.
+    if "owner_workspace_slugs" in args:
+        slugs = args["owner_workspace_slugs"]
+        kwargs["owner_workspace_slugs"] = (
+            [str(s) for s in slugs] if slugs is not None else None
+        )
+    if args.get("groups") is not None:
+        kwargs["groups"] = [str(g) for g in args["groups"]]
+    if not kwargs:
+        raise ValueError(
+            "composite_preset_update: nothing to update — pass at least one "
+            "of name / description / owner_workspace_slugs / groups")
+    with ReportArchiveClient() as c:
+        return c.update_composite_preset(pid, **kwargs)
+
+
+def _do_composite_preset_delete(args: dict) -> Any:
+    logger.info("composite_preset_delete id=%s", args.get("preset_id"))
+    # Confirm gate (mirrors preset_delete). 양식 can be shared 전사-wide.
+    if args.get("confirm") is not True:
+        raise ValueError(
+            "confirm parameter must be true (boolean) to delete — composite "
+            "preset deletion is PERMANENT and shared 양식 disappear for every user")
+    pid = _int_arg(args, "preset_id")
+    with ReportArchiveClient() as c:
+        c.delete_composite_preset(pid)
+    return {"deleted": True, "id": pid}
+
+
+def _do_report_mount_set_note(args: dict) -> Any:
+    rid = _int_arg(args, "report_id")
+    slug = str(args["workspace_slug"])
+    note = str(args["note"])
+    with ReportArchiveClient() as c:
+        return c.set_mount_note(rid, slug, note=note)
+
+
+# --------------------------------------------------------------------------- #
 # v0.6.0 — activities + notifications dispatchers
 # --------------------------------------------------------------------------- #
 def _do_report_activities(args: dict) -> Any:
@@ -3582,6 +3802,14 @@ _DISPATCH = {
     "composite_delete": _do_composite_delete,
     "composite_publish": _do_composite_publish,
     "composite_unpublish": _do_composite_unpublish,
+    # ---- v0.15.0 — composite presets (종합보고 양식) + mount note + links - #
+    "report_links_list": _do_report_links_list,
+    "composite_presets_list": _do_composite_presets_list,
+    "composite_preset_create": _do_composite_preset_create,
+    "composite_new_from_preset": _do_composite_new_from_preset,
+    "composite_preset_update": _do_composite_preset_update,
+    "composite_preset_delete": _do_composite_preset_delete,
+    "report_mount_set_note": _do_report_mount_set_note,
     # ---- v0.6.0 — activities + notifications --------------------------- #
     "report_activities": _do_report_activities,
     "notifications_list": _do_notifications_list,
@@ -3639,6 +3867,8 @@ def _build_typed_error_map() -> list[tuple[type, str, bool]]:
         (ReportStillMountedError, "report_still_mounted", True),
         (NetworkUnreachableError, "network_unreachable", False),
         (AuthUnavailableError, "auth_unavailable", False),
+        # v0.15.0 — composite preset manage gate (RA c5c57ca)
+        (CompositePresetPermissionError, "composite_preset_forbidden", False),
     ]
     return [(cls, code, has_rid) for (cls, code, has_rid) in raw if cls is not None]
 

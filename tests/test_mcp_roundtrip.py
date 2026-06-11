@@ -256,8 +256,11 @@ def test_dispatch_count_is_93():
     # v0.11.0 adds 4 content-aware read tools → 86;
     # v0.12.0 adds 5 high-value read tools (composites_by_report, reports_list,
     # comments_inbox_list, entities_usage_list, workspace_members_list) → 91;
-    # v0.14.0 adds 2 telemetry/VOC tools (session_log, voc_export) → 93.
-    assert len(_DISPATCH) == 93, sorted(_DISPATCH)
+    # v0.14.0 adds 2 telemetry/VOC tools (session_log, voc_export) → 93;
+    # v0.15.0 adds 5 composite-preset (종합보고 양식, RA c5c57ca) tools +
+    # report_mount_set_note (RA b435a0f) + report_links_list (the only
+    # endpoint exposing system summary links) → 100.
+    assert len(_DISPATCH) == 100, sorted(_DISPATCH)
 
 
 # --------------------------------------------------------------------------- #

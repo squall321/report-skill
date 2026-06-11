@@ -10,8 +10,8 @@ Referenced from SKILL.md (Flow A/B). Read this when authoring or patching block 
 | rich_text       | markdown string; supports @-mentions (see mention:// spec below)   |
 | bulleted_list   | `["항목1", "항목2"]` or multi-line string with `-`/`*` bullets    |
 | key_value       | flat dict `{"team": "백엔드", "lead": "..."}`                      |
-| table           | list of dicts keyed by column.key, or markdown table string; dict form also accepts `note` (※-prefix auto), `column_widths`, `table_width_px`, `merges` |
-| comparison      | dict-of-dicts `{"비용": {"as_is": "...", "to_be": "..."}}`; dict form also accepts `note` (※-prefix auto), `column_widths`, `row_label_width`, `table_width_px`, `merges` |
+| table           | list of dicts keyed by column.key, or markdown table string; dict form also accepts `note` (※-prefix auto), `column_widths`, `table_width_px`, `merges`, `header`, `expanded` (v0.15.0, see below) |
+| comparison      | dict-of-dicts `{"비용": {"as_is": "...", "to_be": "..."}}`; dict form also accepts `note` (※-prefix auto), `column_widths`, `row_label_width`, `table_width_px`, `merges`, `header`, `expanded` (v0.15.0, see below) |
 | chart/scatter   | `[{x: "Jan", revenue: 100}, ...]`                                  |
 | pie/waffle      | dict label→value `{"북미": 40, "EMEA": 30}`                        |
 | milestone       | dict date→label or list of `{date, label, status?}`                |
@@ -128,3 +128,32 @@ Three text-bearing widgets gained a sibling rich-markup field that complements t
 - `comparison.cell_html` — same idea, keyed by `"rowKey::caseKey"`.
 
 All three pass through the adapter unchanged; the server validates via `_CELL_HTML_SCHEMA`.
+
+## Multi-row header + expanded read mode — table / comparison (v0.15.0, RA 795c60c / 0c4e4bc / 8b5788f)
+
+Both `table` and `comparison` `content` accept two more optional fields (adapter pass-through, server-validated):
+
+- `header` — multi-row / merged header. Exact shape: `{row_count: 1-8 (required), cells: {"<headerRowIdx>::<colKey>": {text?, html?, bg?, fg?}}, merges: [{r, c, rs, cs}]}`. Cell keys: header row index (0-based) `::` `columns[].key` (table) / `cases[].key` (comparison). Per cell: `text` ≤2000 chars, `html` ≤4000 chars (same sanitized grammar as `caption_html`), `bg`/`fg` from the same 18-token color enum as `cell_styles`. `merges` entries are `{r, c, rs, cs}` — 0-based row/col + rowspan/colspan, all four required. Omit `header` entirely → classic single-row header derived from `columns[].label` / `cases[].label`.
+- `expanded` — bool. `true` = read mode starts with multiline cells unfolded (기본 펼침); omitted/`false` = compact hover mode.
+
+Example (table; 2-row header, "상반기" spans the two quarter columns):
+
+```json
+{
+  "rows": [{"item": "매출", "q1": "1.2억", "q2": "1.5억"}],
+  "header": {
+    "row_count": 2,
+    "cells": {
+      "0::item": {"text": "항목"},
+      "0::q1": {"text": "2026 상반기", "bg": "slate"},
+      "1::q1": {"text": "1분기"},
+      "1::q2": {"text": "2분기"}
+    },
+    "merges": [
+      {"r": 0, "c": 0, "rs": 2, "cs": 1},
+      {"r": 0, "c": 1, "rs": 1, "cs": 2}
+    ]
+  },
+  "expanded": true
+}
+```
