@@ -1,5 +1,21 @@
 ﻿# Changelog
 
+## 0.14.1 — 2026-06-11
+
+Patch — dead view_url links in split dev deployments.
+
+- `_frontend_base()` now honors a `REPORT_FRONTEND_URL` env override. In a
+  split deployment the SPA runs on a different origin than the API (vite
+  dev :3001 vs uvicorn :3000), so the origin-derived `view_url` the LLM
+  hands out after report_create / report_update pointed at a 404. Set
+  `REPORT_FRONTEND_URL=http://localhost:3001` (added to `.env` +
+  documented in `.env.example`); leave blank for combined deployments
+  where the backend serves the frontend.
+- Found while wiring the live frontend for in-VSCode viewing (vite dev
+  server + Simple Browser keybinding).
+
+Verified: 486 passed, 5 skipped; view_url base resolves to the override.
+
 ## 0.14.0 — 2026-06-11
 
 Minor — closes the entire remaining P3/P4 backlog from the v0.11.0 cold-eye

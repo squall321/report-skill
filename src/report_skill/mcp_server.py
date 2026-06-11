@@ -138,7 +138,17 @@ def _frontend_base() -> str:
     """v0.13.0 — derive the frontend origin from settings instead of a
     hardcoded localhost:3001. The API base usually ends in "/api"
     (e.g. http://host:3000/api) and the frontend lives at the same origin
-    without that suffix; fall back to the API base itself otherwise."""
+    without that suffix; fall back to the API base itself otherwise.
+
+    v0.14.1 — REPORT_FRONTEND_URL env override takes precedence: in a split
+    dev deployment the SPA runs on a different port than the API (vite :3001
+    vs uvicorn :3000), so origin-derived view_urls would 404."""
+    import os
+
+    override = os.environ.get("REPORT_FRONTEND_URL", "").strip()
+    if override:
+        return override.rstrip("/")
+
     from report_skill.config import settings
 
     base = str(settings.report_api_base_url).rstrip("/")
