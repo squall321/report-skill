@@ -75,13 +75,43 @@ _TYPED_LOCK_ERRORS = (
 )
 
 
+class _NullClientCM:
+    """Context manager yielding None — used by `report export --offline`
+    so the offline path never touches settings/credentials."""
+
+    def __enter__(self):
+        return None
+
+    def __exit__(self, *_exc):
+        return None
+
+
 def _frontend_base() -> str:
     """v0.15.0 — same REPORT_FRONTEND_URL override as mcp_server (v0.14.1):
-    the CLI's printed view links pointed at a hardcoded localhost:3001."""
+    the CLI's printed view links pointed at a hardcoded localhost:3001.
+    v0.16.0 — when unset, derive from the API base like mcp_server does
+    (strip the /api suffix) so remote-server installs get working links;
+    localhost:3001 remains only as the dev-split fallback."""
     override = os.environ.get("REPORT_FRONTEND_URL", "").strip()
     if override:
         return override.rstrip("/")
+    try:
+        base = str(settings.report_api_base_url).rstrip("/")
+        if base.endswith("/api"):
+            return base[: -len("/api")]
+    except Exception:  # noqa: BLE001 — link cosmetics must never crash
+        pass
     return "http://localhost:3001"
+
+
+def main() -> None:
+    """console_scripts entry — converts ConfigError (whose friendly message
+    config.py already printed to stderr) into exit 2 instead of a traceback."""
+    from report_skill.config import ConfigError
+    try:
+        app()
+    except ConfigError:
+        raise SystemExit(2)
 
 app = typer.Typer(no_args_is_help=True, add_completion=False,
                   help="External skill layer over ReportArchive.")
@@ -649,15 +679,29 @@ def report_export(
         console.print("[red]draft must contain either 'blocks' (with --template) or 'pages'[/red]")
         raise typer.Exit(1)
 
-    with ReportArchiveClient() as client:
+    # v0.16.0 — true offline: never construct the client (it resolves
+    # settings → exit 2 even though no credential is ever used; audit M2).
+    # Cached templates fall back to the BUNDLED baseline automatically.
+    client_cm = _NullClientCM() if offline else ReportArchiveClient()
+    with client_cm as client:
         normalized_pages = []
         total_failed = 0
         for i, page in enumerate(pages_spec):
-            try:
-                tpl = client.fetch_template(page["template_id"], allow_cache=offline)
-            except (ApiError, FileNotFoundError) as e:
-                console.print(f"[red]template fetch failed:[/red] {e}")
-                raise typer.Exit(1)
+            if offline:
+                tpl = catalog_mod.load_cached_template(page["template_id"])
+                if tpl is None:
+                    console.print(
+                        f"[red]template not cached/bundled:[/red] "
+                        f"{page['template_id']} — run `templates sync` once "
+                        "online, or use a bundled template_id "
+                        "(`templates list` shows them)")
+                    raise typer.Exit(1)
+            else:
+                try:
+                    tpl = client.fetch_template(page["template_id"])
+                except (ApiError, FileNotFoundError) as e:
+                    console.print(f"[red]template fetch failed:[/red] {e}")
+                    raise typer.Exit(1)
             block_types = {b["id"]: b["type"]
                            for b in (tpl.get("schema") or {}).get("blocks") or []
                            if isinstance(b, dict)}
@@ -3612,4 +3656,9 @@ def voc_log(
 
 
 if __name__ == "__main__":
-    app()
+    # Call main() (NOT app() directly) so the ConfigError → exit-2 guard runs.
+    # The PyInstaller standalone freezes THIS block as its entry, so skipping
+    # main() here let an unconfigured `tools`/`composites` call escape as a
+    # pydantic traceback + exit 1 on the .exe (fresh-machine re-verify R2),
+    # while the wheel's console_scripts (cli:main) was already guarded.
+    main()

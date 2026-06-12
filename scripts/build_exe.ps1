@@ -179,6 +179,13 @@ Copy-Item (Join-Path $repo "install-standalone.ps1") -Destination $relDir
 # with -ExecutionPolicy Bypass so non-technical receivers don't need PowerShell knowledge.
 Copy-Item (Join-Path $repo "setup.bat") -Destination $relDir
 
+# Uninstaller (fresh-machine audit N3) — ship it in the zip; the installer
+# also drops a copy into the install dir at run time.
+$uninstaller = Join-Path $repo "uninstall.ps1"
+if (Test-Path $uninstaller) {
+    Copy-Item $uninstaller -Destination $relDir -Force
+}
+
 $recvDoc = Join-Path $repo "docs\RECEIVER-STANDALONE.md"
 if (Test-Path $recvDoc) {
     Copy-Item $recvDoc -Destination (Join-Path $relDir "README.md")

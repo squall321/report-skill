@@ -33,6 +33,40 @@ console = Console()
 
 
 # --------------------------------------------------------------------------- #
+# v0.16.0 — offline fallback (fresh-machine audit M2)
+# `templates list/show` previously REQUIRED a live, configured server even
+# though the wheel/exe ship a bundled template baseline. Now: try live, and
+# on any config/network failure fall back to cached + bundled templates so a
+# brand-new machine can explore templates before .env even exists.
+# --------------------------------------------------------------------------- #
+def _offline_templates() -> list[dict]:
+    """Every template readable without a server: live cache first, then the
+    bundled baseline (catalog.load_cached_template's own fallback order)."""
+    from report_skill import catalog
+
+    seen: dict[str, dict] = {}
+    for tid in catalog.list_cached_templates():
+        tpl = catalog.load_cached_template(tid)
+        if tpl:
+            seen[str(tpl.get("template_id") or tid)] = tpl
+    bundled_dir = getattr(catalog, "BUNDLED_TEMPLATES_DIR", None)
+    if bundled_dir is not None and bundled_dir.is_dir():
+        for p in sorted(bundled_dir.glob("*.latest.json")):
+            tid = p.stem[: -len(".latest")]
+            if tid not in seen:
+                try:
+                    seen[tid] = json.loads(p.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    continue
+    return list(seen.values())
+
+
+def _offline_template(template_id: str, version: Optional[int]) -> Optional[dict]:
+    from report_skill import catalog
+    return catalog.load_cached_template(template_id, version)
+
+
+# --------------------------------------------------------------------------- #
 # helpers
 # --------------------------------------------------------------------------- #
 def _blocks_of(tpl: dict) -> list[dict]:
@@ -78,16 +112,20 @@ def cmd_list(
         help="emit the raw list as JSON instead of a table.",
     ),
 ):
-    """Pretty-print all templates. Optional --category filter."""
+    """Pretty-print all templates. Optional --category filter.
+
+    Works offline: when the server/config is unavailable, lists the cached +
+    bundled baseline instead of failing."""
     try:
         with ReportArchiveClient() as client:
             templates = client.fetch_templates()
-    except ApiError as e:
-        console.print(f"[red]templates fetch failed ({e.status_code}):[/red] {e}")
-        raise typer.Exit(2)
-    except Exception as e:
-        console.print(f"[red]templates fetch failed:[/red] {e}")
-        raise typer.Exit(1)
+    except Exception as e:  # noqa: BLE001 — ApiError/ConfigError/network
+        templates = _offline_templates()
+        if not templates:
+            console.print(f"[red]templates fetch failed:[/red] {e}")
+            raise typer.Exit(2 if isinstance(e, ApiError) else 1)
+        console.print(f"[yellow]server unavailable ({type(e).__name__}) — "
+                      f"showing cached/bundled templates[/yellow]")
 
     if category:
         cat_lc = category.lower()
@@ -135,16 +173,20 @@ def cmd_show(
         help="emit the raw template JSON instead of pretty-printing.",
     ),
 ):
-    """Print one template's blocks with each block's id + widget type + key props."""
+    """Print one template's blocks with each block's id + widget type + key props.
+
+    Works offline: falls back to the cached/bundled copy when the server or
+    config is unavailable."""
     try:
         with ReportArchiveClient() as client:
             tpl = client.fetch_template(template_id, version)
-    except ApiError as e:
-        console.print(f"[red]template fetch failed ({e.status_code}):[/red] {e}")
-        raise typer.Exit(2)
-    except Exception as e:
-        console.print(f"[red]template fetch failed:[/red] {e}")
-        raise typer.Exit(1)
+    except Exception as e:  # noqa: BLE001 — ApiError/ConfigError/network
+        tpl = _offline_template(template_id, version)
+        if tpl is None:
+            console.print(f"[red]template fetch failed:[/red] {e}")
+            raise typer.Exit(2 if isinstance(e, ApiError) else 1)
+        console.print(f"[yellow]server unavailable ({type(e).__name__}) — "
+                      f"showing the cached/bundled copy[/yellow]")
 
     if json_out:
         console.print_json(json.dumps(tpl, ensure_ascii=False, indent=2))

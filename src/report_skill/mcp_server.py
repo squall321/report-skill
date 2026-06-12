@@ -138,7 +138,22 @@ try:
 except ImportError:  # pragma: no cover
     CompositePresetPermissionError = None  # type: ignore[assignment,misc]
 
+# v0.16.0 — unconfigured-install error (fresh-machine audit B1). Older
+# config.py raised SystemExit(2) which escaped `except Exception` inside
+# asyncio.to_thread and wedged the whole server.
+try:
+    from report_skill.config import ConfigError
+except ImportError:  # pragma: no cover
+    class ConfigError(RuntimeError):  # type: ignore[no-redef]
+        """Fallback for an older config.py without ConfigError."""
+
 SERVER_NAME = "report-skill"
+
+try:
+    from importlib.metadata import version as _pkg_version
+    SERVER_VERSION = _pkg_version("report-skill")
+except Exception:  # noqa: BLE001 — frozen exe / editable quirks
+    SERVER_VERSION = "0.0.0+unknown"
 
 
 def _frontend_base() -> str:
@@ -3825,7 +3840,7 @@ _DISPATCH = {
 # --------------------------------------------------------------------------- #
 # MCP server wiring
 # --------------------------------------------------------------------------- #
-server: Server = Server(SERVER_NAME)
+server: Server = Server(SERVER_NAME, version=SERVER_VERSION)
 
 
 @server.list_tools()
@@ -3960,6 +3975,23 @@ async def call_tool(name: str, arguments: dict | None) -> list[TextContent]:
             _outcome["error_code"] = type(e).__name__
             _outcome["error_message"] = str(e)[:500]
             raise Exception(_err_json({"error": type(e).__name__, "message": str(e)})) from e
+        except ConfigError as e:
+            # v0.16.0 — unconfigured install (B1). MUST precede the
+            # RuntimeError branch (ConfigError IS-A RuntimeError). Returns a
+            # structured, actionable error instead of killing the server.
+            _outcome["error_code"] = "not_configured"
+            _outcome["error_message"] = str(e)[:500]
+            from report_skill.config import ENV_PATH as _env_path
+            raise Exception(_err_json({
+                "error": "not_configured",
+                "message": str(e),
+                "env_path": str(_env_path),
+                "fix": "Create/complete the .env (REPORT_API_BASE_URL, "
+                       "REPORT_API_EMAIL, REPORT_API_PASSWORD, "
+                       "REPORT_API_WORKSPACE_SLUG), or set REPORT_SKILL_ENV "
+                       "to its full path, or add those vars to this MCP "
+                       "server's `env` block. Then retry — no restart needed.",
+            })) from e
         except RuntimeError as e:
             # v0.5.2 — A5: classify the three RuntimeError flavours the inner
             # dispatchers raise (SnapshotMissing, LLMError, no-LLM-provider) so
@@ -3975,6 +4007,17 @@ async def call_tool(name: str, arguments: dict | None) -> list[TextContent]:
             raise Exception(_err_json(
                 {"error": "internal", "type": type(e).__name__, "message": str(e)}
             )) from e
+        except SystemExit as e:  # defensive (B1): a library calling exit()
+            # inside the to_thread worker must surface as a tool error, not
+            # tear down the event loop and hang the MCP client forever.
+            _outcome["error_code"] = "system_exit"
+            _outcome["error_message"] = f"SystemExit({e.code})"
+            raise Exception(_err_json({
+                "error": "system_exit",
+                "message": f"a component attempted to exit the process "
+                           f"(code={e.code}); the call was aborted but the "
+                           f"server is still alive",
+            })) from e
     finally:
         dur_ms = (time.monotonic() - _t0) * 1000.0
         try:  # belt-and-braces — telemetry swallows internally already

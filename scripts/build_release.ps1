@@ -125,6 +125,37 @@ New-Item -ItemType Directory -Force -Path $relDir | Out-Null
 # 5a. wheel
 Copy-Item $wheel.FullName -Destination $relDir
 
+# 5a-bis. vendor the runtime dependencies (fresh-machine audit B4):
+# an intranet-only corporate machine cannot reach PyPI, so install.ps1's
+# `pip install <wheel>` used to fail resolving httpx/pydantic/... Ship a
+# wheels\ folder of every dep so install.ps1 can `--no-index --find-links`.
+$wheelsDir = Join-Path $relDir "wheels"
+New-Item -ItemType Directory -Force -Path $wheelsDir | Out-Null
+Write-Host "==> vendoring runtime dependencies into wheels\" -ForegroundColor Cyan
+$prev = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+# Download every dependency of the just-built wheel (transitive included).
+# Binary deps resolve to the current interpreter's platform — receivers are
+# all Windows x64 / CPython 3.11+, matching this build venv.
+$dlOut = & $python -m pip download --quiet --dest $wheelsDir $wheel.FullName 2>&1
+$ErrorActionPreference = $prev
+$dlOut | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+if ($LASTEXITCODE -ne 0) {
+    throw "pip download (dependency vendoring) exit=$LASTEXITCODE"
+}
+$vendored = @(Get-ChildItem (Join-Path $wheelsDir "*.whl"))
+Write-Host "    vendored $($vendored.Count) wheel(s) for offline install" -ForegroundColor DarkGray
+
+# 5a-ter. one-shot launchers + uninstaller (fresh-machine audit M5/N3)
+foreach ($extra in @("setup-wheel.bat", "uninstall.ps1")) {
+    $extraSrc = Join-Path $repo $extra
+    if (Test-Path $extraSrc) {
+        # ship setup-wheel.bat as setup.bat so the receiver just double-clicks
+        $dstName = if ($extra -eq "setup-wheel.bat") { "setup.bat" } else { $extra }
+        Copy-Item $extraSrc -Destination (Join-Path $relDir $dstName) -Force
+    }
+}
+
 # 5b. .claude/skills/ (recursive — skills are directories: <name>/SKILL.md + reference/*.md)
 $skillsSrc = Join-Path $repo ".claude\skills"
 if (Test-Path $skillsSrc) {

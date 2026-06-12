@@ -364,9 +364,19 @@ class ReportArchiveClient:
     def __init__(self) -> None:
         self._token: Optional[str] = None
         self._user_id: Optional[int] = None
+        # v0.16.0 — corporate-network hardening (fresh-machine audit M1/N1):
+        # trust_env=False unless opted in (HTTP(S)_PROXY otherwise hijacks
+        # even intranet traffic); verify = corporate CA bundle when given,
+        # else the REPORT_API_VERIFY_TLS flag (default on, certifi roots).
+        verify: Any = bool(settings.report_api_verify_tls)
+        ca_bundle = str(settings.report_api_ca_bundle or "").strip()
+        if ca_bundle:
+            verify = ca_bundle
         self._http = httpx.Client(
             base_url=settings.report_api_base_url,
             timeout=httpx.Timeout(30.0, read=60.0),
+            trust_env=bool(settings.report_api_trust_env),
+            verify=verify,
         )
         try:
             # Reserved for future init steps (e.g., warm-up auth or capability
@@ -1609,6 +1619,7 @@ class ReportArchiveClient:
         *,
         params: Optional[dict] = None,
         json: Optional[dict] = None,
+        headers: Optional[dict] = None,
         _no_auth: bool = False,
         _retried_auth: bool = False,
     ) -> Any:
@@ -1634,9 +1645,16 @@ class ReportArchiveClient:
         if not _no_auth:
             self.ensure_logged_in()
 
-        headers: dict[str, str] = {"X-Workspace-Slug": settings.report_api_workspace_slug}
+        # v0.16.0 — caller-supplied headers (e.g. an X-Workspace-Slug
+        # override from list_reports) win over the defaults. Previously
+        # `headers` wasn't a parameter at all, so reports_list raised
+        # TypeError on every call (fresh-machine audit M3).
+        send_headers: dict[str, str] = {
+            "X-Workspace-Slug": settings.report_api_workspace_slug}
         if self._token and not _no_auth:
-            headers["Authorization"] = f"Bearer {self._token}"
+            send_headers["Authorization"] = f"Bearer {self._token}"
+        if headers:
+            send_headers.update({str(k): str(v) for k, v in headers.items()})
 
         # Network send. GET only gets up to 2 retries with a short backoff —
         # non-GET methods get NO network retry (avoid duplicate writes).
@@ -1644,7 +1662,8 @@ class ReportArchiveClient:
         backoffs = (0.5, 1.0)
         for attempt in range(max_attempts):
             try:
-                resp = self._http.request(method, path, params=params, json=json, headers=headers)
+                resp = self._http.request(method, path, params=params, json=json,
+                                          headers=send_headers)
                 break
             except httpx.RequestError as exc:
                 if attempt + 1 < max_attempts:
@@ -1654,9 +1673,12 @@ class ReportArchiveClient:
                     )
                     time.sleep(backoffs[attempt])
                     continue
-                _rec(0, error_code="network_unreachable",
-                     error_message=str(exc))
-                raise NetworkUnreachableError(str(exc), status_code=0) from exc
+                # Include the attempted URL — "connection refused" alone gave
+                # a new user nothing to check (audit M8).
+                attempted = f"{settings.report_api_base_url.rstrip('/')}{path}"
+                msg = f"{exc} (while {method} {attempted})"
+                _rec(0, error_code="network_unreachable", error_message=msg)
+                raise NetworkUnreachableError(msg, status_code=0) from exc
 
         # 401 → clear the cached token, re-login once, replay the request.
         # Never for the login call itself (_no_auth), and the _retried_auth
@@ -1667,6 +1689,7 @@ class ReportArchiveClient:
             self._token = None
             self.login()
             return self._request(method, path, params=params, json=json,
+                                 headers=headers,
                                  _no_auth=_no_auth, _retried_auth=True)
 
         try:

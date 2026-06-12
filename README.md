@@ -68,7 +68,7 @@ $env:SKILL_LLM_PROVIDER = "bridge"
 
 ## MCP server (any MCP client can call it)
 
-In addition to the CLI and the Claude Code skill, `report-skill` ships an MCP server (`report-skill-mcp`) that exposes 66 MCP tools via stdio. Wire it into Claude Desktop / Continue / Cursor / any MCP client:
+In addition to the CLI and the Claude Code skill, `report-skill` ships an MCP server (`report-skill-mcp`) that exposes **100개 (v0.16.0 기준)** MCP tools via stdio. Wire it into Claude Desktop / Continue / Cursor / any MCP client. The cleanest config points the server at your `.env` and lets it read every credential from there:
 
 ```json
 {
@@ -76,12 +76,32 @@ In addition to the CLI and the Claude Code skill, `report-skill` ships an MCP se
     "report-skill": {
       "command": "report-skill-mcp",
       "env": {
-        "REPORT_API_PASSWORD": "<service-account-password>"
+        "REPORT_SKILL_ENV": "C:\\path\\to\\.env"
       }
     }
   }
 }
 ```
+
+If you'd rather inline the credentials instead of pointing at `.env`, supply the **full** set — not just the password:
+
+```json
+{
+  "mcpServers": {
+    "report-skill": {
+      "command": "report-skill-mcp",
+      "env": {
+        "REPORT_API_BASE_URL": "http://10.0.5.42:3000/api",
+        "REPORT_API_EMAIL": "bot@reportskill.app",
+        "REPORT_API_PASSWORD": "<service-account-password>",
+        "REPORT_API_WORKSPACE_SLUG": "dx"
+      }
+    }
+  }
+}
+```
+
+For Claude Desktop the config file is `claude_desktop_config.json` under `%APPDATA%\Claude\`. For Claude Code, the equivalent one-liner is `claude mcp add report-skill -- report-skill-mcp` (use the absolute exe path if your MCP host scrubs the user PATH). An unconfigured install returns a structured `not_configured` error instead of hanging the client.
 
 The full tool list (3 categories — read-only / write / offline export):
 - read-only: `ping`, `templates_list`, `templates_show`, `templates_suggest`, `widgets_catalog`, `widgets_suggest_extras`, `report_show`, `examples_status`, `tier_show`
@@ -295,12 +315,13 @@ $ report-skill examples check
 
 ## Claude Code skills
 
-Two slash commands in `.claude/skills/`:
+Three slash commands in `.claude/skills/` (each is a `<name>/SKILL.md` directory, not a flat `.md`):
 
-- **`/report-write`** — orchestrates 6 flows: create / update / add-page / from-prompt / template-pick / append. See [.claude/skills/report-write.md](.claude/skills/report-write.md).
-- **`/widgets-sync`** — refreshes cache + reports adapter/example gaps.
+- **`/report-write`** — orchestrates 6 flows: create / update / add-page / from-prompt / template-pick / append. See [.claude/skills/report-write/SKILL.md](.claude/skills/report-write/SKILL.md).
+- **`/widgets-sync`** — refreshes cache + reports adapter/example gaps. See [.claude/skills/widgets-sync/SKILL.md](.claude/skills/widgets-sync/SKILL.md).
+- **`/bridge-process`** — fulfills pending internal-LLM "bridge" requests (the `SKILL_LLM_PROVIDER=bridge` path). See [.claude/skills/bridge-process/SKILL.md](.claude/skills/bridge-process/SKILL.md).
 
-See [INSTALL_SKILLS.md](INSTALL_SKILLS.md) for global install instructions.
+The release installers copy these to your global skills dir by default. See [INSTALL_SKILLS.md](INSTALL_SKILLS.md) for manual / global install instructions.
 
 ## Test suite
 

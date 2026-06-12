@@ -1,5 +1,100 @@
 ﻿# Changelog
 
+## 0.16.0 — 2026-06-12
+
+Minor — fresh-machine hardening. A multi-agent cold-install audit (3 static
+tracks + 2 live cold-install simulations) ran the wheel and standalone
+variants on a clean machine and found the install/config/transport layer was
+full of dev-box assumptions. This release fixes every BLOCKER + the proxy/
+TLS/offline MAJORs so a brand-new Windows machine — including intranet-only
+and corporate-proxy boxes — succeeds first-try.
+
+Fixed — the MCP server no longer hangs when unconfigured (BLOCKER):
+
+- config raises a catchable `ConfigError` instead of `SystemExit(2)`. The
+  old `SystemExit` escaped `call_tool`'s `except Exception` from inside the
+  `asyncio.to_thread` worker and wedged the whole server with no JSON-RPC
+  reply — any client that wired the MCP server before configuring it froze.
+  `call_tool` now maps `ConfigError` → a structured `not_configured` error
+  (with `env_path` + a fix hint) and stays alive; a defensive `SystemExit`
+  catch maps to `system_exit`.
+
+Fixed — credentials + config discovery on a fresh machine:
+
+- `.env` discovery gained a `%LOCALAPPDATA%\report-skill\.env` step, so an
+  env-scrubbed MCP launch (services, some hosts) finds the installer-written
+  `.env` even with no `REPORT_SKILL_ENV` and an arbitrary cwd.
+- `.env` is read as `utf-8-sig`: a UTF-8 BOM (what PowerShell 5.1
+  `Out-File -Encoding utf8` writes) no longer glues onto the first key and
+  silently disables `REPORT_API_BASE_URL`.
+- every `.env` key is exported into the process env at startup, so the
+  `os.environ`-only knobs (`REPORT_FRONTEND_URL`, `SKILL_LLM_*`, `OLLAMA_*`,
+  `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`) finally take effect from `.env`.
+- the config-error message walks pydantic v2 `e.errors()` so the
+  "missing vars" line actually renders (the v1-style str parse never matched).
+
+Fixed — corporate network (proxy + TLS):
+
+- the httpx client now uses `trust_env=False` by default, so `HTTP(S)_PROXY`
+  env vars no longer hijack intranet/localhost API traffic. Opt back in with
+  `REPORT_API_TRUST_ENV=true` (NO_PROXY then honored).
+- new `REPORT_API_CA_BUNDLE` (corporate root-CA PEM for TLS-inspection /
+  self-signed servers) and `REPORT_API_VERIFY_TLS` (last-resort off) settings.
+- network errors now include the attempted URL.
+
+Fixed — offline + first-run:
+
+- `templates list` / `templates show` fall back to the bundled baseline when
+  the server/config is unavailable, instead of exiting 2 — a fresh machine
+  can explore templates before `.env` exists.
+- `report export --offline` never constructs a client (it used to resolve
+  settings and exit 2 even though no credential is used).
+- `catalog sync` refuses with an actionable "dev-maintainer only; bundled
+  snapshot already active" message when `REPORT_BACKEND_PATH` is blank,
+  instead of a cwd-dependent "not a valid backend root" deep in a subprocess.
+- `report_links_list` regression fixed: `reports_list` passed a `headers=`
+  kwarg that `_request` didn't accept → `TypeError` on every call. `_request`
+  now takes `headers`.
+- CLI view links derive the frontend origin from the API base (strip `/api`)
+  when `REPORT_FRONTEND_URL` is unset, so remote-server installs get working
+  links; MCP `serverInfo.version` is now the real package version.
+- the standalone .exe entry (`cli.py` `__main__`) now calls `main()`, so an
+  unconfigured `tools` / `composites` command on the frozen binary returns
+  the friendly config error + exit 2 instead of a pydantic traceback + exit 1
+  (the wheel's `console_scripts` entry was already guarded). Caught by the
+  cold-install re-simulation before release.
+
+Installers + packaging:
+
+- `install.ps1` (wheel): resolves Python via `python` → `py -3.13/-3.12/
+  -3.11` with a `>=3.11` check and Microsoft-Store-stub rejection; installs
+  fully offline from a vendored `wheels\` folder when present; sets
+  user-scope `REPORT_SKILL_ENV` (with consent if another install owns it);
+  copies the skills globally by default (`-SkipGlobalSkills` to opt out).
+- the wheel release zip now ships `wheels\` (39 vendored dependency wheels —
+  no PyPI needed on the receiver), `setup.bat` (one-shot, ExecutionPolicy
+  bypass), and `uninstall.ps1`.
+- `install-standalone.ps1`: guards against upgrading over a RUNNING install
+  (detects resident report-skill processes, `-Force` to kill); actually
+  deletes legacy `--onefile`-era `bin\`-root exes and drops the stale PATH
+  entry that shadowed the new onedir binaries; drops `uninstall.ps1` into the
+  install dir.
+- new `uninstall.ps1` (both zips): removes PATH entries, `REPORT_SKILL_ENV`,
+  `PYTHONIOENCODING`, the optional Defender exclusion, and (prompted)
+  `%LOCALAPPDATA%` state + global skills.
+
+Docs: RECEIVER.md / RECEIVER-STANDALONE.md / INSTALL_SKILLS.md / README.md /
+BUILDING.md corrected — right onedir MCP exe path, wheel MCP `env` block,
+recursive skill-copy command, prerequisites + ExecutionPolicy, 100-tool count,
+uninstall + transport-knob sections.
+
+Verified: 506 unit tests (+11 new `tests/test_fresh_machine.py` locking
+ConfigError-not-SystemExit, BOM tolerance, env export, the LOCALAPPDATA
+discovery step, the `headers` kwarg, transport defaults, `not_configured`
+mapping, and the catalog-sync guard), 15 live E2E. Cold-install re-simulation
+(wheel offline `--no-index` + standalone exe) reconfirmed B1/B2/B4/B5/M2/M3/M9
+fixed on a clean venv built from the system Python.
+
 ## 0.15.0 — 2026-06-12
 
 Minor — full parity with ReportArchive v0.26.0→v0.29.0 (41 commits since

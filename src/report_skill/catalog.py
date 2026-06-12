@@ -46,6 +46,17 @@ def _canonical_hash(obj: Any) -> str:
 def _backend_python() -> Path:
     """Resolve the python interpreter inside the ReportArchive backend venv."""
     backend = settings.report_backend_path
+    # v0.16.0 — consumer guard (fresh-machine audit M4): catalog sync is a
+    # DEV-MAINTAINER operation. On receiver installs REPORT_BACKEND_PATH is
+    # blank (coercing to Path('.')), which used to produce a cwd-dependent
+    # "not a valid backend root: <random dir>" error.
+    if str(backend) in ("", "."):
+        raise RuntimeError(
+            "catalog sync is a dev-maintainer operation: it needs the "
+            "ReportArchive BACKEND SOURCE on this machine "
+            "(REPORT_BACKEND_PATH=<repo>/backend). Receiver installs ship a "
+            "bundled widget snapshot that is already active — no sync needed."
+        )
     candidates = [
         backend / "venv" / "Scripts" / "python.exe",  # Windows
         backend / "venv" / "bin" / "python",           # Posix

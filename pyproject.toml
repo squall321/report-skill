@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "report-skill"
-version = "0.15.0"
+version = "0.16.0"
 description = "External skill layer that turns Claude-organized content into ReportArchive reports using its widget/template system."
 requires-python = ">=3.11"
 dependencies = [
@@ -24,7 +24,7 @@ dev = [
 ]
 
 [project.scripts]
-report-skill = "report_skill.cli:app"
+report-skill = "report_skill.cli:main"
 report-skill-mcp = "report_skill.mcp_server:main"
 
 [tool.setuptools.packages.find]

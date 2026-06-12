@@ -85,6 +85,35 @@ Write-Host "==> report-skill standalone installer" -ForegroundColor Cyan
 # Both subdirs are added to PATH below so bare-name invocation still works.
 $binDir = Join-Path $InstallDir "bin"
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+
+# Upgrade-over-running-install guard (fresh-machine audit M7): an MCP client
+# (Claude Desktop) keeps report-skill-mcp.exe resident, which holds file locks
+# under bin\ — the hard-replace Remove-Item below would then fail HALFWAY and,
+# with $ErrorActionPreference=Stop, abort mid-copy leaving a broken install.
+# Detect first; -Force kills them, otherwise stop with an actionable message.
+try {
+    $running = @(Get-Process -Name "report-skill*" -ErrorAction SilentlyContinue |
+                 Where-Object { $_.Path -and $_.Path -like "$binDir\*" })
+    if ($running.Count -gt 0) {
+        $names = ($running | ForEach-Object { "$($_.ProcessName) (pid $($_.Id))" }) -join ', '
+        if ($Force) {
+            Write-Warning "killing running report-skill processes (-Force): $names"
+            $running | Stop-Process -Force
+            Start-Sleep -Seconds 1   # let file handles release before we delete
+        } else {
+            throw (@(
+                "report-skill is currently running: $names"
+                "  Claude Desktop / Claude Code 를 종료한 뒤 다시 실행하거나 -Force 를 쓰세요."
+                "  Quit Claude Desktop / Claude Code (or pass -Force) and re-run this installer."
+            ) -join "`n")
+        }
+    }
+} catch [System.Management.Automation.RuntimeException] {
+    throw   # re-throw our own actionable message
+} catch {
+    Write-Warning "running-process check failed (continuing): $($_.Exception.Message)"
+}
+
 $entryDirs = @()
 foreach ($name in "report-skill", "report-skill-mcp") {
     $srcTree = Join-Path $src $name
@@ -116,6 +145,7 @@ if ($AddDefenderExclusion) {
         try {
             Add-MpPreference -ExclusionPath $InstallDir -ErrorAction Stop
             Write-Host "    Defender exclusion added -> $InstallDir" -ForegroundColor DarkGray
+            Write-Host "    (uninstall.ps1 removes it; needs an admin shell)" -ForegroundColor DarkGray
         } catch {
             Write-Warning "Add-MpPreference failed: $($_.Exception.Message)"
             Write-Host "    (continuing — exclusion is optional)" -ForegroundColor DarkGray
@@ -138,14 +168,32 @@ function Normalize-PathEntry([string]$p) {
 
 if (-not $SkipPath) {
     $cur = [Environment]::GetEnvironmentVariable("PATH", "User")
-    $parts = $cur -split ';' | Where-Object { $_ -ne '' }
+    $parts = @($cur -split ';' | Where-Object { $_ -ne '' })
+    # Drop any stale legacy bin\-ROOT entry from the pre-onedir (--onefile)
+    # era: the entry .exe no longer lives at bin\ root, so a lingering
+    # PATH entry there made `report-skill` resolve to a DELETED/old exe ahead
+    # of the new subdir entries (fresh-machine audit N2 — this cleanup was
+    # promised by the original comment but never implemented; $binDirNorm
+    # was computed and discarded).
+    $binDirNorm = Normalize-PathEntry $binDir
+    $entryNorms = @{}
+    foreach ($e in $entryDirs) { $entryNorms[(Normalize-PathEntry $e)] = $true }
+    $kept = @()
+    $removedLegacy = @()
+    foreach ($p in $parts) {
+        $pn = Normalize-PathEntry $p
+        # Remove the exact bin\ root (legacy) entry, but keep the new
+        # bin\report-skill / bin\report-skill-mcp subdir entries.
+        if ($pn -eq $binDirNorm -and -not $entryNorms.ContainsKey($pn)) {
+            $removedLegacy += $p
+        } else {
+            $kept += $p
+        }
+    }
+    $parts = $kept
     # Build a lookup of normalized existing entries once — O(n) instead of O(n*m).
     $existingNorm = @{}
     foreach ($p in $parts) { $existingNorm[(Normalize-PathEntry $p)] = $true }
-    # Drop any stale legacy $binDir entry from pre-onedir installs — the
-    # entry .exe no longer lives at bin\ root, so leaving it on PATH is
-    # harmless but confusing in `where.exe report-skill` diagnostics.
-    $binDirNorm = Normalize-PathEntry $binDir
     $added = @()
     foreach ($entryDir in $entryDirs) {
         $norm = Normalize-PathEntry $entryDir
@@ -155,8 +203,11 @@ if (-not $SkipPath) {
             $added += $entryDir
         }
     }
-    if ($added.Count -gt 0) {
+    if ($added.Count -gt 0 -or $removedLegacy.Count -gt 0) {
         [Environment]::SetEnvironmentVariable("PATH", ($parts -join ';'), "User")
+        foreach ($r in $removedLegacy) {
+            Write-Host "    removed stale legacy PATH entry: $r" -ForegroundColor Yellow
+        }
         foreach ($a in $added) {
             $env:PATH = "$env:PATH;$a"  # affect THIS session too
             Write-Host "    added $a to user PATH" -ForegroundColor DarkGray
@@ -164,6 +215,20 @@ if (-not $SkipPath) {
         Write-Host "    (open a new terminal to see PATH changes elsewhere)" -ForegroundColor DarkGray
     } else {
         Write-Host "    PATH already contains both entry dirs" -ForegroundColor DarkGray
+    }
+}
+
+# Delete legacy bin\-ROOT exes from the pre-onedir era so `where.exe` and any
+# absolute-path references can't pick up a stale binary (audit N2).
+foreach ($legacyExe in @("report-skill.exe", "report-skill-mcp.exe")) {
+    $legacyPath = Join-Path $binDir $legacyExe
+    if (Test-Path $legacyPath -PathType Leaf) {
+        try {
+            Remove-Item -Force $legacyPath
+            Write-Host "    removed legacy bin-root $legacyExe" -ForegroundColor Yellow
+        } catch {
+            Write-Warning "could not remove legacy ${legacyPath}: $($_.Exception.Message)"
+        }
     }
 }
 
@@ -379,8 +444,20 @@ if ($pingExit -ne 0) {
     Write-Host "    - service account missing (admin must register bot@reportskill.app)" -ForegroundColor DarkGray
 }
 
+# --- 8. drop an uninstaller next to the install (audit N3) ---
+$uninstallerSrc = Join-Path $src "uninstall.ps1"
+if (Test-Path $uninstallerSrc) {
+    try {
+        Copy-Item $uninstallerSrc -Destination (Join-Path $InstallDir "uninstall.ps1") -Force
+        Write-Host "    uninstaller -> $InstallDir\uninstall.ps1" -ForegroundColor DarkGray
+    } catch {
+        Write-Warning "could not copy uninstall.ps1: $($_.Exception.Message)"
+    }
+}
+
 Write-Host ""
 Write-Host "==> ready. Try (in a NEW terminal so PATH refreshes):" -ForegroundColor Cyan
 Write-Host "    report-skill templates list" -ForegroundColor Green
 Write-Host ""
 Write-Host "Claude Code: /report-write should now work from any cwd." -ForegroundColor DarkGray
+Write-Host "Uninstall:   powershell -ExecutionPolicy Bypass -File `"$InstallDir\uninstall.ps1`"" -ForegroundColor DarkGray
